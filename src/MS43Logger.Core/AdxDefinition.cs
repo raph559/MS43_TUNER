@@ -13,11 +13,100 @@ public sealed class AdxDefinition
     private readonly IReadOnlyDictionary<string, AdxListenPacket> _listenPacketsById;
     private readonly IReadOnlyDictionary<string, AdxMacro> _macrosById;
 
+    private AdxDefinition(
+        string sourceName,
+        AdxHeader header,
+        List<AdxValueDefinition> values,
+        Dictionary<string, AdxLookupTable> lookupTablesByIdHash,
+        Dictionary<string, AdxSendCommand> sendCommandsById,
+        Dictionary<string, AdxListenPacket> listenPacketsById,
+        Dictionary<string, AdxMacro> macrosById)
+    {
+        SourceName = sourceName;
+        Header = header;
+        Values = values.AsReadOnly();
+        _valuesByIdHash = new ReadOnlyDictionary<string, AdxValueDefinition>(
+            values.ToDictionary(value => value.IdHash, StringComparer.OrdinalIgnoreCase));
+        _lookupTablesByIdHash = new ReadOnlyDictionary<string, AdxLookupTable>(lookupTablesByIdHash);
+        _sendCommandsById = new ReadOnlyDictionary<string, AdxSendCommand>(sendCommandsById);
+        _listenPacketsById = new ReadOnlyDictionary<string, AdxListenPacket>(listenPacketsById);
+        _macrosById = new ReadOnlyDictionary<string, AdxMacro>(macrosById);
+    }
+
     public string SourceName { get; }
 
     public AdxHeader Header { get; }
 
     public IReadOnlyList<AdxValueDefinition> Values { get; }
+
+    public static AdxDefinition Load(Stream stream, string sourceName = "definition.adx")
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+
+        var document = XDocument.Load(stream, LoadOptions.None);
+        var root = document.Root ?? throw new InvalidOperationException("ADX document has no root node.");
+        if (!string.Equals(root.Name.LocalName, "ADXFORMAT", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Unsupported ADX document.");
+        }
+
+        var headerElement = root.Element("ADXHEADER") ?? throw new InvalidOperationException("ADX header is missing.");
+        var defaultsElement = headerElement.Element("DEFAULTS") ?? throw new InvalidOperationException("ADX defaults are missing.");
+
+        var defaults = new AdxDefaults(
+            ParseInt((string?)defaultsElement.Attribute("datasizeinbits"), 8),
+            ParseInt((string?)defaultsElement.Attribute("sigdigits"), 2),
+            ParseInt((string?)defaultsElement.Attribute("outputtype"), 3),
+            ParseBoolIndicator((string?)defaultsElement.Attribute("signed"), false),
+            ParseBoolIndicator((string?)defaultsElement.Attribute("lsbfirst"), false),
+            ParseBoolIndicator((string?)defaultsElement.Attribute("float"), false));
+
+        var header = new AdxHeader(
+            Description: (string?)headerElement.Element("desc") ?? string.Empty,
+            InitialBaud: ParseInt(headerElement.Element("baud")?.Value, 9600),
+            InitialParity: ParseParity(ParseInt(headerElement.Element("parity")?.Value, 2)),
+            ConnectCommandId: (string?)headerElement.Element("connectcmd") ?? throw new InvalidOperationException("ADX connect command is missing."),
+            MonitorCommandId: (string?)headerElement.Element("monitorcmd") ?? throw new InvalidOperationException("ADX monitor command is missing."),
+            DisconnectCommandId: (string?)headerElement.Element("disconnectcmd") ?? throw new InvalidOperationException("ADX disconnect command is missing."),
+            Defaults: defaults);
+
+        var values = root.Elements("ADXVALUE")
+            .Select(element => ParseValue(element, defaults))
+            .OrderBy(value => value.PacketOffset)
+            .ThenBy(value => value.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var lookupTables = root.Elements("ADXLOOKUPTABLE")
+            .Select(ParseLookupTable)
+            .ToDictionary(table => table.IdHash, StringComparer.OrdinalIgnoreCase);
+
+        var sendCommands = root.Elements("ADXCSENDCOMMAND")
+            .Select(ParseSendCommand)
+            .ToDictionary(command => command.Id, StringComparer.OrdinalIgnoreCase);
+
+        var listenPackets = root.Elements("ADXCLISTENPACKET")
+            .Select(ParseListenPacket)
+            .ToDictionary(packet => packet.Id, StringComparer.OrdinalIgnoreCase);
+
+        var macros = root.Elements("ADXMACRO")
+            .Select(ParseMacro)
+            .ToDictionary(macro => macro.Id, StringComparer.OrdinalIgnoreCase);
+
+        return new AdxDefinition(sourceName, header, values, lookupTables, sendCommands, listenPackets, macros);
+    }
+
+    public static AdxDefinition LoadFromFile(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        using var stream = File.OpenRead(path);
+        return Load(stream, Path.GetFileName(path));
+    }
+
+    public AdxExchange GetConnectExchange() => ResolveExchange(Header.ConnectCommandId);
+
+    public AdxExchange GetMonitorExchange() => ResolveExchange(Header.MonitorCommandId);
+
+    public AdxExchange GetDisconnectExchange() => ResolveExchange(Header.DisconnectCommandId);
 
     public IReadOnlyList<AdxValueDefinition> MatchChannels(IEnumerable<string>? filters)
     {
@@ -69,6 +158,47 @@ public sealed class AdxDefinition
         }
 
         return matches;
+    }
+
+    private AdxExchange ResolveExchange(string macroId)
+    {
+        if (!_macrosById.TryGetValue(macroId, out var macro))
+        {
+            throw new InvalidOperationException($"ADX macro '{macroId}' was not found.");
+        }
+
+        AdxSendCommand? request = null;
+        AdxListenPacket? response = null;
+
+        foreach (var step in macro.Steps)
+        {
+            for (var repeat = 0; repeat < Math.Max(1, step.RepeatCount); repeat++)
+            {
+                if (request is null && _sendCommandsById.TryGetValue(step.CommandId, out var sendCommand))
+                {
+                    request = sendCommand;
+                    continue;
+                }
+
+                if (request is not null && response is null && _listenPacketsById.TryGetValue(step.CommandId, out var listenPacket))
+                {
+                    response = listenPacket;
+                    break;
+                }
+            }
+
+            if (request is not null && response is not null)
+            {
+                break;
+            }
+        }
+
+        if (request is null || response is null)
+        {
+            throw new InvalidOperationException($"ADX macro '{macroId}' does not resolve to a send/listen exchange.");
+        }
+
+        return new AdxExchange(request, response);
     }
 
     private static double ExtractNativeValue(AdxValueDefinition definition, ReadOnlySpan<byte> payload)
@@ -186,6 +316,31 @@ public sealed class AdxDefinition
             Title: (string?)element.Attribute("title") ?? string.Empty,
             Baud: ParseOptionalInt(element.Element("baud")?.Value),
             Bytes: ParseByteString(element.Element("bytestring")?.Value));
+    }
+
+    private static AdxListenPacket ParseListenPacket(XElement element)
+    {
+        return new AdxListenPacket(
+            Id: (string?)element.Attribute("id") ?? throw new InvalidOperationException("ADX listen packet is missing an id."),
+            Title: (string?)element.Attribute("title") ?? string.Empty,
+            Baud: ParseOptionalInt(element.Element("baud")?.Value),
+            Header: ParseByteString(element.Element("headerstring")?.Value),
+            PacketSize: ParseInt(element.Element("packetsize")?.Value, 0),
+            ListenTimeout: ParseInt(element.Element("listentimeout")?.Value, 250));
+    }
+
+    private static AdxMacro ParseMacro(XElement element)
+    {
+        var steps = element.Elements("NODE")
+            .Select(node => new AdxMacroStep(
+                CommandId: (string?)node.Attribute("commandID") ?? throw new InvalidOperationException("ADX macro step is missing commandID."),
+                RepeatCount: ParseInt((string?)node.Attribute("repeatcount"), 1)))
+            .ToList();
+
+        return new AdxMacro(
+            Id: (string?)element.Attribute("id") ?? throw new InvalidOperationException("ADX macro is missing an id."),
+            Title: (string?)element.Attribute("title") ?? string.Empty,
+            Steps: steps.AsReadOnly());
     }
 
     private static AdxVariableKind ParseVariableKind(string? value)
@@ -392,3 +547,5 @@ public sealed record AdxMacro(string Id, string Title, IReadOnlyList<AdxMacroSte
 public sealed record AdxMacroStep(string CommandId, int RepeatCount);
 
 public sealed record AdxExchange(AdxSendCommand Request, AdxListenPacket Response);
+
+public sealed record DecodedValue(AdxValueDefinition Definition, double Value);
