@@ -160,6 +160,20 @@ public sealed class AdxDefinition
         return matches;
     }
 
+    public IReadOnlyList<DecodedValue> DecodePayload(ReadOnlySpan<byte> payload, IEnumerable<AdxValueDefinition>? selectedValues = null)
+    {
+        var targets = (selectedValues ?? Values).ToList();
+        var cache = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        var decoded = new List<DecodedValue>(targets.Count);
+
+        foreach (var value in targets)
+        {
+            decoded.Add(new DecodedValue(value, EvaluateValue(value, payload, cache, new HashSet<string>(StringComparer.OrdinalIgnoreCase))));
+        }
+
+        return decoded;
+    }
+
     private AdxExchange ResolveExchange(string macroId)
     {
         if (!_macrosById.TryGetValue(macroId, out var macro))
@@ -199,6 +213,61 @@ public sealed class AdxDefinition
         }
 
         return new AdxExchange(request, response);
+    }
+
+    private double EvaluateValue(
+        AdxValueDefinition definition,
+        ReadOnlySpan<byte> payload,
+        IDictionary<string, double> cache,
+        ISet<string> stack)
+    {
+        if (cache.TryGetValue(definition.IdHash, out var cached))
+        {
+            return cached;
+        }
+
+        if (!stack.Add(definition.IdHash))
+        {
+            throw new InvalidOperationException($"Circular ADX dependency detected for '{definition.DisplayName}'.");
+        }
+
+        try
+        {
+            var variables = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            var needsNativeValue = definition.Variables.Any(variable => variable.Kind == AdxVariableKind.Native);
+            var nativeValue = needsNativeValue ? ExtractNativeValue(definition, payload) : 0d;
+
+            foreach (var variable in definition.Variables)
+            {
+                switch (variable.Kind)
+                {
+                    case AdxVariableKind.Native:
+                        variables[variable.Name] = nativeValue;
+                        break;
+                    case AdxVariableKind.Link:
+                        if (variable.LinkIdHash is null || !_valuesByIdHash.TryGetValue(variable.LinkIdHash, out var linkedDefinition))
+                        {
+                            throw new InvalidOperationException($"ADX link '{variable.LinkIdHash}' for '{definition.DisplayName}' could not be resolved.");
+                        }
+
+                        variables[variable.Name] = EvaluateValue(linkedDefinition, payload, cache, stack);
+                        break;
+                }
+            }
+
+            var computedValue = ExpressionEvaluator.Evaluate(definition.Equation, variables);
+            if (definition.LookupIdHash is not null && _lookupTablesByIdHash.TryGetValue(definition.LookupIdHash, out var lookupTable))
+            {
+                computedValue = lookupTable.Apply(computedValue);
+            }
+
+            cache[definition.IdHash] = computedValue;
+            return computedValue;
+        }
+        finally
+        {
+            stack.Remove(definition.IdHash);
+        }
     }
 
     private static double ExtractNativeValue(AdxValueDefinition definition, ReadOnlySpan<byte> payload)

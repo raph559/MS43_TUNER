@@ -4,6 +4,14 @@ namespace MS43Logger.Core;
 
 public static class ExpressionEvaluator
 {
+    public static double Evaluate(string expression, IReadOnlyDictionary<string, double> variables)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(expression);
+        ArgumentNullException.ThrowIfNull(variables);
+
+        var parser = new Parser(expression, variables);
+        return parser.Parse();
+    }
 
     private sealed class Parser
     {
@@ -15,6 +23,18 @@ public static class ExpressionEvaluator
         {
             _expression = expression;
             _variables = variables;
+        }
+
+        public double Parse()
+        {
+            var value = ParseExpression();
+            SkipWhitespace();
+            if (_position != _expression.Length)
+            {
+                throw new InvalidOperationException($"Unexpected token '{_expression[_position]}' in expression '{_expression}'.");
+            }
+
+            return value;
         }
 
         private double ParseExpression()
