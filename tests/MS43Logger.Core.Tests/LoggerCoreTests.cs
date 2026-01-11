@@ -64,6 +64,34 @@ public class LoggerCoreTests
         Assert.Equal(26.705882d, decoded["COOLANTTEMP"], 5);
     }
 
+    [Fact]
+    public void SessionHandlesEchoAndExtractsPayload()
+    {
+        var definition = BundledDefinitions.Load("b30");
+        var fakePort = new FakeSerialPortAdapter("COM_TEST");
+        var connectExchange = definition.GetConnectExchange();
+        var monitorExchange = definition.GetMonitorExchange();
+        var disconnectExchange = definition.GetDisconnectExchange();
+
+        var payload = Enumerable.Range(0, 82).Select(value => (byte)value).ToArray();
+        fakePort.QueueWriteResponse(connectExchange.Response.Header);
+        fakePort.QueueWriteResponse(monitorExchange.Request.Bytes.Concat(BuildFrame(monitorExchange.Response.Header, payload)).ToArray());
+        fakePort.QueueWriteResponse(disconnectExchange.Response.Header);
+
+        using var session = new Ds2Session(definition, fakePort);
+        session.Connect();
+        var loggedPayload = session.PollPayload();
+        session.Disconnect();
+
+        Assert.Equal(payload, loggedPayload);
+        Assert.Equal(connectExchange.Request.Bytes, fakePort.Writes[0]);
+        Assert.Equal(monitorExchange.Request.Bytes, fakePort.Writes[1]);
+        Assert.Equal(disconnectExchange.Request.Bytes, fakePort.Writes[2]);
+        Assert.Contains(9600, fakePort.BaudHistory);
+        Assert.Contains(125000, fakePort.BaudHistory);
+        Assert.False(fakePort.IsOpen);
+    }
+
     private static byte[] BuildFrame(IReadOnlyList<byte> header, IReadOnlyList<byte> payload)
     {
         var frame = new byte[header.Count + payload.Count + 1];
