@@ -3,170 +3,297 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="using:MS43Logger.AvaloniaApp"
-        mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="720"
+        mc:Ignorable="d" d:DesignWidth="1240" d:DesignHeight="820"
         x:Class="MS43Logger.AvaloniaApp.MainWindow"
         x:DataType="local:MainWindowViewModel"
         Title="MS43 Logger"
-        Background="#0a0b0e"
+        Background="#f3efe7"
         FontFamily="avares://Avalonia.Fonts.Inter/Assets#Inter"
-        MinWidth="820" MinHeight="560">
+        MinWidth="980" MinHeight="680">
 
     <Window.Styles>
         <Style Selector="Button">
-            <Setter Property="CornerRadius" Value="6"/>
-            <Setter Property="Padding" Value="14,8"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="16,10"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="TextBox">
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="12,9"/>
         </Style>
         <Style Selector="ComboBox">
-            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="CornerRadius" Value="10"/>
+        </Style>
+        <Style Selector="CheckBox">
+            <Setter Property="Foreground" Value="#3f3a34"/>
         </Style>
     </Window.Styles>
 
-    <Grid RowDefinitions="64,*,44">
-
-        <!-- HEADER BAR -->
-        <Border Grid.Row="0" Background="#111318" BorderBrush="#1c1f28" BorderThickness="0,0,0,1">
-            <Grid ColumnDefinitions="Auto,*,Auto" Margin="24,0">
-
-                <!-- Brand -->
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border Width="4" Height="26" Background="#00e5ff" CornerRadius="2" Margin="0,0,12,0"/>
-                    <TextBlock Text="MS43" FontSize="18" FontWeight="Black" Foreground="#f0f2f7" VerticalAlignment="Center"/>
-                    <TextBlock Text=" LOGGER" FontSize="18" FontWeight="Light" Foreground="#3a4055" VerticalAlignment="Center"/>
+    <Grid RowDefinitions="Auto,*,Auto">
+        <Border Grid.Row="0"
+                Background="#d8c3a5"
+                Padding="24,20"
+                BorderBrush="#b89b74"
+                BorderThickness="0,0,0,1">
+            <Grid ColumnDefinitions="2*,3*">
+                <StackPanel Grid.Column="0" Spacing="6">
+                    <TextBlock Text="MS43 LOGGER"
+                               FontSize="28"
+                               FontWeight="Black"
+                               Foreground="#2d241d"/>
+                    <TextBlock Text="Desktop logger for MS4X extended logging over DS2 K-line"
+                               FontSize="13"
+                               Foreground="#5e4f42"/>
                 </StackPanel>
 
-                <!-- Controls -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <TextBlock Text="PORT" FontSize="10" Foreground="#2e3345"
-                               VerticalAlignment="Center" FontWeight="Bold" Margin="0,0,2,0"/>
-                    <ComboBox ItemsSource="{Binding AvailablePorts}"
+                <Grid Grid.Column="1"
+                      ColumnDefinitions="Auto,120,Auto,Auto,100,*,Auto,Auto"
+                      RowDefinitions="Auto,Auto"
+                      ColumnSpacing="10"
+                      RowSpacing="10"
+                      VerticalAlignment="Center">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="PORT"
+                               FontSize="10" FontWeight="Bold"
+                               Foreground="#6a5949"
+                               VerticalAlignment="Center"/>
+                    <ComboBox Grid.Row="0" Grid.Column="1"
+                              ItemsSource="{Binding AvailablePorts}"
                               SelectedItem="{Binding SelectedPort}"
-                              Width="110" Height="34"/>
-                    <Button Content="↻" Click="RefreshButton_Click"
-                            Background="#161920" Foreground="#606880"
-                            Width="34" Height="34" Padding="0"
-                            HorizontalContentAlignment="Center"
-                            VerticalContentAlignment="Center"
-                            FontSize="16" ToolTip.Tip="Refresh ports"/>
-
-                    <Rectangle Width="1" Height="22" Fill="#1c1f28" Margin="6,0"/>
-
-                    <TextBlock Text="VARIANT" FontSize="10" Foreground="#2e3345"
-                               VerticalAlignment="Center" FontWeight="Bold" Margin="0,0,2,0"/>
-                    <ComboBox ItemsSource="{Binding AdxVariants}"
+                              Height="38"/>
+                    <Button Grid.Row="0" Grid.Column="2"
+                            Content="REFRESH"
+                            Click="RefreshButton_Click"
+                            Background="#fffaf4"
+                            Foreground="#4a3f34"/>
+                    <TextBlock Grid.Row="0" Grid.Column="3" Text="VARIANT"
+                               FontSize="10" FontWeight="Bold"
+                               Foreground="#6a5949"
+                               VerticalAlignment="Center"/>
+                    <ComboBox Grid.Row="0" Grid.Column="4"
+                              ItemsSource="{Binding AdxVariants}"
                               SelectedItem="{Binding SelectedVariant}"
-                              Width="80" Height="34"/>
+                              Height="38"/>
+                    <Button Grid.Row="0" Grid.Column="7"
+                            Content="{Binding ConnectionButtonText}"
+                            Click="ConnectButton_Click"
+                            Background="#2f7d4c"
+                            Foreground="White"/>
 
-                    <Rectangle Width="1" Height="22" Fill="#1c1f28" Margin="6,0"/>
-
-                    <Button Content="CONNECT" Click="ConnectButton_Click"
-                            Background="#00e5ff" Foreground="#04080f"
-                            Height="34" IsVisible="{Binding IsNotConnected}"/>
-                    <Button Content="DISCONNECT" Click="DisconnectButton_Click"
-                            Background="#ff4e6a" Foreground="#ffffff"
-                            Height="34" IsVisible="{Binding IsConnected}"/>
-                </StackPanel>
-
+                    <CheckBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                              Content="Write CSV log"
+                              IsChecked="{Binding EnableCsvLogging}"
+                              VerticalAlignment="Center"/>
+                    <TextBox Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="4"
+                             Text="{Binding CsvPath}"
+                             Watermark="CSV output path"
+                             IsEnabled="{Binding EnableCsvLogging}"/>
+                    <Button Grid.Row="1" Grid.Column="6"
+                            Content="BROWSE"
+                            Click="BrowseCsvButton_Click"
+                            IsEnabled="{Binding EnableCsvLogging}"
+                            Background="#fffaf4"
+                            Foreground="#4a3f34"/>
+                </Grid>
             </Grid>
         </Border>
 
-        <!-- CONTENT AREA -->
-        <Panel Grid.Row="1" Background="#0a0b0e">
-
-            <!-- Disconnected / empty state -->
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
-                        Spacing="10" IsVisible="{Binding IsNotConnected}">
-                <TextBlock Text="NO ACTIVE SESSION"
-                           FontSize="13" FontWeight="Bold"
-                           Foreground="#1e2130"
-                           HorizontalAlignment="Center"/>
-                <TextBlock Text="Select a port and press CONNECT to begin logging"
-                           FontSize="12" Foreground="#181b26"
-                           HorizontalAlignment="Center"/>
-            </StackPanel>
-
-            <!-- Live dashboard -->
-            <ScrollViewer IsVisible="{Binding IsConnected}"
-                          HorizontalScrollBarVisibility="Disabled"
-                          VerticalScrollBarVisibility="Auto"
-                          Padding="12,12,12,0">
-                <ItemsControl ItemsSource="{Binding LiveValues}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <WrapPanel Orientation="Horizontal"/>
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="local:DecodedValueViewModel">
-                            <Border Width="190" Height="120" Margin="8"
-                                    Background="#111318" CornerRadius="10"
-                                    BorderBrush="{Binding AccentBrush}"
-                                    BorderThickness="0,2,0,0"
-                                    BoxShadow="0 4 24 0 #06070b">
-                                <Grid RowDefinitions="*,Auto" Margin="16,14,16,16">
-                                    <TextBlock Grid.Row="0"
-                                               Text="{Binding Title}"
-                                               FontSize="10" FontWeight="Bold"
-                                               Foreground="#2e3448"
-                                               TextWrapping="Wrap"
-                                               MaxLines="2"
-                                               VerticalAlignment="Top"/>
-                                    <StackPanel Grid.Row="1"
-                                                Orientation="Horizontal"
-                                                VerticalAlignment="Bottom">
-                                        <TextBlock Text="{Binding Value}"
-                                                   FontSize="34" FontWeight="Bold"
-                                                   Foreground="#e0e4f0"
-                                                   VerticalAlignment="Bottom"/>
-                                        <TextBlock Text="{Binding Units}"
-                                                   FontSize="13" Foreground="#2e3448"
-                                                   VerticalAlignment="Bottom"
-                                                   Margin="7,0,0,4"/>
+        <Grid Grid.Row="1" ColumnDefinitions="310,*">
+            <Border Grid.Column="0"
+                    Background="#f8f4ed"
+                    BorderBrush="#dec9a8"
+                    BorderThickness="0,0,1,0"
+                    Padding="20">
+                <StackPanel Spacing="18">
+                    <Border Background="#fffaf4" CornerRadius="16" Padding="16" BorderBrush="#e7d5ba" BorderThickness="1">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="SESSION"
+                                       FontSize="12"
+                                       FontWeight="Bold"
+                                       Foreground="#8b6f50"/>
+                            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="10" ColumnSpacing="10">
+                                <Border Grid.Row="0" Grid.Column="0" Background="#efe1cf" CornerRadius="12" Padding="12">
+                                    <StackPanel>
+                                        <TextBlock Text="STATUS" FontSize="10" FontWeight="Bold" Foreground="#8b6f50"/>
+                                        <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" FontSize="12" Foreground="#2d241d"/>
                                     </StackPanel>
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
+                                </Border>
+                                <Border Grid.Row="0" Grid.Column="1" Background="#efe1cf" CornerRadius="12" Padding="12">
+                                    <StackPanel>
+                                        <TextBlock Text="ELAPSED" FontSize="10" FontWeight="Bold" Foreground="#8b6f50"/>
+                                        <TextBlock Text="{Binding ElapsedTime}" FontSize="22" FontWeight="Bold" Foreground="#2d241d"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Row="1" Grid.Column="0" Background="#efe1cf" CornerRadius="12" Padding="12">
+                                    <StackPanel>
+                                        <TextBlock Text="SAMPLES" FontSize="10" FontWeight="Bold" Foreground="#8b6f50"/>
+                                        <TextBlock Text="{Binding SampleCount}" FontSize="22" FontWeight="Bold" Foreground="#2d241d"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Row="1" Grid.Column="1" Background="#efe1cf" CornerRadius="12" Padding="12">
+                                    <StackPanel>
+                                        <TextBlock Text="RATE" FontSize="10" FontWeight="Bold" Foreground="#8b6f50"/>
+                                        <TextBlock Text="{Binding SamplesPerSecond, StringFormat='{}{0:F1} Hz'}" FontSize="22" FontWeight="Bold" Foreground="#2d241d"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Row="2" Grid.ColumnSpan="2" Background="#2d241d" CornerRadius="12" Padding="14">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="CONNECT TIP" FontSize="10" FontWeight="Bold" Foreground="#d8c3a5"/>
+                                        <TextBlock Text="If the ECU rejects the baud switch while running, connect before engine start."
+                                                   TextWrapping="Wrap"
+                                                   FontSize="12"
+                                                   Foreground="#fff8ef"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
 
-        </Panel>
-
-        <!-- STATUS BAR -->
-        <Border Grid.Row="2" Background="#0d0f14" BorderBrush="#1c1f28" BorderThickness="0,1,0,0">
-            <Grid ColumnDefinitions="Auto,*,Auto" Margin="24,0">
-
-                <!-- Connection indicator -->
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <Ellipse Width="7" Height="7" Fill="#2eff9b" IsVisible="{Binding IsConnected}"/>
-                    <Ellipse Width="7" Height="7" Fill="#252836" IsVisible="{Binding IsNotConnected}"/>
-                    <TextBlock Text="{Binding StatusText}"
-                               FontSize="11" Foreground="#353848" VerticalAlignment="Center"/>
+                    <Border Background="#fffaf4" CornerRadius="16" Padding="16" BorderBrush="#e7d5ba" BorderThickness="1">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="CHANNEL FILTER"
+                                       FontSize="12"
+                                       FontWeight="Bold"
+                                       Foreground="#8b6f50"/>
+                            <TextBox Text="{Binding SearchText}"
+                                     Watermark="Search by ID, title, or units"/>
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <CheckBox Content="Pinned only"
+                                          IsChecked="{Binding ShowPinnedOnly}"/>
+                                <TextBlock Text="{Binding PinnedCount, StringFormat='{}{0} pinned'}"
+                                           FontSize="12"
+                                           Foreground="#6a5949"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding VisibleChannelCount, StringFormat='{}{0} channels visible'}"
+                                       FontSize="12"
+                                       Foreground="#6a5949"/>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
+            </Border>
 
-                <!-- Stats -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="28" VerticalAlignment="Center">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <TextBlock Text="SAMPLES" FontSize="9" Foreground="#252836"
-                                   VerticalAlignment="Center" FontWeight="Bold"/>
-                        <TextBlock Text="{Binding SampleCount}"
-                                   FontSize="11" Foreground="#00e5ff" FontWeight="Bold"
-                                   VerticalAlignment="Center"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <TextBlock Text="ELAPSED" FontSize="9" Foreground="#252836"
-                                   VerticalAlignment="Center" FontWeight="Bold"/>
-                        <TextBlock Text="{Binding ElapsedTime}"
-                                   FontSize="11" Foreground="#a0a8c0" FontWeight="Bold"
-                                   VerticalAlignment="Center"/>
-                    </StackPanel>
-                </StackPanel>
+            <Grid Grid.Column="1" RowDefinitions="Auto,*" Margin="0">
+                <Border Grid.Row="0"
+                        Background="#fbf7f0"
+                        Padding="20,18"
+                        BorderBrush="#eadbc3"
+                        BorderThickness="0,0,0,1">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel>
+                            <TextBlock Text="LIVE CHANNELS"
+                                       FontSize="14"
+                                       FontWeight="Black"
+                                       Foreground="#2d241d"/>
+                            <TextBlock Text="All decoded channels from the selected bundled MS4X ADX definition"
+                                       FontSize="12"
+                                       Foreground="#6a5949"/>
+                        </StackPanel>
+                        <Border Grid.Column="1"
+                                CornerRadius="999"
+                                Background="#e5f4e9"
+                                Padding="12,6"
+                                VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Ellipse Width="8" Height="8" Fill="#2f7d4c" IsVisible="{Binding IsConnected}"/>
+                                <Ellipse Width="8" Height="8" Fill="#aa8e70" IsVisible="{Binding IsNotConnected}"/>
+                                <TextBlock Text="{Binding ConnectionButtonText}"
+                                           FontSize="11"
+                                           FontWeight="Bold"
+                                           Foreground="#2d241d"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Border>
 
+                <ScrollViewer Grid.Row="1"
+                              HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto"
+                              Padding="16">
+                    <ItemsControl ItemsSource="{Binding LiveValues}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="local:DecodedValueViewModel">
+                                <Border Width="220"
+                                        Height="140"
+                                        Margin="8"
+                                        Background="#fffaf4"
+                                        CornerRadius="18"
+                                        BorderBrush="#e8d6bb"
+                                        BorderThickness="1">
+                                    <Grid RowDefinitions="Auto,*,Auto" ColumnDefinitions="*,Auto" Margin="16">
+                                        <Border Grid.ColumnSpan="2"
+                                                Background="{Binding AccentBrush}"
+                                                Height="6"
+                                                CornerRadius="999"
+                                                HorizontalAlignment="Stretch"/>
+                                        <Button Grid.Column="1"
+                                                Content="{Binding PinGlyph}"
+                                                Click="PinButton_Click"
+                                                CommandParameter="{Binding}"
+                                                Width="32"
+                                                Height="32"
+                                                Padding="0"
+                                                CornerRadius="999"
+                                                Background="#f4e8d8"
+                                                Foreground="#8b6f50"
+                                                HorizontalContentAlignment="Center"
+                                                VerticalContentAlignment="Center"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Top"/>
+                                        <TextBlock Grid.Row="1"
+                                                   Grid.ColumnSpan="2"
+                                                   Text="{Binding Title}"
+                                                   FontSize="11"
+                                                   FontWeight="Bold"
+                                                   Foreground="#7a6550"
+                                                   TextWrapping="Wrap"
+                                                   MaxLines="2"
+                                                   Margin="0,12,0,8"/>
+                                        <StackPanel Grid.Row="2" Spacing="4">
+                                            <TextBlock Text="{Binding Value}"
+                                                       FontSize="32"
+                                                       FontWeight="Black"
+                                                       Foreground="#2d241d"/>
+                                            <TextBlock Text="{Binding Units}"
+                                                       FontSize="12"
+                                                       Foreground="#9b8469"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+        </Grid>
+
+        <Border Grid.Row="2"
+                Background="#2d241d"
+                Padding="18,12">
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="20">
+                <TextBlock Text="MS43 + MS4X extended logger desktop dashboard"
+                           Foreground="#d8c3a5"
+                           FontSize="11"
+                           VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1"
+                           Text="{Binding SelectedVariant, StringFormat='Variant: {0}'}"
+                           Foreground="#fff8ef"
+                           FontSize="11"
+                           FontWeight="Bold"
+                           VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="2"
+                           Text="{Binding SelectedPort, StringFormat='Port: {0}'}"
+                           Foreground="#fff8ef"
+                           FontSize="11"
+                           FontWeight="Bold"
+                           VerticalAlignment="Center"/>
             </Grid>
         </Border>
-
     </Grid>
 </Window>

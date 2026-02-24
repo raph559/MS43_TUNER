@@ -1,11 +1,13 @@
+using System.IO;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
 
 namespace MS43Logger.AvaloniaApp;
 
 public partial class MainWindow : Window
 {
-    private MainWindowViewModel ViewModel => (MainWindowViewModel)DataContext;
+    private MainWindowViewModel? ViewModel => DataContext as MainWindowViewModel;
 
     public MainWindow()
     {
@@ -31,12 +33,48 @@ public partial class MainWindow : Window
     {
         if (ViewModel != null)
         {
-            await ViewModel.ConnectAsync();
+            await ViewModel.ToggleConnectionAsync();
         }
     }
 
-    private void DisconnectButton_Click(object sender, RoutedEventArgs e)
+    private void PinButton_Click(object sender, RoutedEventArgs e)
     {
-        ViewModel?.Disconnect();
+        if (ViewModel is null)
+        {
+            return;
+        }
+
+        if (sender is Button { CommandParameter: DecodedValueViewModel value })
+        {
+            ViewModel.TogglePinned(value);
+        }
+    }
+
+    private async void BrowseCsvButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel is null)
+        {
+            return;
+        }
+
+        var defaultFileName = Path.GetFileName(ViewModel.CsvPath);
+        var selectedFile = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Choose CSV log file",
+            SuggestedFileName = string.IsNullOrWhiteSpace(defaultFileName) ? "ms43-log.csv" : defaultFileName,
+            DefaultExtension = "csv",
+            FileTypeChoices =
+            [
+                new FilePickerFileType("CSV files")
+                {
+                    Patterns = ["*.csv"]
+                }
+            ]
+        });
+
+        if (selectedFile?.Path is { IsAbsoluteUri: true } selectedPath)
+        {
+            ViewModel.CsvPath = selectedPath.LocalPath;
+        }
     }
 }
