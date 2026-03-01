@@ -41,6 +41,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private double _samplesPerSecond;
     private bool _showPinnedOnly;
     private int _pinnedCount;
+    private string _selectedTheme = "Dark";
 
     private static readonly HashSet<string> DefaultPinnedChannels = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -53,6 +54,8 @@ public class MainWindowViewModel : INotifyPropertyChanged
     };
 
     public string[] AdxVariants { get; } = { "b22", "b25", "b30" };
+
+    public string[] ThemeModes { get; } = { "Dark", "Light" };
 
     private string _selectedVariant = "b30";
     public string SelectedVariant
@@ -169,11 +172,24 @@ public class MainWindowViewModel : INotifyPropertyChanged
         set => SetField(ref _pinnedCount, value);
     }
 
+    public string SelectedTheme
+    {
+        get => _selectedTheme;
+        set
+        {
+            if (SetField(ref _selectedTheme, value))
+            {
+                App.SetTheme(value);
+            }
+        }
+    }
+
     public MainWindowViewModel()
     {
         AvailablePorts = new ObservableCollection<string>(SerialPort.GetPortNames());
         SelectedPort = AvailablePorts.FirstOrDefault();
         LiveValues = new ObservableCollection<DecodedValueViewModel>();
+        App.SetTheme(SelectedTheme);
         CsvPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             "MS43 Logs",
