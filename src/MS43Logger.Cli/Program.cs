@@ -166,7 +166,7 @@ static void PrintUsage()
     Console.WriteLine();
     Console.WriteLine("Options:");
     Console.WriteLine("  --port COMx           Serial port for the K-line adapter.");
-    Console.WriteLine("  --variant NAME        Bundled ADX variant: b22, b25, or b30. Default: b30.");
+    Console.WriteLine("  --variant NAME        Bundled ADX variant: b22, b25, b30, or ms43x. Default: b30.");
     Console.WriteLine("  --definition PATH     Custom ADX file to use instead of a bundled variant.");
     Console.WriteLine("  --channel NAME        Repeat to select channels by ID or title match.");
     Console.WriteLine("  --list-channels       Print the matched channels and exit.");
