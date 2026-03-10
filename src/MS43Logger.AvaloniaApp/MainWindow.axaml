@@ -7,7 +7,7 @@
         x:Class="MS43Logger.AvaloniaApp.MainWindow"
         x:DataType="local:MainWindowViewModel"
         Title="MS43 Logger"
-        Background="#f3efe7"
+        Background="{DynamicResource AppBackgroundBrush}"
         FontFamily="avares://Avalonia.Fonts.Inter/Assets#Inter"
         MinWidth="980" MinHeight="680">
 
@@ -22,140 +22,155 @@
         <Style Selector="TextBox">
             <Setter Property="CornerRadius" Value="10"/>
             <Setter Property="Padding" Value="12,9"/>
+            <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource InputForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource InputBorderBrush}"/>
         </Style>
         <Style Selector="ComboBox">
             <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Foreground" Value="{DynamicResource InputForegroundBrush}"/>
         </Style>
         <Style Selector="CheckBox">
-            <Setter Property="Foreground" Value="#3f3a34"/>
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
         </Style>
     </Window.Styles>
 
     <Grid RowDefinitions="Auto,*,Auto">
         <Border Grid.Row="0"
-                Background="#d8c3a5"
+                Background="{DynamicResource HeaderBackgroundBrush}"
                 Padding="24,20"
-                BorderBrush="#b89b74"
+                BorderBrush="{DynamicResource HeaderBorderBrush}"
                 BorderThickness="0,0,0,1">
             <Grid ColumnDefinitions="2*,3*">
                 <StackPanel Grid.Column="0" Spacing="6">
                     <TextBlock Text="MS43 LOGGER"
                                FontSize="28"
                                FontWeight="Black"
-                               Foreground="#2d241d"/>
+                               Foreground="{DynamicResource PrimaryTextBrush}"/>
                     <TextBlock Text="Desktop logger for MS4X extended logging over DS2 K-line"
                                FontSize="13"
-                               Foreground="#5e4f42"/>
+                               Foreground="{DynamicResource SecondaryTextBrush}"/>
                 </StackPanel>
 
                 <Grid Grid.Column="1"
-                      ColumnDefinitions="Auto,120,Auto,Auto,100,*,Auto,Auto"
+                      ColumnDefinitions="Auto,120,Auto,Auto,100,Auto,110,*,Auto"
                       RowDefinitions="Auto,Auto"
                       ColumnSpacing="10"
                       RowSpacing="10"
                       VerticalAlignment="Center">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="PORT"
                                FontSize="10" FontWeight="Bold"
-                               Foreground="#6a5949"
+                               Foreground="{DynamicResource MutedTextBrush}"
                                VerticalAlignment="Center"/>
                     <ComboBox Grid.Row="0" Grid.Column="1"
                               ItemsSource="{Binding AvailablePorts}"
                               SelectedItem="{Binding SelectedPort}"
+                              Background="{DynamicResource InputBackgroundBrush}"
                               Height="38"/>
                     <Button Grid.Row="0" Grid.Column="2"
                             Content="REFRESH"
                             Click="RefreshButton_Click"
-                            Background="#fffaf4"
-                            Foreground="#4a3f34"/>
+                            Background="{DynamicResource NeutralButtonBackgroundBrush}"
+                            Foreground="{DynamicResource NeutralButtonForegroundBrush}"/>
                     <TextBlock Grid.Row="0" Grid.Column="3" Text="VARIANT"
                                FontSize="10" FontWeight="Bold"
-                               Foreground="#6a5949"
+                               Foreground="{DynamicResource MutedTextBrush}"
                                VerticalAlignment="Center"/>
                     <ComboBox Grid.Row="0" Grid.Column="4"
                               ItemsSource="{Binding AdxVariants}"
                               SelectedItem="{Binding SelectedVariant}"
+                              Background="{DynamicResource InputBackgroundBrush}"
+                              Height="38"/>
+                    <TextBlock Grid.Row="0" Grid.Column="5" Text="THEME"
+                               FontSize="10" FontWeight="Bold"
+                               Foreground="{DynamicResource MutedTextBrush}"
+                               VerticalAlignment="Center"/>
+                    <ComboBox Grid.Row="0" Grid.Column="6"
+                              ItemsSource="{Binding ThemeModes}"
+                              SelectedItem="{Binding SelectedTheme}"
+                              Background="{DynamicResource InputBackgroundBrush}"
                               Height="38"/>
                     <Button Grid.Row="0" Grid.Column="7"
                             Content="{Binding ConnectionButtonText}"
                             Click="ConnectButton_Click"
-                            Background="#2f7d4c"
-                            Foreground="White"/>
+                            Background="{DynamicResource ConnectButtonBackgroundBrush}"
+                            Foreground="{DynamicResource ConnectButtonForegroundBrush}"/>
 
                     <CheckBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
                               Content="Write CSV log"
                               IsChecked="{Binding EnableCsvLogging}"
                               VerticalAlignment="Center"/>
-                    <TextBox Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="4"
+                    <TextBox Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="6"
                              Text="{Binding CsvPath}"
                              Watermark="CSV output path"
                              IsEnabled="{Binding EnableCsvLogging}"/>
-                    <Button Grid.Row="1" Grid.Column="6"
+                    <Button Grid.Row="1" Grid.Column="8"
                             Content="BROWSE"
                             Click="BrowseCsvButton_Click"
                             IsEnabled="{Binding EnableCsvLogging}"
-                            Background="#fffaf4"
-                            Foreground="#4a3f34"/>
+                            Background="{DynamicResource NeutralButtonBackgroundBrush}"
+                            Foreground="{DynamicResource NeutralButtonForegroundBrush}"/>
                 </Grid>
             </Grid>
         </Border>
 
         <Grid Grid.Row="1" ColumnDefinitions="310,*">
             <Border Grid.Column="0"
-                    Background="#f8f4ed"
-                    BorderBrush="#dec9a8"
+                    Background="{DynamicResource SidebarBackgroundBrush}"
+                    BorderBrush="{DynamicResource PanelBorderBrush}"
                     BorderThickness="0,0,1,0"
                     Padding="20">
                 <StackPanel Spacing="18">
-                    <Border Background="#fffaf4" CornerRadius="16" Padding="16" BorderBrush="#e7d5ba" BorderThickness="1">
+                    <Border Background="{DynamicResource SurfaceBackgroundBrush}" CornerRadius="16" Padding="16" BorderBrush="{DynamicResource SurfaceBorderBrush}" BorderThickness="1">
                         <StackPanel Spacing="10">
                             <TextBlock Text="SESSION"
                                        FontSize="12"
                                        FontWeight="Bold"
-                                       Foreground="#8b6f50"/>
+                                       Foreground="{DynamicResource SectionLabelBrush}"/>
                             <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="10" ColumnSpacing="10">
-                                <Border Grid.Row="0" Grid.Column="0" Background="#efe1cf" CornerRadius="12" Padding="12">
+                                <Border Grid.Row="0" Grid.Column="0" Background="{DynamicResource SurfaceMutedBackgroundBrush}" CornerRadius="12" Padding="12">
                                     <StackPanel>
-                                        <TextBlock Text="STATUS" FontSize="10" FontWeight="Bold" Foreground="#8b6f50"/>
-                                        <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" FontSize="12" Foreground="#2d241d"/>
+                                        <TextBlock Text="STATUS" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource SectionLabelBrush}"/>
+                                        <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}"/>
                                     </StackPanel>
                                 </Border>
-                                <Border Grid.Row="0" Grid.Column="1" Background="#efe1cf" CornerRadius="12" Padding="12">
+                                <Border Grid.Row="0" Grid.Column="1" Background="{DynamicResource SurfaceMutedBackgroundBrush}" CornerRadius="12" Padding="12">
                                     <StackPanel>
-                                        <TextBlock Text="ELAPSED" FontSize="10" FontWeight="Bold" Foreground="#8b6f50"/>
-                                        <TextBlock Text="{Binding ElapsedTime}" FontSize="22" FontWeight="Bold" Foreground="#2d241d"/>
+                                        <TextBlock Text="ELAPSED" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource SectionLabelBrush}"/>
+                                        <TextBlock Text="{Binding ElapsedTime}" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
                                     </StackPanel>
                                 </Border>
-                                <Border Grid.Row="1" Grid.Column="0" Background="#efe1cf" CornerRadius="12" Padding="12">
+                                <Border Grid.Row="1" Grid.Column="0" Background="{DynamicResource SurfaceMutedBackgroundBrush}" CornerRadius="12" Padding="12">
                                     <StackPanel>
-                                        <TextBlock Text="SAMPLES" FontSize="10" FontWeight="Bold" Foreground="#8b6f50"/>
-                                        <TextBlock Text="{Binding SampleCount}" FontSize="22" FontWeight="Bold" Foreground="#2d241d"/>
+                                        <TextBlock Text="SAMPLES" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource SectionLabelBrush}"/>
+                                        <TextBlock Text="{Binding SampleCount}" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
                                     </StackPanel>
                                 </Border>
-                                <Border Grid.Row="1" Grid.Column="1" Background="#efe1cf" CornerRadius="12" Padding="12">
+                                <Border Grid.Row="1" Grid.Column="1" Background="{DynamicResource SurfaceMutedBackgroundBrush}" CornerRadius="12" Padding="12">
                                     <StackPanel>
-                                        <TextBlock Text="RATE" FontSize="10" FontWeight="Bold" Foreground="#8b6f50"/>
-                                        <TextBlock Text="{Binding SamplesPerSecond, StringFormat='{}{0:F1} Hz'}" FontSize="22" FontWeight="Bold" Foreground="#2d241d"/>
+                                        <TextBlock Text="RATE" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource SectionLabelBrush}"/>
+                                        <TextBlock Text="{Binding SamplesPerSecond, StringFormat='{}{0:F1} Hz'}" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
                                     </StackPanel>
                                 </Border>
-                                <Border Grid.Row="2" Grid.ColumnSpan="2" Background="#2d241d" CornerRadius="12" Padding="14">
+                                <Border Grid.Row="2" Grid.ColumnSpan="2" Background="{DynamicResource TipBackgroundBrush}" CornerRadius="12" Padding="14">
                                     <StackPanel Spacing="4">
-                                        <TextBlock Text="CONNECT TIP" FontSize="10" FontWeight="Bold" Foreground="#d8c3a5"/>
+                                        <TextBlock Text="CONNECT TIP" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TipHeaderBrush}"/>
                                         <TextBlock Text="If the ECU rejects the baud switch while running, connect before engine start."
                                                    TextWrapping="Wrap"
                                                    FontSize="12"
-                                                   Foreground="#fff8ef"/>
+                                                   Foreground="{DynamicResource TipTextBrush}"/>
                                     </StackPanel>
                                 </Border>
                             </Grid>
                         </StackPanel>
                     </Border>
 
-                    <Border Background="#fffaf4" CornerRadius="16" Padding="16" BorderBrush="#e7d5ba" BorderThickness="1">
+                    <Border Background="{DynamicResource SurfaceBackgroundBrush}" CornerRadius="16" Padding="16" BorderBrush="{DynamicResource SurfaceBorderBrush}" BorderThickness="1">
                         <StackPanel Spacing="10">
                             <TextBlock Text="CHANNEL FILTER"
                                        FontSize="12"
                                        FontWeight="Bold"
-                                       Foreground="#8b6f50"/>
+                                       Foreground="{DynamicResource SectionLabelBrush}"/>
                             <TextBox Text="{Binding SearchText}"
                                      Watermark="Search by ID, title, or units"/>
                             <StackPanel Orientation="Horizontal" Spacing="12">
@@ -163,12 +178,12 @@
                                           IsChecked="{Binding ShowPinnedOnly}"/>
                                 <TextBlock Text="{Binding PinnedCount, StringFormat='{}{0} pinned'}"
                                            FontSize="12"
-                                           Foreground="#6a5949"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
                                            VerticalAlignment="Center"/>
                             </StackPanel>
                             <TextBlock Text="{Binding VisibleChannelCount, StringFormat='{}{0} channels visible'}"
                                        FontSize="12"
-                                       Foreground="#6a5949"/>
+                                       Foreground="{DynamicResource SecondaryTextBrush}"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -176,32 +191,32 @@
 
             <Grid Grid.Column="1" RowDefinitions="Auto,*" Margin="0">
                 <Border Grid.Row="0"
-                        Background="#fbf7f0"
+                        Background="{DynamicResource SurfaceBackgroundBrush}"
                         Padding="20,18"
-                        BorderBrush="#eadbc3"
+                        BorderBrush="{DynamicResource SurfaceBorderBrush}"
                         BorderThickness="0,0,0,1">
                     <Grid ColumnDefinitions="*,Auto">
                         <StackPanel>
                             <TextBlock Text="LIVE CHANNELS"
                                        FontSize="14"
                                        FontWeight="Black"
-                                       Foreground="#2d241d"/>
+                                       Foreground="{DynamicResource PrimaryTextBrush}"/>
                             <TextBlock Text="All decoded channels from the selected bundled MS4X ADX definition"
                                        FontSize="12"
-                                       Foreground="#6a5949"/>
+                                       Foreground="{DynamicResource SecondaryTextBrush}"/>
                         </StackPanel>
                         <Border Grid.Column="1"
                                 CornerRadius="999"
-                                Background="#e5f4e9"
+                                Background="{DynamicResource StatusBadgeBackgroundBrush}"
                                 Padding="12,6"
                                 VerticalAlignment="Center">
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Ellipse Width="8" Height="8" Fill="#2f7d4c" IsVisible="{Binding IsConnected}"/>
-                                <Ellipse Width="8" Height="8" Fill="#aa8e70" IsVisible="{Binding IsNotConnected}"/>
+                                <Ellipse Width="8" Height="8" Fill="{DynamicResource StatusConnectedBrush}" IsVisible="{Binding IsConnected}"/>
+                                <Ellipse Width="8" Height="8" Fill="{DynamicResource StatusDisconnectedBrush}" IsVisible="{Binding IsNotConnected}"/>
                                 <TextBlock Text="{Binding ConnectionButtonText}"
                                            FontSize="11"
                                            FontWeight="Bold"
-                                           Foreground="#2d241d"/>
+                                           Foreground="{DynamicResource StatusBadgeTextBrush}"/>
                             </StackPanel>
                         </Border>
                     </Grid>
@@ -222,9 +237,9 @@
                                 <Border Width="220"
                                         Height="140"
                                         Margin="8"
-                                        Background="#fffaf4"
+                                        Background="{DynamicResource SurfaceBackgroundBrush}"
                                         CornerRadius="18"
-                                        BorderBrush="#e8d6bb"
+                                        BorderBrush="{DynamicResource SurfaceBorderBrush}"
                                         BorderThickness="1">
                                     <Grid RowDefinitions="Auto,*,Auto" ColumnDefinitions="*,Auto" Margin="16">
                                         <Border Grid.ColumnSpan="2"
@@ -240,8 +255,8 @@
                                                 Height="32"
                                                 Padding="0"
                                                 CornerRadius="999"
-                                                Background="#f4e8d8"
-                                                Foreground="#8b6f50"
+                                                Background="{DynamicResource PinButtonBackgroundBrush}"
+                                                Foreground="{DynamicResource PinButtonForegroundBrush}"
                                                 HorizontalContentAlignment="Center"
                                                 VerticalContentAlignment="Center"
                                                 HorizontalAlignment="Right"
@@ -251,7 +266,7 @@
                                                    Text="{Binding Title}"
                                                    FontSize="11"
                                                    FontWeight="Bold"
-                                                   Foreground="#7a6550"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                                    TextWrapping="Wrap"
                                                    MaxLines="2"
                                                    Margin="0,12,0,8"/>
@@ -259,10 +274,10 @@
                                             <TextBlock Text="{Binding Value}"
                                                        FontSize="32"
                                                        FontWeight="Black"
-                                                       Foreground="#2d241d"/>
+                                                       Foreground="{DynamicResource PrimaryTextBrush}"/>
                                             <TextBlock Text="{Binding Units}"
                                                        FontSize="12"
-                                                       Foreground="#9b8469"/>
+                                                       Foreground="{DynamicResource TertiaryTextBrush}"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
@@ -274,22 +289,22 @@
         </Grid>
 
         <Border Grid.Row="2"
-                Background="#2d241d"
+                Background="{DynamicResource FooterBackgroundBrush}"
                 Padding="18,12">
             <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="20">
                 <TextBlock Text="MS43 + MS4X extended logger desktop dashboard"
-                           Foreground="#d8c3a5"
+                           Foreground="{DynamicResource FooterForegroundBrush}"
                            FontSize="11"
                            VerticalAlignment="Center"/>
                 <TextBlock Grid.Column="1"
                            Text="{Binding SelectedVariant, StringFormat='Variant: {0}'}"
-                           Foreground="#fff8ef"
+                           Foreground="{DynamicResource FooterAccentBrush}"
                            FontSize="11"
                            FontWeight="Bold"
                            VerticalAlignment="Center"/>
                 <TextBlock Grid.Column="2"
                            Text="{Binding SelectedPort, StringFormat='Port: {0}'}"
-                           Foreground="#fff8ef"
+                           Foreground="{DynamicResource FooterAccentBrush}"
                            FontSize="11"
                            FontWeight="Bold"
                            VerticalAlignment="Center"/>
