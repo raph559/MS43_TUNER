@@ -53,7 +53,7 @@
                 </StackPanel>
 
                 <Grid Grid.Column="1"
-                      ColumnDefinitions="Auto,120,Auto,Auto,100,Auto,110,*,Auto"
+                      ColumnDefinitions="Auto,120,Auto,Auto,100,*,Auto"
                       RowDefinitions="Auto,Auto"
                       ColumnSpacing="10"
                       RowSpacing="10"
@@ -81,30 +81,22 @@
                               SelectedItem="{Binding SelectedVariant}"
                               Background="{DynamicResource InputBackgroundBrush}"
                               Height="38"/>
-                    <TextBlock Grid.Row="0" Grid.Column="5" Text="THEME"
-                               FontSize="10" FontWeight="Bold"
-                               Foreground="{DynamicResource MutedTextBrush}"
-                               VerticalAlignment="Center"/>
-                    <ComboBox Grid.Row="0" Grid.Column="6"
-                              ItemsSource="{Binding ThemeModes}"
-                              SelectedItem="{Binding SelectedTheme}"
-                              Background="{DynamicResource InputBackgroundBrush}"
-                              Height="38"/>
-                    <Button Grid.Row="0" Grid.Column="7"
+                    <Button Grid.Row="0" Grid.Column="5" Grid.ColumnSpan="2"
                             Content="{Binding ConnectionButtonText}"
                             Click="ConnectButton_Click"
                             Background="{DynamicResource ConnectButtonBackgroundBrush}"
-                            Foreground="{DynamicResource ConnectButtonForegroundBrush}"/>
+                            Foreground="{DynamicResource ConnectButtonForegroundBrush}"
+                            HorizontalAlignment="Right"/>
 
                     <CheckBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
                               Content="Write CSV log"
                               IsChecked="{Binding EnableCsvLogging}"
                               VerticalAlignment="Center"/>
-                    <TextBox Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="6"
+                    <TextBox Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="4"
                              Text="{Binding CsvPath}"
                              Watermark="CSV output path"
                              IsEnabled="{Binding EnableCsvLogging}"/>
-                    <Button Grid.Row="1" Grid.Column="8"
+                    <Button Grid.Row="1" Grid.Column="6"
                             Content="BROWSE"
                             Click="BrowseCsvButton_Click"
                             IsEnabled="{Binding EnableCsvLogging}"
@@ -127,7 +119,7 @@
                                        FontSize="12"
                                        FontWeight="Bold"
                                        Foreground="{DynamicResource SectionLabelBrush}"/>
-                            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="10" ColumnSpacing="10">
+                            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" RowSpacing="10" ColumnSpacing="10">
                                 <Border Grid.Row="0" Grid.Column="0" Background="{DynamicResource SurfaceMutedBackgroundBrush}" CornerRadius="12" Padding="12">
                                     <StackPanel>
                                         <TextBlock Text="STATUS" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource SectionLabelBrush}"/>
@@ -140,19 +132,7 @@
                                         <TextBlock Text="{Binding ElapsedTime}" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
                                     </StackPanel>
                                 </Border>
-                                <Border Grid.Row="1" Grid.Column="0" Background="{DynamicResource SurfaceMutedBackgroundBrush}" CornerRadius="12" Padding="12">
-                                    <StackPanel>
-                                        <TextBlock Text="SAMPLES" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource SectionLabelBrush}"/>
-                                        <TextBlock Text="{Binding SampleCount}" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                                    </StackPanel>
-                                </Border>
-                                <Border Grid.Row="1" Grid.Column="1" Background="{DynamicResource SurfaceMutedBackgroundBrush}" CornerRadius="12" Padding="12">
-                                    <StackPanel>
-                                        <TextBlock Text="RATE" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource SectionLabelBrush}"/>
-                                        <TextBlock Text="{Binding SamplesPerSecond, StringFormat='{}{0:F1} Hz'}" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                                    </StackPanel>
-                                </Border>
-                                <Border Grid.Row="2" Grid.ColumnSpan="2" Background="{DynamicResource TipBackgroundBrush}" CornerRadius="12" Padding="14">
+                                <Border Grid.Row="1" Grid.ColumnSpan="2" Background="{DynamicResource TipBackgroundBrush}" CornerRadius="12" Padding="14">
                                     <StackPanel Spacing="4">
                                         <TextBlock Text="CONNECT TIP" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TipHeaderBrush}"/>
                                         <TextBlock Text="If the ECU rejects the baud switch while running, connect before engine start."
@@ -164,6 +144,13 @@
                             </Grid>
                         </StackPanel>
                     </Border>
+
+                    <Button Content="OPEN PERFORMANCE DASHBOARD"
+                            Click="OpenPerformanceWindow_Click"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            Background="{DynamicResource NeutralButtonBackgroundBrush}"
+                            Foreground="{DynamicResource NeutralButtonForegroundBrush}"/>
 
                     <Border Background="{DynamicResource SurfaceBackgroundBrush}" CornerRadius="16" Padding="16" BorderBrush="{DynamicResource SurfaceBorderBrush}" BorderThickness="1">
                         <StackPanel Spacing="10">
@@ -291,7 +278,7 @@
         <Border Grid.Row="2"
                 Background="{DynamicResource FooterBackgroundBrush}"
                 Padding="18,12">
-            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="20">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="20">
                 <TextBlock Text="MS43 + MS4X extended logger desktop dashboard"
                            Foreground="{DynamicResource FooterForegroundBrush}"
                            FontSize="11"
@@ -308,6 +295,21 @@
                            FontSize="11"
                            FontWeight="Bold"
                            VerticalAlignment="Center"/>
+                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <TextBlock Text="THEME:"
+                               FontSize="10" FontWeight="Bold"
+                               Foreground="{DynamicResource FooterAccentBrush}"
+                               VerticalAlignment="Center"/>
+                    <ComboBox ItemsSource="{Binding ThemeModes}"
+                              SelectedItem="{Binding SelectedTheme}"
+                              Background="Transparent"
+                              BorderThickness="0"
+                              Foreground="{DynamicResource FooterAccentBrush}"
+                              FontSize="11"
+                              FontWeight="Bold"
+                              Padding="6,4"
+                              MinHeight="20"/>
+                </StackPanel>
             </Grid>
         </Border>
     </Grid>

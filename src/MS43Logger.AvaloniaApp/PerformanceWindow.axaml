@@ -1,0 +1,62 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="using:MS43Logger.AvaloniaApp"
+        mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="250"
+        x:Class="MS43Logger.AvaloniaApp.PerformanceWindow"
+        x:DataType="local:MainWindowViewModel"
+        Title="Performance Tests"
+        Background="{DynamicResource AppBackgroundBrush}"
+        FontFamily="avares://Avalonia.Fonts.Inter/Assets#Inter"
+        Width="400" Height="260"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Styles>
+        <Style Selector="Button">
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="16,10"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+    </Window.Styles>
+
+    <Border Padding="20">
+        <StackPanel Spacing="20">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel>
+                    <TextBlock Text="PERFORMANCE DASHBOARD"
+                               FontSize="16"
+                               FontWeight="Black"
+                               Foreground="{DynamicResource PrimaryTextBrush}"/>
+                    <TextBlock Text="Measure sprint times directly from ECU parameters"
+                               FontSize="11"
+                               Foreground="{DynamicResource SecondaryTextBrush}"/>
+                </StackPanel>
+                <Button Grid.Column="1" 
+                        Content="START TEST" 
+                        Click="StartPerformanceTestButton_Click" 
+                        Background="{DynamicResource ConnectButtonBackgroundBrush}" 
+                        Foreground="{DynamicResource ConnectButtonForegroundBrush}" 
+                        VerticalAlignment="Center"/>
+            </Grid>
+
+            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto" ColumnSpacing="15">
+                <Border Grid.Column="0" Background="{DynamicResource SurfaceBackgroundBrush}" BorderBrush="{DynamicResource SurfaceBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="20">
+                    <StackPanel Spacing="6" HorizontalAlignment="Center">
+                        <TextBlock Text="0-100 KM/H" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource SectionLabelBrush}" HorizontalAlignment="Center"/>
+                        <TextBlock Text="{Binding Time0To100}" FontSize="32" FontWeight="Black" Foreground="{DynamicResource PrimaryTextBrush}" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="1" Background="{DynamicResource SurfaceBackgroundBrush}" BorderBrush="{DynamicResource SurfaceBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="20">
+                    <StackPanel Spacing="6" HorizontalAlignment="Center">
+                        <TextBlock Text="0-200 KM/H" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource SectionLabelBrush}" HorizontalAlignment="Center"/>
+                        <TextBlock Text="{Binding Time0To200}" FontSize="32" FontWeight="Black" Foreground="{DynamicResource PrimaryTextBrush}" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </StackPanel>
+    </Border>
+</Window>
