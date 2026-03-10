@@ -488,7 +488,24 @@ public sealed class AdxDefinition
 
     private static string? NormalizeHash(string? value)
     {
-        return string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = value.Trim().ToUpperInvariant();
+        if (normalized.StartsWith("0X", StringComparison.Ordinal))
+        {
+            normalized = normalized[2..];
+        }
+
+        normalized = normalized.TrimStart('0');
+        if (normalized.Length == 0)
+        {
+            normalized = "0";
+        }
+
+        return "0X" + normalized;
     }
 
     private static byte[] ParseByteString(string? value)

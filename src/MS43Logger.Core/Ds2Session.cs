@@ -4,6 +4,7 @@ namespace MS43Logger.Core;
 
 public sealed class Ds2Session : IDisposable
 {
+    private const int PollRetryCount = 2;
     private readonly AdxDefinition _definition;
     private readonly ISerialPortAdapter _port;
     private bool _connected;
@@ -46,8 +47,22 @@ public sealed class Ds2Session : IDisposable
         }
 
         var exchange = _definition.GetMonitorExchange();
-        var responseFrame = ExecuteExchange(exchange);
-        return ExtractPayload(responseFrame, exchange.Response);
+        TimeoutException? lastTimeout = null;
+
+        for (var attempt = 1; attempt <= PollRetryCount; attempt++)
+        {
+            try
+            {
+                var responseFrame = ExecuteExchange(exchange);
+                return ExtractPayload(responseFrame, exchange.Response);
+            }
+            catch (TimeoutException ex) when (attempt < PollRetryCount)
+            {
+                lastTimeout = ex;
+            }
+        }
+
+        throw lastTimeout ?? new TimeoutException($"Timed out waiting for '{exchange.Response.Id}' on {PortName}.");
     }
 
     public void Disconnect()

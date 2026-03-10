@@ -19,6 +19,7 @@ namespace MS43Logger.AvaloniaApp;
 
 public class MainWindowViewModel : INotifyPropertyChanged
 {
+    private const int ConsecutivePollTimeoutLimit = 3;
     private string _selectedPort;
     private ObservableCollection<string> _availablePorts;
     private ObservableCollection<DecodedValueViewModel> _liveValues;
@@ -72,7 +73,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
         "FUELPULSEAVG",
     };
 
-    public string[] AdxVariants { get; } = { "b22", "b25", "b30" };
+    public string[] AdxVariants { get; } = { "b22", "b25", "b30", "ms43x" };
 
     public string[] ThemeModes { get; } = { "Dark", "Light" };
 
@@ -321,7 +322,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
             SamplesPerSecond = 0;
             _sampleRateBaseCount = 0;
             _sampleRateStopwatch.Restart();
-            StatusText = $"Connected to {SelectedPort}. Logging {channels.Count} channels from {SelectedVariant.ToUpperInvariant()}.";
+            StatusText = BuildConnectedStatus(channels.Count);
 
             _allLiveValues.Clear();
             foreach (var channel in channels)
@@ -361,6 +362,8 @@ public class MainWindowViewModel : INotifyPropertyChanged
     {
         await Task.Run(async () =>
         {
+            var consecutivePollTimeouts = 0;
+
             while (!token.IsCancellationRequested)
             {
                 try
@@ -368,9 +371,15 @@ public class MainWindowViewModel : INotifyPropertyChanged
                     var payload = _session.PollPayload();
                     var decoded = _currentDefinition.DecodePayload(payload, channels);
                     WriteCsvRow(decoded);
+                    var resumedAfterTimeout = consecutivePollTimeouts > 0;
+                    consecutivePollTimeouts = 0;
 
                     Dispatcher.UIThread.Post(() =>
                     {
+                        if (resumedAfterTimeout)
+                        {
+                            StatusText = BuildConnectedStatus(channels.Count);
+                        }
                         SampleCount++;
                         foreach (var decodedValue in decoded)
                         {
@@ -392,6 +401,29 @@ public class MainWindowViewModel : INotifyPropertyChanged
                 {
                     break;
                 }
+                catch (TimeoutException ex)
+                {
+                    consecutivePollTimeouts++;
+                    if (consecutivePollTimeouts < ConsecutivePollTimeoutLimit)
+                    {
+                        var timeoutCount = consecutivePollTimeouts;
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            StatusText = $"Polling timeout ({timeoutCount}/{ConsecutivePollTimeoutLimit}). Retrying...";
+                        });
+
+                        await Task.Delay(50, token);
+                        continue;
+                    }
+
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        StatusText = $"Polling error: {ex.Message}";
+                        ConnectionFailed?.Invoke(this, "Polling error: " + ex.ToString());
+                        Disconnect();
+                    });
+                    break;
+                }
                 catch (Exception ex)
                 {
                     Dispatcher.UIThread.Post(() =>
@@ -406,6 +438,11 @@ public class MainWindowViewModel : INotifyPropertyChanged
                 await Task.Delay(20, token);
             }
         }, token);
+    }
+
+    private string BuildConnectedStatus(int channelCount)
+    {
+        return $"Connected to {SelectedPort}. Logging {channelCount} channels from {SelectedVariant.ToUpperInvariant()}.";
     }
 
     public void Disconnect()

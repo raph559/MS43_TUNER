@@ -10,6 +10,7 @@ public static class BundledDefinitions
             ["b22"] = "Siemens_MS43_Extended_Log_v2.9_M54B22.adx",
             ["b25"] = "Siemens_MS43_Extended_Log_v2.9_M54B25.adx",
             ["b30"] = "Siemens_MS43_Extended_Log_v2.9_M54B30.adx",
+            ["ms43x"] = "Siemens_MS43_MS43X001_Logging.adx",
         };
 
     public static IReadOnlyCollection<string> Variants => VariantFiles.Keys.ToArray();
