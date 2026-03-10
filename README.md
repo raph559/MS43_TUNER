@@ -1,12 +1,13 @@
 # MS43 Logger
 
-`MS43Logger` is a C#/.NET 10 CLI logger for BMW MS43 ECUs running the MS4X custom firmware extended logger.
+`MS43Logger` is a C#/.NET 10 logger for BMW MS43 ECUs running the MS4X custom firmware extended logger.
 
 It uses the official MS4X v2.9 ADX definitions to:
 
 - switch the ECU from `9600 8E1` into the extended logger session
 - poll the custom `0B B0` logging command at `125000` baud
 - decode ADX channels, math expressions, linked values, and lookup-backed flags
+- show a live desktop dashboard
 - print live values to the console
 - write CSV logs
 
@@ -26,7 +27,23 @@ Build everything:
 dotnet build MS43Logger.sln
 ```
 
-List channels from the bundled B30 definition:
+Run the desktop app:
+
+```powershell
+dotnet run --project src/MS43Logger.AvaloniaApp/MS43Logger.AvaloniaApp.csproj
+```
+
+The desktop app lets you:
+
+- pick the COM port and ADX variant
+- connect/disconnect from the ECU
+- view all decoded channels live
+- pin favorite channels so they stay at the top
+- filter channels by name/ID
+- optionally write a CSV log directly from the GUI
+- choose the CSV path with a file picker
+
+List channels from the bundled B30 definition from the CLI:
 
 ```powershell
 dotnet run --project src/MS43Logger.Cli/MS43Logger.Cli.csproj -- --variant b30 --list-channels
@@ -48,6 +65,26 @@ Stop after a fixed sample count:
 
 ```powershell
 dotnet run --project src/MS43Logger.Cli/MS43Logger.Cli.csproj -- --port COM3 --variant b22 --count 500 --csv logs\b22-run.csv
+```
+
+## Desktop Publish
+
+If you want a standalone Windows build of the desktop app:
+
+```powershell
+dotnet publish src/MS43Logger.AvaloniaApp/MS43Logger.AvaloniaApp.csproj -c Release -r win-x64 --self-contained true
+```
+
+The published app will be under:
+
+```text
+src\MS43Logger.AvaloniaApp\bin\Release\net10.0\win-x64\publish\
+```
+
+There is also a helper script that publishes both the desktop app and the CLI into an `artifacts\publish` folder:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\Publish-Windows.ps1
 ```
 
 ## CLI Options
