@@ -1,0 +1,6 @@
+tmp/
+.pytest_cache/
+__pycache__/
+bin/
+obj/
+.vs/
