@@ -16,6 +16,60 @@ public sealed class ValueCodec
         _image = image ?? throw new ArgumentNullException(nameof(image));
     }
 
+    /// <summary>Physical value of <paramref name="raw"/>, or NaN when the equation cannot be evaluated or is not finite.</summary>
+    public double ToPhysical(XdfMath math, long raw) => ToPhysical(math, raw, LinkValues(math, 0));
+
+    /// <summary>The raw value whose physical value is closest to <paramref name="physical"/>, clamped to the element range.</summary>
+    public long ToRaw(XdfMath math, XdfData data, double physical)
+    {
+        ArgumentNullException.ThrowIfNull(math);
+        ArgumentNullException.ThrowIfNull(data);
+        if (!double.IsFinite(physical))
+        {
+            throw new ArgumentException("The target value must be a finite number.", nameof(physical));
+        }
+
+        var links = LinkValues(math, 0);
+        var (min, max) = RawRange(data);
+        if (TryLinear(math, links, min, max, out var at0, out var slope))
+        {
+            // Clamp before the cast: huge targets would otherwise saturate the long and wrap to the wrong end.
+            var exact = Math.Round(min + (physical - at0) / slope);
+            if (exact <= min || exact >= max)
+            {
+                return exact <= min ? min : max;
+            }
+
+            var guess = (long)exact;
+            return Nearest(math, links, physical, Math.Max(guess - 1, min), Math.Min(guess + 1, max));
+        }
+
+        if (data.ElementBits > 16)
+        {
+            throw new NotSupportedException($"Converting back through '{math.Equation}' is only supported for linear 32-bit values.");
+        }
+
+        var table = Table(math, links, min, max);
+        long best = min;
+        var bestDistance = double.PositiveInfinity;
+        for (var i = 0; i < table.Length; i++)
+        {
+            var distance = Math.Abs(table[i] - physical);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                best = min + i;
+            }
+        }
+
+        if (double.IsPositiveInfinity(bestDistance))
+        {
+            throw new InvalidOperationException($"'{math.Equation}' gives no finite value for any raw value, so {physical} cannot be stored.");
+        }
+
+        return best;
+    }
+
     public static string Format(double physical, long raw, int? decimalPlaces, int? outputType, int elementBits)
     {
         switch (outputType)
@@ -76,6 +130,65 @@ public sealed class ValueCodec
         }
     }
 
+    /// <summary>Values of the linked variables, or null when one cannot be resolved.</summary>
+    private Dictionary<string, double>? LinkValues(XdfMath math, int depth)
+    {
+        var values = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        foreach (var variable in math.Variables)
+        {
+            switch (variable.Kind)
+            {
+                case XdfVariableKind.Unsupported:
+                    return null;
+                case XdfVariableKind.Link:
+                    if (depth >= MaxLinkDepth ||
+                        variable.LinkId is not int id ||
+                        _xdf.FindConstantById(id) is not XdfConstant constant ||
+                        !constant.Data.IsSupported ||
+                        !_image.Contains(constant.Data))
+                    {
+                        return null;
+                    }
+
+                    var value = ToPhysical(constant.Math, _image.ReadElement(constant.Data, 0), LinkValues(constant.Math, depth + 1));
+                    if (double.IsNaN(value))
+                    {
+                        return null;
+                    }
+
+                    values[variable.Id] = value;
+                    break;
+            }
+        }
+
+        return values;
+    }
+
+    private bool TryLinear(XdfMath math, IReadOnlyDictionary<string, double>? links, long min, long max, out double at0, out double slope)
+    {
+        // The slope comes from the end points: two neighbouring raws lose precision across a 32-bit range.
+        at0 = ToPhysical(math, min, links);
+        var atMax = ToPhysical(math, max, links);
+        slope = (atMax - at0) / (max - min);
+        if (!double.IsFinite(at0) || !double.IsFinite(atMax) || slope == 0)
+        {
+            return false;
+        }
+
+        var tolerance = 1e-9 * Math.Max(1, Math.Max(Math.Abs(at0), Math.Abs(atMax)));
+        foreach (var point in new[] { min + 1, min + (max - min) / 2, max - 1 })
+        {
+            var expected = at0 + slope * (point - min);
+            var actual = ToPhysical(math, point, links);
+            if (!double.IsFinite(actual) || Math.Abs(actual - expected) > tolerance)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private long Nearest(XdfMath math, IReadOnlyDictionary<string, double>? links, double physical, long from, long to)
     {
         var best = from;
@@ -91,5 +204,23 @@ public sealed class ValueCodec
         }
 
         return best;
+    }
+
+    private double[] Table(XdfMath math, IReadOnlyDictionary<string, double>? links, long min, long max)
+    {
+        var key = string.Join('|', math.Equation, min, max, string.Join(',', links?.Select(pair => pair.Key + "=" + pair.Value.ToString("R", CultureInfo.InvariantCulture)) ?? Array.Empty<string>()));
+        if (!_tables.TryGetValue(key, out var table))
+        {
+            table = new double[max - min + 1];
+            for (var i = 0; i < table.Length; i++)
+            {
+                var value = ToPhysical(math, min + i, links);
+                table[i] = double.IsNaN(value) ? double.PositiveInfinity : value;
+            }
+
+            _tables[key] = table;
+        }
+
+        return table;
     }
 }

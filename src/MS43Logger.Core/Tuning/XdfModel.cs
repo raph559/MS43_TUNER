@@ -21,4 +21,36 @@ public sealed record XdfVariable(string Id, XdfVariableKind Kind, int? LinkId);
 
 public sealed record XdfMath(string Equation, IReadOnlyList<XdfVariable> Variables);
 
+public sealed record XdfAxis(
+    string Id,
+    string Units,
+    int Count,
+    XdfData? Data,
+    int? LinkedTableId,
+    IReadOnlyList<string> Labels,
+    XdfMath Math,
+    int? DecimalPlaces);
+
 public sealed record XdfZ(XdfData Data, XdfMath Math, string Units, int? DecimalPlaces, int? OutputType, double? Min, double? Max);
+
+public abstract record XdfItem(int UniqueId, string Title, string Description, IReadOnlyList<int> CategoryIds);
+
+public sealed record XdfTable(int UniqueId, string Title, string Description, IReadOnlyList<int> CategoryIds, XdfAxis X, XdfAxis Y, XdfZ Z)
+    : XdfItem(UniqueId, Title, Description, CategoryIds);
+
+public sealed record XdfConstant(
+    int UniqueId,
+    string Title,
+    string Description,
+    IReadOnlyList<int> CategoryIds,
+    XdfData Data,
+    XdfMath Math,
+    string Units,
+    int? DecimalPlaces,
+    int? OutputType,
+    double? RangeLow,
+    double? RangeHigh)
+    : XdfItem(UniqueId, Title, Description, CategoryIds);
+
+public sealed record XdfFlag(int UniqueId, string Title, string Description, IReadOnlyList<int> CategoryIds, XdfData Data, long Mask)
+    : XdfItem(UniqueId, Title, Description, CategoryIds);
