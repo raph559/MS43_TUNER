@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using MS43Logger.Core;
+using MS43Logger.Core.Tuning;
 
 return Run(args);
 
@@ -9,6 +10,16 @@ static int Run(string[] args)
 {
     try
     {
+        if (args.Length > 0 && args[0] == "rate")
+        {
+            return RunRate(args.Skip(1).ToArray());
+        }
+
+        if (args.Length > 0 && args[0] == "show")
+        {
+            return RunShow(args.Skip(1).ToArray());
+        }
+
         var options = CliOptions.Parse(args);
         if (options.ShowHelp)
         {
@@ -48,6 +59,7 @@ static int Run(string[] args)
 
             var durationLimit = options.DurationSeconds is double seconds ? TimeSpan.FromSeconds(seconds) : (TimeSpan?)null;
             var stopwatch = Stopwatch.StartNew();
+            var rateMeter = new SampleRateMeter(windowSize: int.MaxValue);
             long sampleIndex = 0;
 
             while (!stopRequested)
@@ -63,6 +75,7 @@ static int Run(string[] args)
                 }
 
                 var payload = session.PollPayload();
+                rateMeter.Record(stopwatch.Elapsed);
                 var decodedValues = definition.DecodePayload(payload, channels);
                 var sample = new LogSample(DateTimeOffset.UtcNow, sampleIndex, decodedValues);
 
@@ -84,7 +97,12 @@ static int Run(string[] args)
                 Console.WriteLine();
             }
 
-            Console.WriteLine($"Stopped after {sampleIndex} sample(s).");
+            Console.WriteLine(rateMeter.Current is RateStats rate
+                ? string.Format(
+                    CultureInfo.InvariantCulture,
+                    "Stopped after {0} sample(s), {1:0.0} samples/s (avg {2:0.0} ms, min {3:0} ms, max {4:0} ms).",
+                    sampleIndex, rate.SamplesPerSecond, rate.AverageMs, rate.MinMs, rate.MaxMs)
+                : $"Stopped after {sampleIndex} sample(s).");
             return 0;
         }
         finally
@@ -101,6 +119,88 @@ static int Run(string[] args)
         Console.Error.WriteLine($"Error: {exception.Message}");
         return 1;
     }
+}
+
+static int RunRate(string[] args)
+{
+    if (args.Length != 1)
+    {
+        throw new InvalidOperationException("Usage: ms43-logger rate PATH.csv");
+    }
+
+    using var reader = new StreamReader(args[0]);
+    if (LogRateAnalyzer.FromCsv(reader) is not RateStats rate)
+    {
+        Console.Error.WriteLine($"Error: no timestamps found in {args[0]}");
+        return 1;
+    }
+
+    Console.WriteLine(string.Format(
+        CultureInfo.InvariantCulture,
+        "{0} samples, {1:0.0} samples/s, interval avg {2:0.0} ms, min {3:0.0} ms, max {4:0.0} ms",
+        rate.Intervals + 1, rate.SamplesPerSecond, rate.AverageMs, rate.MinMs, rate.MaxMs));
+    return 0;
+}
+
+static int RunShow(string[] args)
+{
+    string? binPath = null, xdfPath = null, name = null;
+    var raw = false;
+    for (var index = 0; index < args.Length; index++)
+    {
+        switch (args[index])
+        {
+            case "--bin" when index + 1 < args.Length:
+                binPath = args[++index];
+                break;
+            case "--xdf" when index + 1 < args.Length:
+                xdfPath = args[++index];
+                break;
+            case "--raw":
+                raw = true;
+                break;
+            default:
+                name = name is null ? args[index] : throw new InvalidOperationException($"Unexpected argument '{args[index]}'.");
+                break;
+        }
+    }
+
+    if (binPath is null || xdfPath is null || name is null)
+    {
+        throw new InvalidOperationException("Usage: ms43-logger show --bin PATH --xdf PATH NAME [--raw]");
+    }
+
+    var image = BinImage.Load(binPath);
+    var xdf = XdfDefinition.LoadFromFile(xdfPath);
+    var firmware = FirmwareIdentifier.Identify(image);
+    if (!FirmwareIdentifier.Matches(firmware, xdf))
+    {
+        Console.Error.WriteLine($"Warning: XDF \"{xdf.Title}\" does not match firmware {firmware.SoftwareId ?? "(unknown)"} of {image.Name}.");
+    }
+
+    var reader = new CalibrationReader(xdf, image);
+    switch (xdf.FindByTitle(name))
+    {
+        case XdfTable table:
+            Console.WriteLine(TableTextFormatter.Format(reader.ReadTable(table), raw));
+            return 0;
+        case XdfConstant constant:
+            Console.WriteLine(TableTextFormatter.FormatConstant(constant, reader.ReadConstant(constant)));
+            return 0;
+        case XdfFlag flag:
+            Console.WriteLine($"{flag.Title} = {(reader.ReadFlag(flag) ? "on" : "off")} (mask 0x{flag.Mask:X2})");
+            return 0;
+    }
+
+    var suggestions = xdf.Tables.Cast<XdfItem>().Concat(xdf.Constants).Concat(xdf.Flags)
+        .Select(item => item.Title)
+        .Where(title => title.Contains(name, StringComparison.OrdinalIgnoreCase))
+        .Take(5)
+        .ToList();
+    Console.Error.WriteLine(suggestions.Count == 0
+        ? $"Error: no item named '{name}' in {xdf.SourceName}."
+        : $"Error: no item named '{name}'. Did you mean: {string.Join(", ", suggestions)}?");
+    return 1;
 }
 
 static AdxDefinition LoadDefinition(CliOptions options)
@@ -163,6 +263,8 @@ static void PrintUsage()
     Console.WriteLine();
     Console.WriteLine("Usage:");
     Console.WriteLine("  ms43-logger --port COM3 [options]");
+    Console.WriteLine("  ms43-logger rate PATH.csv     Logging rate of an existing CSV log.");
+    Console.WriteLine("  ms43-logger show --bin PATH --xdf PATH NAME [--raw]   Print a table, value or flag.");
     Console.WriteLine();
     Console.WriteLine("Options:");
     Console.WriteLine("  --port COMx           Serial port for the K-line adapter.");
