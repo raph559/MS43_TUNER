@@ -36,6 +36,7 @@ dotnet run --project src/MS43Logger.AvaloniaApp/MS43Logger.AvaloniaApp.csproj
 The desktop app lets you:
 
 - pick the COM port and ADX variant
+- switch between dark and light themes
 - connect/disconnect from the ECU
 - view all decoded channels live
 - pin favorite channels so they stay at the top
