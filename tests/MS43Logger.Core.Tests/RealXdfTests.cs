@@ -30,4 +30,23 @@ public class RealXdfTests
         Assert.Equal(1253, links.Count);
         Assert.All(links, axis => Assert.NotNull(xdf.FindTableById(axis.LinkedTableId!.Value)));
     }
+
+    [RealFileFact(TestData.Xdf)]
+    public void KnownQuirksAreReported()
+    {
+        var xdf = Load();
+
+        Assert.Single(xdf.Warnings, warning => warning.Contains("ip_ectpwm_i__tco_dif", StringComparison.Ordinal));
+        Assert.Contains(xdf.Warnings, warning => warning.Contains("0x2738", StringComparison.Ordinal));
+        Assert.Equal("ip_n_ecf_temp_cat__temp_cat", xdf.FindTableById(0x2738)!.Title);
+    }
+
+    [RealFileFact(TestData.Xdf)]
+    public void CategoriesResolve()
+    {
+        var xdf = Load();
+        var table = (XdfTable)xdf.FindByTitle("ip_iga_ron98_pl__n__maf")!;
+
+        Assert.Contains("Ignition", table.CategoryIds.Select(id => xdf.Categories[id]));
+    }
 }

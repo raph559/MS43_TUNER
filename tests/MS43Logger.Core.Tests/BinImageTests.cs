@@ -82,4 +82,17 @@ public class BinImageTests
         Assert.Equal(new FirmwareInfo("43X001", "ca43X001.DAT"), FirmwareIdentifier.Identify(withId));
         Assert.Equal(new FirmwareInfo(null, null), FirmwareIdentifier.Identify(blank));
     }
+
+    [RealFileFact(TestData.CarBin, TestData.StockBin, TestData.Xdf)]
+    public void IdentifiesRealFirmwareAndMatchesXdf()
+    {
+        var car = FirmwareIdentifier.Identify(BinImage.Load(TestData.Find(TestData.CarBin)!));
+        var stock = FirmwareIdentifier.Identify(BinImage.Load(TestData.Find(TestData.StockBin)!));
+        var xdf = XdfDefinition.LoadFromFile(TestData.Find(TestData.Xdf)!);
+
+        Assert.Equal(new FirmwareInfo("43X001", "ca43X001.DAT"), car);
+        Assert.Equal(new FirmwareInfo("430069", "ca430069.DAT"), stock);
+        Assert.True(FirmwareIdentifier.Matches(car, xdf));
+        Assert.False(FirmwareIdentifier.Matches(stock, xdf));
+    }
 }
