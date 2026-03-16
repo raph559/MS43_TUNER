@@ -174,4 +174,86 @@ public class XdfDefinitionTests
         Assert.Equal(new XdfVariable("Y", XdfVariableKind.Link, 0x3236), variables[1]);
         Assert.Equal(XdfVariableKind.Unsupported, variables[2].Kind);
     }
+
+    [Fact]
+    public void CategoriesUseIndexPlusOne()
+    {
+        var xdf = Parse(Table("0x10", "t1", """<EMBEDDEDDATA mmedaddress="0x7315" mmedelementsizebits="8" />"""));
+
+        Assert.Equal("Idle Speed", xdf.Categories[133]);
+        Assert.Equal(new[] { 133 }, xdf.Tables[0].CategoryIds);
+    }
+
+    [Fact]
+    public void DuplicateIdKeepsFirstAndWarns()
+    {
+        var xdf = Parse(
+            Table("0x2738", "first", """<EMBEDDEDDATA mmedaddress="0x7C84" mmedelementsizebits="8" />""") +
+            Table("0x2738", "second", """<EMBEDDEDDATA mmedaddress="0xBEF4" mmedelementsizebits="8" />"""));
+
+        Assert.Equal(2, xdf.Tables.Count);
+        Assert.Equal("first", xdf.FindTableById(0x2738)!.Title);
+        Assert.Contains(xdf.Warnings, warning => warning.Contains("0x2738", StringComparison.Ordinal));
+        Assert.Equal("second", xdf.FindByTitle("SECOND")!.Title);
+    }
+
+    [Fact]
+    public void FlagMaskIsParsed()
+    {
+        var xdf = Parse("""
+            <XDFFLAG uniqueid="0xCBC8"><title>lv_mil_ind_knk_lv_2</title>
+              <EMBEDDEDDATA mmedtypeflags="0x02" mmedaddress="0x7D0" mmedelementsizebits="16" />
+              <mask>0x02</mask></XDFFLAG>
+            """);
+
+        var flag = Assert.Single(xdf.Flags);
+        Assert.Equal(2, flag.Mask);
+        Assert.Equal(0x707D0, flag.Data.Address);
+        Assert.Same(flag, xdf.FindByTitle("lv_mil_ind_knk_lv_2"));
+    }
+
+    [Fact]
+    public void ConstantFieldsAreParsed()
+    {
+        var xdf = Parse("""
+            <XDFCONSTANT uniqueid="0x661E" vislevel="10" flags="0xC"><title>c_dtc_isa_2_1</title>
+              <description>An OBD code</description>
+              <CATEGORYMEM index="0" category="133" />
+              <EMBEDDEDDATA mmedtypeflags="0x02" mmedaddress="0x272" mmedelementsizebits="16" />
+              <units>OBDII P Code</units><outputtype>3</outputtype><decimalpl>0</decimalpl>
+              <rangelow>-5.5</rangelow><rangehigh>65535.000000</rangehigh>
+              <MATH equation="1.0*X"><VAR id="X" /></MATH></XDFCONSTANT>
+            """);
+
+        var constant = Assert.Single(xdf.Constants);
+        Assert.Equal(0x661E, constant.UniqueId);
+        Assert.Equal("An OBD code", constant.Description);
+        Assert.Equal("OBDII P Code", constant.Units);
+        Assert.Equal(3, constant.OutputType);
+        Assert.Equal(0, constant.DecimalPlaces);
+        Assert.Equal(-5.5, constant.RangeLow);
+        Assert.Equal(65535.0, constant.RangeHigh);
+        Assert.Same(constant, xdf.FindConstantById(0x661E));
+    }
+
+    [Fact]
+    public void DoctypeIsRefused()
+    {
+        const string xml = """
+            <?xml version="1.0"?>
+            <!DOCTYPE XDFFORMAT [<!ENTITY x "boom">]>
+            <XDFFORMAT><XDFHEADER><deftitle>&x;</deftitle></XDFHEADER></XDFFORMAT>
+            """;
+
+        Assert.Throws<XmlException>(() => XdfDefinition.Load(new MemoryStream(Encoding.UTF8.GetBytes(xml)), "evil.xdf"));
+    }
+
+    [Fact]
+    public void MissingHeaderIsRefused()
+    {
+        var error = Assert.Throws<InvalidDataException>(
+            () => XdfDefinition.Load(new MemoryStream(Encoding.UTF8.GetBytes("<XDFFORMAT></XDFFORMAT>")), "empty.xdf"));
+
+        Assert.Contains("XDF header is missing", error.Message);
+    }
 }
