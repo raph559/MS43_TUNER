@@ -43,6 +43,25 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private int _pinnedCount;
     private string _selectedTheme = "Dark";
 
+    private readonly Stopwatch _accelStopwatch = new();
+    private string _time0To100 = "--";
+    private string _time0To200 = "--";
+    private bool _reached100;
+    private bool _reached200;
+    private bool _isPerformanceTestArmed;
+    private bool _isWaitingForLaunch;
+
+    public void ArmPerformanceTest()
+    {
+        _isPerformanceTestArmed = true;
+        _isWaitingForLaunch = false;
+        _accelStopwatch.Reset();
+        _reached100 = false;
+        _reached200 = false;
+        Time0To100 = "Wait 0kmh";
+        Time0To200 = "Wait 0kmh";
+    }
+
     private static readonly HashSet<string> DefaultPinnedChannels = new(StringComparer.OrdinalIgnoreCase)
     {
         "RPM",
@@ -116,6 +135,63 @@ public class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _elapsedTime;
         set => SetField(ref _elapsedTime, value);
+    }
+
+    public string Time0To100
+    {
+        get => _time0To100;
+        set => SetField(ref _time0To100, value);
+    }
+
+    public string Time0To200
+    {
+        get => _time0To200;
+        set => SetField(ref _time0To200, value);
+    }
+
+    private void UpdateAccelerationTimes(double speed)
+    {
+        if (!_isPerformanceTestArmed)
+        {
+            return;
+        }
+
+        if (!_accelStopwatch.IsRunning)
+        {
+            if (speed <= 1.0 && !_isWaitingForLaunch)
+            {
+                _isWaitingForLaunch = true;
+                Time0To100 = "Ready";
+                Time0To200 = "Ready";
+            }
+            else if (_isWaitingForLaunch && speed > 1.0)
+            {
+                _accelStopwatch.Restart();
+                Time0To100 = "00.0s";
+                Time0To200 = "00.0s";
+            }
+        }
+        else if (_accelStopwatch.IsRunning)
+        {
+            if (!_reached100)
+            {
+                Time0To100 = (_accelStopwatch.ElapsedMilliseconds / 1000.0).ToString("F1") + "s";
+                if (speed >= 100.0)
+                {
+                    _reached100 = true;
+                }
+            }
+            if (!_reached200)
+            {
+                Time0To200 = (_accelStopwatch.ElapsedMilliseconds / 1000.0).ToString("F1") + "s";
+                if (speed >= 200.0)
+                {
+                    _reached200 = true;
+                    _accelStopwatch.Stop();
+                    _isPerformanceTestArmed = false; // Disable arm after completion
+                }
+            }
+        }
     }
 
     public string SearchText
@@ -196,6 +272,8 @@ public class MainWindowViewModel : INotifyPropertyChanged
             $"ms43-{DateTime.Now:yyyyMMdd-HHmmss}.csv");
     }
 
+    public event EventHandler<string> ConnectionFailed;
+
     public void RefreshPorts()
     {
         AvailablePorts = new ObservableCollection<string>(SerialPort.GetPortNames());
@@ -274,6 +352,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
         catch (Exception ex)
         {
             StatusText = $"Connect failed: {ex.Message}";
+            ConnectionFailed?.Invoke(this, ex.ToString());
             Disconnect();
         }
     }
@@ -301,6 +380,11 @@ public class MainWindowViewModel : INotifyPropertyChanged
                                 var digits = Math.Clamp(decodedValue.Definition.DigitCount, 0, 6);
                                 vm.Value = decodedValue.Value.ToString($"F{digits}", CultureInfo.InvariantCulture);
                             }
+
+                            if (string.Equals(decodedValue.Definition.Id, "VEHICLESPEED", StringComparison.OrdinalIgnoreCase))
+                            {
+                                UpdateAccelerationTimes(decodedValue.Value);
+                            }
                         }
                     });
                 }
@@ -313,6 +397,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
                     Dispatcher.UIThread.Post(() =>
                     {
                         StatusText = $"Polling error: {ex.Message}";
+                        ConnectionFailed?.Invoke(this, "Polling error: " + ex.ToString());
                         Disconnect();
                     });
                     break;

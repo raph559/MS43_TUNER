@@ -12,10 +12,15 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        DataContext = new MainWindowViewModel();
         
-        // Ensure graceful disconnect when closing window
-        Closing += (s, e) => 
+        var viewModel = new MainWindowViewModel();
+        DataContext = viewModel;
+
+        viewModel.ConnectionFailed += (s, errorLog) =>
+        {
+            var errorWindow = new ErrorWindow(errorLog);
+            errorWindow.ShowDialog(this);
+        };
         {
             if (ViewModel?.IsConnected == true)
             {
@@ -76,5 +81,19 @@ public partial class MainWindow : Window
         {
             ViewModel.CsvPath = selectedPath.LocalPath;
         }
+    }
+
+    private void OpenPerformanceWindow_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel is null)
+        {
+            return;
+        }
+
+        var perfWindow = new PerformanceWindow
+        {
+            DataContext = ViewModel
+        };
+        perfWindow.Show(this);
     }
 }
