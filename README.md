@@ -2,9 +2,9 @@
 
 `MS43Logger` is a C#/.NET 10 logger for BMW MS43 ECUs running the MS4X custom firmware extended logger.
 
-It uses the official MS4X v2.9 ADX definitions to:
+It uses the official MS4X ADX definitions to:
 
-- switch the ECU from `9600 8E1` into the extended logger session
+- switch the ECU from `9600 8E1` into the logger session
 - poll the custom `0B B0` logging command at `125000` baud
 - decode ADX channels, math expressions, linked values, and lookup-backed flags
 - show a live desktop dashboard
@@ -56,6 +56,12 @@ Log a few channels on `COM3`:
 dotnet run --project src/MS43Logger.Cli/MS43Logger.Cli.csproj -- --port COM3 --variant b30 --channel RPM --channel MAF --channel COOLANTTEMP
 ```
 
+For MS4X `MS43X` custom firmware, use the dedicated bundled definition:
+
+```powershell
+dotnet run --project src/MS43Logger.Cli/MS43Logger.Cli.csproj -- --port COM3 --variant ms43x
+```
+
 Capture everything to CSV:
 
 ```powershell
@@ -91,7 +97,7 @@ powershell -ExecutionPolicy Bypass -File scripts\Publish-Windows.ps1
 ## CLI Options
 
 - `--port COMx`: serial port for the K-line adapter
-- `--variant {b22,b25,b30}`: bundled ADX definition variant to use
+- `--variant {b22,b25,b30,ms43x}`: bundled ADX definition variant to use
 - `--definition PATH`: use a custom ADX instead of a bundled variant
 - `--channel NAME`: repeat to choose channels by ID or title match
 - `--list-channels`: print the matched channels and exit

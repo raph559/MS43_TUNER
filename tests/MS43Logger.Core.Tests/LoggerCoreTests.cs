@@ -22,6 +22,19 @@ public class LoggerCoreTests
     }
 
     [Fact]
+    public void Ms43xBundledDefinitionMatchesCurrentFirmwareReplyShape()
+    {
+        var definition = BundledDefinitions.Load("ms43x");
+        var monitor = definition.GetMonitorExchange();
+
+        Assert.Equal("DATAREQUEST", monitor.Request.Id);
+        Assert.Equal("DATAREPLY", monitor.Response.Id);
+        Assert.Equal("12-05-0B-B0-AC", BitConverter.ToString(monitor.Request.Bytes));
+        Assert.Equal("12-4D-A0", BitConverter.ToString(monitor.Response.Header));
+        Assert.Equal(73, monitor.Response.PacketSize);
+    }
+
+    [Fact]
     public void DecodePayloadEvaluatesMathLinksAndLookupTables()
     {
         var definition = BundledDefinitions.Load("b30");
@@ -90,6 +103,58 @@ public class LoggerCoreTests
         Assert.Contains(9600, fakePort.BaudHistory);
         Assert.Contains(125000, fakePort.BaudHistory);
         Assert.False(fakePort.IsOpen);
+    }
+
+    [Fact]
+    public void SessionRetriesPollingAfterSingleTimeout()
+    {
+        var definition = BundledDefinitions.Load("b30");
+        var fakePort = new FakeSerialPortAdapter("COM_TEST");
+        var connectExchange = definition.GetConnectExchange();
+        var monitorExchange = definition.GetMonitorExchange();
+        var disconnectExchange = definition.GetDisconnectExchange();
+
+        var payload = Enumerable.Range(0, 82).Select(value => (byte)value).ToArray();
+        fakePort.QueueWriteResponse(connectExchange.Response.Header);
+        fakePort.QueueWriteResponse([]);
+        fakePort.QueueWriteResponse(BuildFrame(monitorExchange.Response.Header, payload));
+        fakePort.QueueWriteResponse(disconnectExchange.Response.Header);
+
+        using var session = new Ds2Session(definition, fakePort);
+        session.Connect();
+
+        var loggedPayload = session.PollPayload();
+
+        session.Disconnect();
+
+        Assert.Equal(payload, loggedPayload);
+        Assert.Equal(4, fakePort.Writes.Count);
+        Assert.Equal(monitorExchange.Request.Bytes, fakePort.Writes[1]);
+        Assert.Equal(monitorExchange.Request.Bytes, fakePort.Writes[2]);
+    }
+
+    [Fact]
+    public void ExpressionEvaluatorSupportsBitwiseAndUsedByMs43xDefinitions()
+    {
+        var value = ExpressionEvaluator.Evaluate("(X&8191)*IS", new Dictionary<string, double>
+        {
+            ["X"] = 0x2005,
+            ["IS"] = 0.5,
+        });
+
+        Assert.Equal(2.5d, value, 6);
+    }
+
+    [Fact]
+    public void Ms43xDefinitionResolvesLinkedHashesWithMissingLeadingZeroes()
+    {
+        var definition = BundledDefinitions.Load("ms43x");
+        var channels = definition.MatchChannels(["MAPVE1"]);
+        var payload = new byte[73];
+
+        var decoded = definition.DecodePayload(payload, channels);
+
+        Assert.Single(decoded);
     }
 
     private static byte[] BuildFrame(IReadOnlyList<byte> header, IReadOnlyList<byte> payload)

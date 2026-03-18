@@ -27,7 +27,7 @@ public static class ExpressionEvaluator
 
         public double Parse()
         {
-            var value = ParseExpression();
+            var value = ParseBitwiseAnd();
             SkipWhitespace();
             if (_position != _expression.Length)
             {
@@ -35,6 +35,21 @@ public static class ExpressionEvaluator
             }
 
             return value;
+        }
+
+        private double ParseBitwiseAnd()
+        {
+            var value = ParseExpression();
+            while (true)
+            {
+                SkipWhitespace();
+                if (!Match('&'))
+                {
+                    return value;
+                }
+
+                value = (long)value & (long)ParseExpression();
+            }
         }
 
         private double ParseExpression()
@@ -97,7 +112,7 @@ public static class ExpressionEvaluator
 
             if (Match('('))
             {
-                var value = ParseExpression();
+                var value = ParseBitwiseAnd();
                 Expect(')');
                 return value;
             }
