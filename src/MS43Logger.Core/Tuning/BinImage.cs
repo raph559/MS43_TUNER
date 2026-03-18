@@ -43,22 +43,57 @@ public sealed class BinImage
         return data.Address is long address && ToOffset(address) + (long)data.Count * data.ElementBytes <= Size;
     }
 
-    /// <summary>Reads element <paramref name="index"/> (row-major) of <paramref name="data"/>.</summary>
-    public long ReadElement(XdfData data, int index)
+    public BinImage Clone() => new((byte[])_bytes.Clone(), Name);
+
+    public byte[] ToArray() => (byte[])_bytes.Clone();
+
+    /// <summary>Contiguous byte ranges where this image differs from <paramref name="other"/>.</summary>
+    public IReadOnlyList<(int Offset, int Length)> DiffRanges(BinImage other)
     {
-        ArgumentNullException.ThrowIfNull(data);
-        if (data.Address is not long address || data.ElementBits is not (8 or 16 or 32))
+        ArgumentNullException.ThrowIfNull(other);
+        var ranges = new List<(int Offset, int Length)>();
+        var start = -1;
+        for (var i = 0; i <= Size; i++)
         {
-            throw new ArgumentOutOfRangeException(nameof(data), "The data has no readable storage.");
+            var differs = i < Size && _bytes[i] != other._bytes[i];
+            if (differs && start < 0)
+            {
+                start = i;
+            }
+            else if (!differs && start >= 0)
+            {
+                ranges.Add((start, i - start));
+                start = -1;
+            }
+        }
+
+        return ranges;
+    }
+
+    /// <summary>Writes element <paramref name="index"/> (row-major) of <paramref name="data"/>; nothing changes when the value or position is invalid.</summary>
+    public void WriteElement(XdfData data, int index, long raw)
+    {
+        var offset = ElementOffset(data, index);
+        var bits = data.ElementBits;
+        var (min, max) = data.Signed ? (-(1L << (bits - 1)), (1L << (bits - 1)) - 1) : (0L, (1L << bits) - 1);
+        if (raw < min || raw > max)
+        {
+            throw new ArgumentOutOfRangeException(nameof(raw), $"{raw} does not fit a {(data.Signed ? "signed" : "unsigned")} {bits}-bit element ({min}…{max}).");
         }
 
         var size = data.ElementBytes;
-        var offset = ToOffset(address) + (long)index * size;
-        if (index < 0 || offset + size > Size)
+        var value = (ulong)raw;
+        for (var i = 0; i < size; i++)
         {
-            throw new ArgumentOutOfRangeException(nameof(index), $"Element {index} at 0x{address:X} lies outside the {Size}-byte image.");
+            _bytes[offset + (data.LsbFirst ? i : size - 1 - i)] = (byte)(value >> (8 * i));
         }
+    }
 
+    /// <summary>Reads element <paramref name="index"/> (row-major) of <paramref name="data"/>.</summary>
+    public long ReadElement(XdfData data, int index)
+    {
+        var offset = ElementOffset(data, index);
+        var size = data.ElementBytes;
         ulong value = 0;
         for (var i = 0; i < size; i++)
         {
@@ -73,5 +108,22 @@ public sealed class BinImage
         }
 
         return (long)value;
+    }
+
+    private static int ElementOffset(XdfData data, int index)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        if (data.Address is not long address || data.ElementBits is not (8 or 16 or 32))
+        {
+            throw new ArgumentOutOfRangeException(nameof(data), "The data has no readable storage.");
+        }
+
+        var offset = ToOffset(address) + (long)index * data.ElementBytes;
+        if (index < 0 || offset + data.ElementBytes > Size)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index), $"Element {index} at 0x{address:X} lies outside the {Size}-byte image.");
+        }
+
+        return (int)offset;
     }
 }
