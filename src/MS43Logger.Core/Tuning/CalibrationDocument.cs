@@ -78,6 +78,43 @@ public sealed class CalibrationDocument
     /// <summary>True once a <c>.bak</c> of the file on disk was written in this session.</summary>
     public bool BackupWritten { get; private set; }
 
+    /// <summary>
+    /// Writes the working image to <paramref name="path"/> (default: the open file). The first time an existing file is
+    /// overwritten in this session its previous bytes go to <c>&lt;file&gt;.bak</c>. The image is written to a temporary
+    /// file and moved into place, so a failure leaves the target as it was. Changed items are appended to the edit log.
+    /// </summary>
+    public void Save(string? path = null, DateTime? now = null)
+    {
+        var target = System.IO.Path.GetFullPath(path ?? Path ?? throw new InvalidOperationException("Choose where to save this file."));
+        var when = now ?? DateTime.Now;
+        var entries = LogEntries(when);
+
+        var temp = target + ".tmp";
+        try
+        {
+            File.WriteAllBytes(temp, Image.ToArray());
+            if (File.Exists(target) && MarkBackedUp(target))
+            {
+                File.Copy(target, target + ".bak", overwrite: true);
+                BackupWritten = true;
+            }
+
+            File.Move(temp, target, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temp))
+            {
+                File.Delete(temp);
+            }
+        }
+
+        Saved = Image.Clone();
+        Path = target;
+        EditLog.Append(target, entries);
+        RaiseChanged();
+    }
+
     // Files already backed up while this app runs: reopening a file must not replace the .bak of its original bytes.
     private static readonly HashSet<string> BackedUpThisRun = new(StringComparer.OrdinalIgnoreCase);
 
@@ -87,5 +124,15 @@ public sealed class CalibrationDocument
         {
             return BackedUpThisRun.Add(path);
         }
+    }
+
+    private List<string> LogEntries(DateTime when)
+    {
+        var before = new CalibrationReader(Xdf, Saved);
+        return ModifiedItems()
+            .Select(item => item is XdfConstant constant
+                ? EditLog.Entry(constant, before.ReadConstant(constant), Reader.ReadConstant(constant), when)
+                : EditLog.Entry(item, null, null, when))
+            .ToList();
     }
 }
