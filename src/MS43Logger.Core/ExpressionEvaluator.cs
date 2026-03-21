@@ -160,7 +160,26 @@ public static class ExpressionEvaluator
                 break;
             }
 
-            return double.Parse(_expression.AsSpan(start, _position - start), CultureInfo.InvariantCulture);
+            // Exponent (e.g. 6.9388939e-018), taken only when digits follow so "2e" stays an error.
+            if (_position < _expression.Length && (_expression[_position] is 'e' or 'E'))
+            {
+                var exponent = _position + 1;
+                if (exponent < _expression.Length && (_expression[exponent] is '+' or '-'))
+                {
+                    exponent++;
+                }
+
+                if (exponent < _expression.Length && char.IsDigit(_expression[exponent]))
+                {
+                    _position = exponent;
+                    while (_position < _expression.Length && char.IsDigit(_expression[_position]))
+                    {
+                        _position++;
+                    }
+                }
+            }
+
+            return double.Parse(_expression.AsSpan(start, _position - start), NumberStyles.Float, CultureInfo.InvariantCulture);
         }
 
         private double ParseIdentifier()
