@@ -35,6 +35,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private readonly Stopwatch _sampleClock = new();
     private readonly SampleRateMeter _rateMeter = new();
     private readonly object _rateLock = new();
+    private LiveLogger _logger;
     private string _rateText = "No samples yet";
     private StreamWriter _csvWriter;
     private string _searchText = string.Empty;
@@ -73,6 +74,12 @@ public class MainWindowViewModel : INotifyPropertyChanged
         "COOLANTTEMP",
         "BATTERYVOLTAGE",
         "FUELPULSEAVG",
+        "N",
+        "MAFIGA",
+        "IGAAVG",
+        "TCO",
+        "LAM1",
+        "VB",
     };
 
     public string[] AdxVariants { get; } = { "b22", "b25", "b30", "ms43x" };
@@ -119,7 +126,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     public bool IsNotConnected => !IsConnected;
 
-    public string ConnectionButtonText => IsConnected ? "DISCONNECT" : "CONNECT";
+    public string ConnectionButtonText => IsConnected ? "Disconnect" : "Connect";
 
     public string StatusText
     {
@@ -231,6 +238,15 @@ public class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _samplesPerSecond;
         set => SetField(ref _samplesPerSecond, value);
+    }
+
+    private double _engineSpeedLevel;
+
+    /// <summary>Engine speed as a fraction of 8 000 rpm, for the logo needle.</summary>
+    public double EngineSpeedLevel
+    {
+        get => _engineSpeedLevel;
+        set => SetField(ref _engineSpeedLevel, value);
     }
 
     public string RateText
@@ -363,6 +379,26 @@ public class MainWindowViewModel : INotifyPropertyChanged
             ConnectionFailed?.Invoke(this, ex.ToString());
             Disconnect();
         }
+    }
+
+    private void BuildChannelRows(IReadOnlyList<AdxValueDefinition> channels)
+    {
+        var pinned = _allLiveValues.Where(value => value.IsPinned).Select(value => value.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _allLiveValues.Clear();
+        foreach (var channel in channels)
+        {
+            _allLiveValues.Add(new DecodedValueViewModel
+            {
+                Id = channel.Id,
+                Title = channel.DisplayName,
+                Units = SanitizeUnits(channel.Units),
+                Value = "–",
+                AccentBrush = GetAccentBrush(channel.Id, channel.DisplayName),
+                IsPinned = pinned.Contains(channel.Id) || DefaultPinnedChannels.Contains(channel.Id),
+            });
+        }
+
+        ApplyFilter();
     }
 
     private async Task PollSensorsAsync(IReadOnlyList<AdxValueDefinition> channels, CancellationToken token)
@@ -578,11 +614,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     private void UpdateSampleRate()
     {
-        RateStats stats;
-        lock (_rateLock)
-        {
-            stats = _rateMeter.Current;
-        }
+        var stats = _logger?.Rate;
 
         SamplesPerSecond = stats?.SamplesPerSecond ?? 0;
         RateText = stats is null
@@ -592,11 +624,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     private void ResetRate()
     {
-        lock (_rateLock)
-        {
-            _rateMeter.Reset();
-        }
-
+        _logger = null;
         SamplesPerSecond = 0;
         RateText = "No samples yet";
     }
@@ -654,7 +682,29 @@ public class DecodedValueViewModel : INotifyPropertyChanged
     private string _value;
     private bool _isPinned;
 
+    private int _historyVersion;
+
     public string Id { get; set; }
+
+    public SampleHistory History { get; } = new();
+
+    /// <summary>Changes with every new sample so the sparkline redraws.</summary>
+    public int HistoryVersion
+    {
+        get => _historyVersion;
+        private set
+        {
+            _historyVersion = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HistoryVersion)));
+        }
+    }
+
+    public void Push(double value)
+    {
+        History.Add(value);
+        HistoryVersion++;
+    }
+
     public string Title { get; set; }
     public string Units { get; set; } = string.Empty;
     public IBrush AccentBrush { get; set; } = new SolidColorBrush(Color.Parse("#00e5ff"));
