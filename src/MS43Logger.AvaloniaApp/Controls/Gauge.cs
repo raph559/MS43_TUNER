@@ -61,6 +61,77 @@ public sealed class Gauge : Control
         return new Size(side, side);
     }
 
+    public override void Render(DrawingContext context)
+    {
+        var side = Math.Min(Bounds.Width, Bounds.Height);
+        if (side <= 0 || Maximum <= Minimum)
+        {
+            return;
+        }
+
+        // Drawn in a 320-unit square, like the mockup's SVG, then scaled.
+        var s = side / 320;
+        var origin = new Point((Bounds.Width - side) / 2, (Bounds.Height - side) / 2);
+        Point P(double x, double y) => new(origin.X + x * s, origin.Y + y * s);
+        Point Polar(double degrees, double radius) => P(160 + radius * Math.Cos(degrees * Math.PI / 180), 160 + radius * Math.Sin(degrees * Math.PI / 180));
+        double A(double value) => GaugeMath.Angle(Minimum, Maximum, value);
+
+        var display = ThemeBrushes.Font(this, "DisplayFont");
+        var ui = ThemeBrushes.Font(this, "UiFont");
+        var ink = ThemeBrushes.Get(this, "InkBrush");
+        var ink2 = ThemeBrushes.Get(this, "Ink2Brush");
+        var ink3 = ThemeBrushes.Get(this, "Ink3Brush");
+        var needle = ThemeBrushes.Get(this, "NeedleBrush");
+
+        context.DrawEllipse(ThemeBrushes.Get(this, "FaceBrush"), new Pen(ThemeBrushes.Get(this, "Bezel2Brush"), 1.5 * s), P(160, 160), 146 * s, 146 * s);
+
+        if (RedFrom is double red && red < Maximum)
+        {
+            var arc = new StreamGeometry();
+            using (var g = arc.Open())
+            {
+                var from = A(Math.Max(red, Minimum));
+                var to = A(Maximum);
+                g.BeginFigure(Polar(from, 129), false);
+                g.ArcTo(Polar(to, 129), new Size(129 * s, 129 * s), 0, to - from > 180, SweepDirection.Clockwise);
+                g.EndFigure(false);
+            }
+
+            context.DrawGeometry(null, new Pen(ThemeBrushes.Get(this, "RedZoneBrush"), 7 * s), arc);
+        }
+
+        var majorPen = new Pen(ThemeBrushes.Get(this, "TickBrush"), 2.4 * s);
+        var minorPen = new Pen(ink3, 1.2 * s);
+        var steps = (int)Math.Round((Maximum - Minimum) / MinorStep);
+        for (var i = 0; i <= steps; i++)
+        {
+            var value = Minimum + i * MinorStep;
+            var ratio = (value - Minimum) / MajorStep;
+            var major = Math.Abs(ratio - Math.Round(ratio)) < 1e-6;
+            context.DrawLine(major ? majorPen : minorPen, Polar(A(value), major ? 120 : 126), Polar(A(value), 134));
+            if (major)
+            {
+                var label = (value / LabelDivisor).ToString("0.##", CultureInfo.InvariantCulture).Replace('-', '−');
+                DrawCentred(context, label, display, 15 * s, ink2, Polar(A(value), 104));
+            }
+        }
+
+        DrawCentred(context, Title, ui, 13 * s, ink2, P(160, 104), FontWeight.SemiBold);
+        var read = Value is double v ? Format(v) : "–";
+        DrawCentred(context, read, display, 40 * s, IsLive && Value is not null ? needle : ink, P(160, 216));
+        DrawCentred(context, Unit, ui, 12.5 * s, ink3, P(160, 246));
+        if (RedFrom is double limit)
+        {
+            DrawCentred(context, "limiter " + Format(limit) + " rpm", ui, 11 * s, ink3, P(160, 294));
+        }
+
+        var tip = Polar(A(Value ?? Minimum), 116);
+        var glow = ThemeBrushes.Color(this, "NeedleGlowColor");
+        context.DrawLine(new Pen(new SolidColorBrush(glow), 8 * s, lineCap: PenLineCap.Round), P(160, 160), tip);
+        context.DrawLine(new Pen(needle, 3.2 * s, lineCap: PenLineCap.Round), P(160, 160), tip);
+        context.DrawEllipse(ThemeBrushes.Get(this, "RaisedBrush"), new Pen(ThemeBrushes.Get(this, "Bezel2Brush"), 1 * s), P(160, 160), 9 * s, 9 * s);
+    }
+
     private string Format(double value) =>
         Decimals == 0
             ? Math.Round(value).ToString("#,0", CultureInfo.InvariantCulture).Replace(',', ' ')
