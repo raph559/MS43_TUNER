@@ -19,7 +19,6 @@ namespace MS43Logger.AvaloniaApp;
 
 public class MainWindowViewModel : INotifyPropertyChanged
 {
-    private const int ConsecutivePollTimeoutLimit = 3;
     private string _selectedPort;
     private ObservableCollection<string> _availablePorts;
     private ObservableCollection<DecodedValueViewModel> _liveValues;
@@ -32,9 +31,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private CancellationTokenSource _pollingCts;
     private DispatcherTimer _uiTimer;
     private readonly Stopwatch _sessionStopwatch = new();
-    private readonly Stopwatch _sampleClock = new();
-    private readonly SampleRateMeter _rateMeter = new();
-    private readonly object _rateLock = new();
     private LiveLogger _logger;
     private string _rateText = "No samples yet";
     private StreamWriter _csvWriter;
@@ -90,7 +86,13 @@ public class MainWindowViewModel : INotifyPropertyChanged
     public string SelectedVariant
     {
         get => _selectedVariant;
-        set => SetField(ref _selectedVariant, value);
+        set
+        {
+            if (SetField(ref _selectedVariant, value))
+            {
+                PreviewChannels();
+            }
+        }
     }
 
     public ObservableCollection<string> AvailablePorts
@@ -249,6 +251,19 @@ public class MainWindowViewModel : INotifyPropertyChanged
         set => SetField(ref _engineSpeedLevel, value);
     }
 
+    public IReadOnlyList<GaugeViewModel> Gauges { get; } = GaugeViewModel.CreateCluster();
+
+    /// <summary>Puts the rev counter's red zone at the open tune's limiter, or removes it.</summary>
+    public void SetRedline(double? rpm) => Gauges[0].RedFrom = rpm;
+
+    private void ResolveGauges(IReadOnlyList<AdxValueDefinition> channels)
+    {
+        foreach (var gauge in Gauges)
+        {
+            gauge.ChannelId = gauge.Candidates.FirstOrDefault(id => channels.Any(channel => channel.Id == id));
+        }
+    }
+
     public string RateText
     {
         get => _rateText;
@@ -295,6 +310,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             "MS43 Logs",
             $"ms43-{DateTime.Now:yyyyMMdd-HHmmss}.csv");
+        PreviewChannels();
     }
 
     public event EventHandler<string> ConnectionFailed;
@@ -344,24 +360,10 @@ public class MainWindowViewModel : INotifyPropertyChanged
             IsConnected = true;
             SampleCount = 0;
             ResetRate();
-            _sampleClock.Restart();
+            ResolveGauges(channels);
             StatusText = BuildConnectedStatus(channels.Count);
 
-            _allLiveValues.Clear();
-            foreach (var channel in channels)
-            {
-                _allLiveValues.Add(new DecodedValueViewModel
-                {
-                    Id = channel.Id,
-                    Title = channel.DisplayName.ToUpperInvariant(),
-                    Units = SanitizeUnits(channel.Units),
-                    Value = "--",
-                    AccentBrush = GetAccentBrush(channel.Id, channel.DisplayName),
-                    IsPinned = DefaultPinnedChannels.Contains(channel.Id)
-                });
-            }
-
-            ApplyFilter();
+            BuildChannelRows(channels);
 
             _pollingCts = new CancellationTokenSource();
             _ = PollSensorsAsync(channels, _pollingCts.Token);
@@ -378,6 +380,26 @@ public class MainWindowViewModel : INotifyPropertyChanged
             StatusText = $"Connect failed: {ex.Message}";
             ConnectionFailed?.Invoke(this, ex.ToString());
             Disconnect();
+        }
+    }
+
+    /// <summary>Shows the selected definition's channels and dials before connecting.</summary>
+    public void PreviewChannels()
+    {
+        if (IsConnected)
+        {
+            return;
+        }
+
+        try
+        {
+            var channels = BundledDefinitions.Load(SelectedVariant).MatchChannels(Array.Empty<string>());
+            BuildChannelRows(channels);
+            ResolveGauges(channels);
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Cannot read the {SelectedVariant} definition: {ex.Message}";
         }
     }
 
@@ -401,91 +423,56 @@ public class MainWindowViewModel : INotifyPropertyChanged
         ApplyFilter();
     }
 
-    private async Task PollSensorsAsync(IReadOnlyList<AdxValueDefinition> channels, CancellationToken token)
+    private Task PollSensorsAsync(IReadOnlyList<AdxValueDefinition> channels, CancellationToken token)
     {
-        await Task.Run(async () =>
+        var logger = new LiveLogger();
+        _logger = logger;
+        logger.SampleReceived += (_, sample) =>
         {
-            var consecutivePollTimeouts = 0;
+            WriteCsvRow(sample.Values);
+            Dispatcher.UIThread.Post(() => ShowSample(sample.Values));
+        };
+        logger.Status += (_, status) => Dispatcher.UIThread.Post(() =>
+            StatusText = status == "Resumed" ? BuildConnectedStatus(channels.Count) : status);
+        logger.Failed += (_, error) => Dispatcher.UIThread.Post(() =>
+        {
+            StatusText = $"Polling error: {error.Message}";
+            ConnectionFailed?.Invoke(this, "Polling error: " + error);
+            Disconnect();
+        });
 
-            while (!token.IsCancellationRequested)
+        return logger.RunAsync(_session, _currentDefinition, channels, token);
+    }
+
+    internal void ShowSample(IReadOnlyList<DecodedValue> decoded)
+    {
+        SampleCount++;
+        foreach (var decodedValue in decoded)
+        {
+            var id = decodedValue.Definition.Id;
+            var vm = _allLiveValues.FirstOrDefault(value => value.Id == id);
+            if (vm is not null)
             {
-                try
-                {
-                    var payload = _session.PollPayload();
-                    lock (_rateLock)
-                    {
-                        _rateMeter.Record(_sampleClock.Elapsed);
-                    }
-
-                    var decoded = _currentDefinition.DecodePayload(payload, channels);
-                    WriteCsvRow(decoded);
-                    var resumedAfterTimeout = consecutivePollTimeouts > 0;
-                    consecutivePollTimeouts = 0;
-
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        if (resumedAfterTimeout)
-                        {
-                            StatusText = BuildConnectedStatus(channels.Count);
-                        }
-                        SampleCount++;
-                        foreach (var decodedValue in decoded)
-                        {
-                            var vm = _allLiveValues.FirstOrDefault(value => value.Id == decodedValue.Definition.Id);
-                            if (vm is not null)
-                            {
-                                var digits = Math.Clamp(decodedValue.Definition.DigitCount, 0, 6);
-                                vm.Value = decodedValue.Value.ToString($"F{digits}", CultureInfo.InvariantCulture);
-                            }
-
-                            if (string.Equals(decodedValue.Definition.Id, "VEHICLESPEED", StringComparison.OrdinalIgnoreCase))
-                            {
-                                UpdateAccelerationTimes(decodedValue.Value);
-                            }
-                        }
-                    });
-                }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
-                catch (TimeoutException ex)
-                {
-                    consecutivePollTimeouts++;
-                    if (consecutivePollTimeouts < ConsecutivePollTimeoutLimit)
-                    {
-                        var timeoutCount = consecutivePollTimeouts;
-                        Dispatcher.UIThread.Post(() =>
-                        {
-                            StatusText = $"Polling timeout ({timeoutCount}/{ConsecutivePollTimeoutLimit}). Retrying...";
-                        });
-
-                        await Task.Delay(50, token);
-                        continue;
-                    }
-
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        StatusText = $"Polling error: {ex.Message}";
-                        ConnectionFailed?.Invoke(this, "Polling error: " + ex.ToString());
-                        Disconnect();
-                    });
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        StatusText = $"Polling error: {ex.Message}";
-                        ConnectionFailed?.Invoke(this, "Polling error: " + ex.ToString());
-                        Disconnect();
-                    });
-                    break;
-                }
-
-                await Task.Delay(20, token);
+                var digits = Math.Clamp(decodedValue.Definition.DigitCount, 0, 6);
+                vm.Value = decodedValue.Value.ToString($"F{digits}", CultureInfo.InvariantCulture);
+                vm.Push(decodedValue.Value);
             }
-        }, token);
+
+            foreach (var gauge in Gauges.Where(gauge => gauge.ChannelId == id))
+            {
+                gauge.Value = decodedValue.Value;
+            }
+
+            if (id is "N" or "RPM")
+            {
+                EngineSpeedLevel = Math.Clamp(decodedValue.Value / 8000.0, 0, 1);
+            }
+
+            if (string.Equals(id, "VEHICLESPEED", StringComparison.OrdinalIgnoreCase))
+            {
+                UpdateAccelerationTimes(decodedValue.Value);
+            }
+        }
     }
 
     private string BuildConnectedStatus(int channelCount)
@@ -502,7 +489,11 @@ public class MainWindowViewModel : INotifyPropertyChanged
         _uiTimer = null;
 
         _sessionStopwatch.Stop();
-        _sampleClock.Stop();
+        foreach (var gauge in Gauges)
+        {
+            gauge.Value = null;
+        }
+
         ElapsedTime = "00:00:00";
         ResetRate();
         IsConnected = false;
