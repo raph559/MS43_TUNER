@@ -31,6 +31,7 @@ public static class SurfaceMath
 /// <summary>The map as a shaded surface on a floor grid; drag to turn it.</summary>
 public sealed class Surface3D : Control
 {
+    public static readonly StyledProperty<TableEditorViewModel?> EditorProperty = AvaloniaProperty.Register<Surface3D, TableEditorViewModel?>(nameof(Editor));
 
     private double _yaw = -0.72;
     private double _pitch = 0.6;
@@ -42,6 +43,27 @@ public sealed class Surface3D : Control
         ClipToBounds = true;
         Cursor = new Cursor(StandardCursorType.SizeAll);
         ActualThemeVariantChanged += (_, _) => InvalidateVisual();
+    }
+
+    public TableEditorViewModel? Editor { get => GetValue(EditorProperty); set => SetValue(EditorProperty, value); }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == EditorProperty)
+        {
+            if (change.OldValue is TableEditorViewModel old)
+            {
+                old.PropertyChanged -= OnEditorChanged;
+            }
+
+            if (change.NewValue is TableEditorViewModel editor)
+            {
+                editor.PropertyChanged += OnEditorChanged;
+            }
+
+            InvalidateVisual();
+        }
     }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
@@ -69,6 +91,73 @@ public sealed class Surface3D : Control
         base.OnPointerReleased(e);
         _dragFrom = null;
         e.Pointer.Capture(null);
+    }
+
+    public override void Render(DrawingContext context)
+    {
+        var size = Bounds.Size;
+        context.DrawRectangle(ThemeBrushes.Get(this, "SunkenBrush"), null, new Rect(size), 8, 8);
+        if (Editor?.Values is not TableValues values || values.Rows < 2 || values.Cols < 2)
+        {
+            return;
+        }
+
+        var finite = values.Physical.Cast<double>().Where(double.IsFinite).ToList();
+        if (finite.Count == 0)
+        {
+            return;
+        }
+
+        double min = finite.Min(), max = finite.Max();
+        double H(int r, int c) => double.IsFinite(values.Physical[r, c]) && max > min ? (values.Physical[r, c] - min) / (max - min) : 0;
+        (Point Point, double Depth) P(double u, double w, double h) => SurfaceMath.Project(u, w, h, _yaw, _pitch, size);
+
+        var floor = new Pen(ThemeBrushes.Get(this, "Bezel2Brush"), 0.6);
+        for (var i = 0; i <= 8; i++)
+        {
+            var t = i / 8.0;
+            context.DrawLine(floor, P(t, 0, 0).Point, P(t, 1, 0).Point);
+            context.DrawLine(floor, P(0, t, 0).Point, P(1, t, 0).Point);
+        }
+
+        var quads = new List<(Point[] Corners, double Depth, Color Colour)>();
+        for (var r = 0; r < values.Rows - 1; r++)
+        {
+            for (var c = 0; c < values.Cols - 1; c++)
+            {
+                var corners = new[] { (c, r), (c + 1, r), (c + 1, r + 1), (c, r + 1) }
+                    .Select(p => P((double)p.Item1 / (values.Cols - 1), (double)p.Item2 / (values.Rows - 1), H(p.Item2, p.Item1)))
+                    .ToArray();
+                // Light from the upper left: shade each cell by its slope.
+                var dx = (H(r, c + 1) + H(r + 1, c + 1) - H(r, c) - H(r + 1, c)) / 2;
+                var dy = (H(r + 1, c) + H(r + 1, c + 1) - H(r, c) - H(r, c + 1)) / 2;
+                var shade = Math.Clamp(1 - dx * 2.2 + dy * 1.4, 0.55, 1.15);
+                var colour = HeatRamp.Color((H(r, c) + H(r, c + 1) + H(r + 1, c) + H(r + 1, c + 1)) / 4);
+                colour = Color.FromRgb(Shade(colour.R, shade), Shade(colour.G, shade), Shade(colour.B, shade));
+                quads.Add((corners.Select(p => p.Point).ToArray(), corners.Average(p => p.Depth), colour));
+            }
+        }
+
+        foreach (var quad in quads.OrderBy(q => q.Depth))
+        {
+            var geometry = new StreamGeometry();
+            using (var g = geometry.Open())
+            {
+                g.BeginFigure(quad.Corners[0], true);
+                g.LineTo(quad.Corners[1]);
+                g.LineTo(quad.Corners[2]);
+                g.LineTo(quad.Corners[3]);
+                g.EndFigure(true);
+            }
+
+            var edge = Color.FromRgb((byte)(quad.Colour.R * 0.7), (byte)(quad.Colour.G * 0.7), (byte)(quad.Colour.B * 0.7));
+            context.DrawGeometry(new SolidColorBrush(quad.Colour), new Pen(new SolidColorBrush(edge), 0.5), geometry);
+        }
+
+        var font = new Typeface(ThemeBrushes.Font(this, "UiFont"));
+        var ink3 = ThemeBrushes.Get(this, "Ink3Brush");
+        Label(context, values.Y.Units.Length > 0 ? values.Y.Units : "rows", font, ink3, P(-0.14, 0.5, 0).Point);
+        Label(context, values.X.Units.Length > 0 ? values.X.Units : "columns", font, ink3, P(0.5, 1.13, 0).Point);
     }
 
     private static byte Shade(byte value, double factor) => (byte)Math.Clamp(Math.Round(value * factor), 0, 255);

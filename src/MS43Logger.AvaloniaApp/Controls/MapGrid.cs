@@ -76,6 +76,29 @@ public sealed class MapGrid : Control
         return row >= 0 && row < values.Rows && col >= 0 && col < values.Cols;
     }
 
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == EditorProperty)
+        {
+            if (change.OldValue is TableEditorViewModel old)
+            {
+                old.PropertyChanged -= OnEditorChanged;
+                old.Edited -= OnEdited;
+            }
+
+            if (change.NewValue is TableEditorViewModel editor)
+            {
+                editor.PropertyChanged += OnEditorChanged;
+                editor.Edited += OnEdited;
+            }
+
+            _typed = string.Empty;
+            InvalidateMeasure();
+            InvalidateVisual();
+        }
+    }
+
     protected override Size MeasureOverride(Size availableSize)
     {
         if (Values is not TableValues values)

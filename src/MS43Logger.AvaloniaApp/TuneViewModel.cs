@@ -185,4 +185,240 @@ public sealed class TuneViewModel : ViewModelBase
             _ => false,
         };
     }
+
+    public string SelectedKindText => SelectedItem is null || Catalog is null ? string.Empty : Catalog.Kind(SelectedItem).ToString();
+
+    public string SearchText
+    {
+        get => _searchText;
+        set
+        {
+            if (SetField(ref _searchText, value ?? string.Empty))
+            {
+                RebuildRail();
+            }
+        }
+    }
+
+    public bool ModifiedOnly
+    {
+        get => _modifiedOnly;
+        set
+        {
+            if (SetField(ref _modifiedOnly, value))
+            {
+                RebuildRail();
+            }
+        }
+    }
+
+    public XdfItem? SelectedItem
+    {
+        get => _selectedItem;
+        set
+        {
+            if (SetField(ref _selectedItem, value))
+            {
+                Editor?.Dispose();
+                Value?.Dispose();
+                Editor = value is XdfTable table && Document is not null && History is not null
+                    ? new TableEditorViewModel(Document, History, table) { Selection = new CellRange(0, 0, 0, 0) }
+                    : null;
+                Value = value is XdfConstant or XdfFlag && Document is not null && History is not null && Catalog is not null
+                    ? new ValueEditorViewModel(Document, History, value, Catalog)
+                    : null;
+
+                // Facts read the editors, so rebuild them once the editors have refreshed after an edit.
+                if (Editor is { } editor)
+                {
+                    editor.PropertyChanged += (_, e) =>
+                    {
+                        if (e.PropertyName == nameof(TableEditorViewModel.Values) && ReferenceEquals(editor, Editor))
+                        {
+                            BuildFacts();
+                        }
+                    };
+                }
+
+                if (Value is { } single)
+                {
+                    single.PropertyChanged += (_, e) =>
+                    {
+                        if (e.PropertyName == nameof(ValueEditorViewModel.Current) && ReferenceEquals(single, Value))
+                        {
+                            BuildFacts();
+                        }
+                    };
+                }
+                OnPropertyChanged(nameof(SelectedKindText));
+                OnPropertyChanged(nameof(ShowsSurface));
+                OnPropertyChanged(nameof(ShowsCurve));
+                BuildFacts();
+                if (value is not null)
+                {
+                    _settings.AddRecent(value.Title);
+                }
+
+                RebuildRail();
+            }
+        }
+    }
+
+    public void TogglePin(XdfItem item)
+    {
+        _settings.TogglePin(item.Title);
+        RebuildRail();
+    }
+
+    public void ToggleCategory(string name)
+    {
+        if (!_expanded.Remove(name))
+        {
+            _expanded.Add(name);
+        }
+
+        RebuildRail();
+    }
+
+    public void RefreshModified() => RebuildRail();
+
+    private void OnDocumentChanged(object? sender, EventArgs e)
+    {
+        OnPropertyChanged(nameof(DirtyText));
+        BuildFacts();
+        RebuildRail();
+    }
+
+    private void BuildFacts()
+    {
+        var facts = new List<Fact>();
+        LegendMin = LegendMax = string.Empty;
+        string Hex(long? address) => address is long a ? "0x" + a.ToString("X5", System.Globalization.CultureInfo.InvariantCulture) : "none";
+        string Bits(XdfData data) => $"{data.ElementBits} bit{(data.Signed ? ", signed" : string.Empty)}";
+        string Axis(AxisValues axis, int count) =>
+            string.Join(", ", new[] { axis.Name, axis.Units, $"{count} points" }.Where(part => !string.IsNullOrWhiteSpace(part)));
+
+        switch (SelectedItem)
+        {
+            case XdfTable table when Editor is { } editor && Catalog is { } catalog:
+                var values = editor.Values;
+                facts.Add(new Fact("Address", Hex(table.Z.Data.Address)));
+                facts.Add(new Fact("Size", $"{values.Rows} × {values.Cols}, {Bits(table.Z.Data)}"));
+                if (table.Z.Units.Length > 0)
+                {
+                    facts.Add(new Fact("Units", table.Z.Units));
+                }
+
+                facts.Add(new Fact("Scaling", table.Z.Math.Equation));
+                if (values.Rows > 1)
+                {
+                    facts.Add(new Fact("Rows", Axis(values.Y, values.Rows)));
+                }
+
+                if (values.Cols > 1)
+                {
+                    facts.Add(new Fact("Columns", Axis(values.X, values.Cols)));
+                }
+
+                if (catalog.Kind(table) == ItemKind.Axis)
+                {
+                    var users = catalog.AxisUsers(table);
+                    facts.Add(new Fact("Used by", users.Count == 0 ? "no table in this XDF" : string.Join(", ", users.Take(4).Select(user => user.Title)) + (users.Count > 4 ? $" and {users.Count - 4} more" : string.Empty)));
+                }
+
+                if (!table.Z.Data.IsSupported)
+                {
+                    facts.Add(new Fact("Read-only", table.Z.Data.UnsupportedReason ?? string.Empty));
+                }
+
+                var finite = values.Physical.Cast<double>().Where(double.IsFinite).ToList();
+                if (finite.Count > 0)
+                {
+                    var units = table.Z.Units.Length > 0 ? " " + table.Z.Units : string.Empty;
+                    LegendMin = ValueCodec.Format(finite.Min(), 0, table.Z.DecimalPlaces, null, 16).Replace('-', '−') + units;
+                    LegendMax = ValueCodec.Format(finite.Max(), 0, table.Z.DecimalPlaces, null, 16).Replace('-', '−') + units;
+                }
+
+                break;
+            case XdfConstant constant when Value is { } value:
+                facts.Add(new Fact("Address", Hex(constant.Data.Address)));
+                facts.Add(new Fact("Size", Bits(constant.Data)));
+                facts.Add(new Fact("Raw", $"{value.Current.Raw} (0x{value.Current.Raw:X})"));
+                facts.Add(new Fact("Scaling", constant.Math.Equation));
+                if (constant.RangeLow is not null || constant.RangeHigh is not null)
+                {
+                    facts.Add(new Fact("Range", $"{constant.RangeLow?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "…"} to {constant.RangeHigh?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "…"}"));
+                }
+
+                break;
+            case XdfFlag flag:
+                facts.Add(new Fact("Address", Hex(flag.Data.Address)));
+                facts.Add(new Fact("Bit mask", "0x" + flag.Mask.ToString("X2", System.Globalization.CultureInfo.InvariantCulture)));
+                break;
+        }
+
+        Facts = facts;
+    }
+
+    private void RebuildRail()
+    {
+        Rail.Clear();
+        if (Catalog is not XdfCatalog catalog || Document is not CalibrationDocument document)
+        {
+            return;
+        }
+
+        var modified = document.ModifiedItems().ToHashSet();
+        RailItem Entry(XdfItem item, bool indented) =>
+            new(item, catalog.Kind(item), _settings.IsPinned(item.Title), modified.Contains(item), ReferenceEquals(item, SelectedItem), indented);
+
+        if (SearchText.Trim().Length > 0)
+        {
+            foreach (var item in catalog.Search(SearchText).Where(item => !ModifiedOnly || modified.Contains(item)))
+            {
+                Rail.Add(Entry(item, false));
+            }
+
+            return;
+        }
+
+        if (ModifiedOnly)
+        {
+            Rail.Add(new RailGroup(modified.Count == 0 ? "No changes since the last save" : "Changed since the last save"));
+            foreach (var item in modified)
+            {
+                Rail.Add(Entry(item, false));
+            }
+
+            return;
+        }
+
+        var pinned = _settings.PinnedInOrder().Select(document.Xdf.FindByTitle).OfType<XdfItem>().ToList();
+        if (pinned.Count > 0)
+        {
+            Rail.Add(new RailGroup("Pinned"));
+            pinned.ForEach(item => Rail.Add(Entry(item, false)));
+        }
+
+        var recent = _settings.Recent.Select(document.Xdf.FindByTitle).OfType<XdfItem>().Except(pinned).Take(5).ToList();
+        if (recent.Count > 0)
+        {
+            Rail.Add(new RailGroup("Recent"));
+            recent.ForEach(item => Rail.Add(Entry(item, false)));
+        }
+
+        Rail.Add(new RailGroup("Categories"));
+        foreach (var (name, count) in catalog.Categories())
+        {
+            var expanded = _expanded.Contains(name);
+            Rail.Add(new RailCategory(name, count, expanded));
+            if (expanded)
+            {
+                foreach (var item in catalog.InCategory(name))
+                {
+                    Rail.Add(Entry(item, true));
+                }
+            }
+        }
+    }
 }
