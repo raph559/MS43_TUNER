@@ -264,6 +264,39 @@ public sealed class TuneViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// Opens a bin with an XDF. Without an XDF, the one last used for the bin's firmware is taken. Problems end up in
+    /// <see cref="ErrorMessage"/> and leave the current document open.
+    /// </summary>
+    public async Task OpenAsync(string binPath, string? xdfPath)
+    {
+        ErrorMessage = null;
+        IsBusy = true;
+        try
+        {
+            var image = await Task.Run(() => BinImage.Load(binPath));
+            var firmware = FirmwareIdentifier.Identify(image);
+            xdfPath ??= firmware.SoftwareId is string id && _settings.XdfByFirmware.TryGetValue(id, out var remembered) && File.Exists(remembered) ? remembered : null;
+            if (xdfPath is null)
+            {
+                ErrorMessage = $"Choose the XDF for {(firmware.SoftwareId is null ? "this bin" : "firmware " + firmware.SoftwareId)}.";
+                return;
+            }
+
+            var xdf = await Task.Run(() => XdfDefinition.LoadFromFile(xdfPath));
+            var document = CalibrationDocument.FromParts(xdf, image, Path.GetFullPath(binPath));
+            Attach(document, xdfPath);
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or System.Xml.XmlException)
+        {
+            ErrorMessage = error.Message;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
     public void TogglePin(XdfItem item)
     {
         _settings.TogglePin(item.Title);
@@ -281,6 +314,45 @@ public sealed class TuneViewModel : ViewModelBase
     }
 
     public void RefreshModified() => RebuildRail();
+
+    private void Attach(CalibrationDocument document, string xdfPath)
+    {
+        if (Document is not null)
+        {
+            Document.Changed -= OnDocumentChanged;
+        }
+
+        Document = document;
+        document.Changed += OnDocumentChanged;
+        History = new EditHistory(document);
+        History.Changed += (_, _) =>
+        {
+            OnPropertyChanged(nameof(CanUndo));
+            OnPropertyChanged(nameof(CanRedo));
+            OnPropertyChanged(nameof(UndoTip));
+        };
+        Catalog = new XdfCatalog(document.Xdf);
+        PlateFile = Path.GetFileName(document.Path ?? "untitled.bin");
+        PlateFirmware = document.Firmware.SoftwareId is string id ? "MS43" + (id.StartsWith("43", StringComparison.Ordinal) ? id[2..] : id) : "Unknown firmware";
+        PlateXdf = Path.GetFileName(xdfPath);
+        FirmwareWarning = document.XdfMatchesFirmware
+            ? null
+            : $"This XDF describes {document.Xdf.Title}, but the bin is firmware {document.Firmware.SoftwareId ?? "unknown"}. Values may be wrong.";
+
+        if (document.Firmware.SoftwareId is string software && document.XdfMatchesFirmware)
+        {
+            _settings.XdfByFirmware[software] = Path.GetFullPath(xdfPath);
+        }
+
+        _settings.LastBin = document.Path;
+        _settings.Save();
+        _expanded.Clear();
+        SelectedItem = null;
+        OnPropertyChanged(nameof(HasDocument));
+        OnPropertyChanged(nameof(DirtyText));
+        RebuildRail();
+        DocumentOpened?.Invoke(this, EventArgs.Empty);
+    }
 
     private void OnDocumentChanged(object? sender, EventArgs e)
     {
