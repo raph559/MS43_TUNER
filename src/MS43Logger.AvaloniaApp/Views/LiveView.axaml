@@ -1,0 +1,85 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:MS43Logger.AvaloniaApp"
+             xmlns:controls="using:MS43Logger.AvaloniaApp.Controls"
+             x:Class="MS43Logger.AvaloniaApp.Views.LiveView"
+             x:DataType="local:MainWindowViewModel">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <StackPanel MaxWidth="1180" Margin="24,26,24,28" Spacing="0">
+
+            <!-- The cluster -->
+            <ItemsControl ItemsSource="{Binding Gauges}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Columns="3" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="local:GaugeViewModel">
+                        <controls:Gauge Height="300" Margin="9,0" IsVisible="{Binding IsAvailable}"
+                                        Title="{Binding Title}" Unit="{Binding Unit}"
+                                        Minimum="{Binding Min}" Maximum="{Binding Max}"
+                                        MajorStep="{Binding Major}" MinorStep="{Binding Minor}"
+                                        LabelDivisor="{Binding LabelDivisor}" Decimals="{Binding Decimals}"
+                                        Value="{Binding Value}" RedFrom="{Binding RedFrom}"
+                                        IsLive="{Binding $parent[UserControl].((local:MainWindowViewModel)DataContext).IsConnected}" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Session -->
+            <WrapPanel HorizontalAlignment="Center" Margin="0,18,0,30" ItemSpacing="22" LineSpacing="10">
+                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <CheckBox Content="Write CSV log" IsChecked="{Binding EnableCsvLogging}" />
+                    <TextBox Text="{Binding CsvPath}" Width="380" IsEnabled="{Binding EnableCsvLogging}" Watermark="CSV output path" />
+                    <Button Content="Browse" Click="BrowseCsvButton_Click" IsEnabled="{Binding EnableCsvLogging}" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <TextBlock Classes="muted" Text="Elapsed" VerticalAlignment="Center" />
+                    <TextBlock Classes="num" Text="{Binding ElapsedTime}" VerticalAlignment="Center" />
+                </StackPanel>
+                <Button Content="Performance tests" Click="OpenPerformanceWindow_Click" VerticalAlignment="Center" />
+                <TextBlock Classes="muted" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="340"
+                           Text="If the ECU refuses the baud switch with the engine running, connect before you start it." />
+            </WrapPanel>
+
+            <!-- Channels -->
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" Margin="0,0,0,10">
+                <TextBlock Classes="heading" Text="Channels" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Classes="muted" Margin="14,0,0,0" VerticalAlignment="Center"
+                           Text="{Binding VisibleChannelCount, StringFormat='{}{0} shown'}" />
+                <TextBox Grid.Column="3" Width="300" Text="{Binding SearchText}" Watermark="Filter by name or ID" Margin="0,0,14,0" />
+                <CheckBox Grid.Column="4" Content="Pinned only" IsChecked="{Binding ShowPinnedOnly}" />
+            </Grid>
+
+            <ItemsControl ItemsSource="{Binding LiveValues}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Columns="2" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="local:DecodedValueViewModel">
+                        <Border BorderBrush="{DynamicResource BezelBrush}" BorderThickness="0,1,0,0" Padding="0,9" Margin="0,0,28,0">
+                            <Grid ColumnDefinitions="26,*,128,112" ColumnSpacing="12">
+                                <Button Classes="ghost" Content="{Binding PinGlyph}" Click="PinButton_Click" CommandParameter="{Binding}"
+                                        ToolTip.Tip="Pin to the top" VerticalAlignment="Center" Foreground="{DynamicResource Ink3Brush}" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Classes="num muted" Text="{Binding Id}" FontSize="11.5" />
+                                </StackPanel>
+                                <controls:Sparkline Grid.Column="2" Height="30" VerticalAlignment="Center"
+                                                    History="{Binding History}" Version="{Binding HistoryVersion}"
+                                                    IsLive="{Binding $parent[UserControl].((local:MainWindowViewModel)DataContext).IsConnected}" />
+                                <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="4">
+                                    <TextBlock Classes="num" Text="{Binding Value}" FontSize="21" VerticalAlignment="Bottom" />
+                                    <TextBlock Classes="muted" Text="{Binding Units}" VerticalAlignment="Bottom" Margin="0,0,0,3" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -1,13 +1,19 @@
 using System.IO;
+using System.Linq;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
+using MS43Logger.AvaloniaApp.Views;
 
 namespace MS43Logger.AvaloniaApp;
 
 public partial class MainWindow : Window
 {
     private MainWindowViewModel? ViewModel => DataContext as MainWindowViewModel;
+    private bool _closeConfirmed;
 
     public MainWindow()
     {
@@ -29,18 +35,56 @@ public partial class MainWindow : Window
         };
     }
 
-    private void RefreshButton_Click(object sender, RoutedEventArgs e)
-    {
-        ViewModel?.RefreshPorts();
-    }
+    private ShellViewModel Shell => (ShellViewModel)DataContext!;
 
-    private async void ConnectButton_Click(object sender, RoutedEventArgs e)
+    private void OnClosing(object? sender, WindowClosingEventArgs e)
     {
-        if (ViewModel != null)
+        if (!_closeConfirmed && Shell.Tune.Document is { IsModified: true })
         {
-            await ViewModel.ToggleConnectionAsync();
+            // Ask first; close again once the edits are saved or knowingly dropped.
+            e.Cancel = true;
+            Dispatcher.UIThread.Post(async () =>
+            {
+                if (await Shell.Tune.ConfirmDiscardAsync())
+                {
+                    _closeConfirmed = true;
+                    Close();
+                }
+            });
+            return;
+        }
+
+        // Leave the ECU's logger session cleanly when the window closes.
+        if (Shell.Live.IsConnected)
+        {
+            Shell.Live.Disconnect();
         }
     }
+
+    private async System.Threading.Tasks.Task SaveAsAsync()
+    {
+        if (Shell.Tune.Document is not { } document)
+        {
+            return;
+        }
+
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Save bin as",
+            SuggestedFileName = System.IO.Path.GetFileName(document.Path ?? "tune.bin"),
+            DefaultExtension = "bin",
+            FileTypeChoices = [new FilePickerFileType("MS43 bin") { Patterns = ["*.bin"] }],
+        });
+
+        if (file?.Path is { IsAbsoluteUri: true } path)
+        {
+            Shell.Tune.Save(path.LocalPath);
+        }
+    }
+
+    private void RefreshButton_Click(object? sender, RoutedEventArgs e) => Shell.Live.RefreshPorts();
+
+    private async void ConnectButton_Click(object? sender, RoutedEventArgs e) => await Shell.Live.ToggleConnectionAsync();
 
     private void PinButton_Click(object sender, RoutedEventArgs e)
     {
