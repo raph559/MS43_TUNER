@@ -1,4 +1,3 @@
-using System.IO;
 using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -12,30 +11,32 @@ namespace MS43Logger.AvaloniaApp;
 
 public partial class MainWindow : Window
 {
-    private MainWindowViewModel? ViewModel => DataContext as MainWindowViewModel;
     private bool _closeConfirmed;
 
     public MainWindow()
+        : this(new ShellViewModel(new MainWindowViewModel(), new TuneViewModel(AppSettings.Load(AppSettings.DefaultFolder))))
+    {
+    }
+
+    public MainWindow(ShellViewModel shell)
     {
         InitializeComponent();
-        
-        var viewModel = new MainWindowViewModel();
-        DataContext = viewModel;
+        DataContext = shell;
 
-        viewModel.ConnectionFailed += (s, errorLog) =>
+        shell.Live.ConnectionFailed += (_, errorLog) => new ErrorWindow(errorLog).ShowDialog(this);
+        shell.Tune.AskToSave = async message =>
         {
-            var errorWindow = new ErrorWindow(errorLog);
-            errorWindow.ShowDialog(this);
+            var answer = await new ConfirmDialog(message).ShowDialog<SaveChoice?>(this);
+            return answer ?? SaveChoice.Cancel;
         };
-        {
-            if (ViewModel?.IsConnected == true)
-            {
-                ViewModel.Disconnect();
-            }
-        };
+
+        Closing += OnClosing;
+        AddHandler(KeyDownEvent, OnShortcut, RoutingStrategies.Tunnel);
     }
 
     private ShellViewModel Shell => (ShellViewModel)DataContext!;
+
+    private TuneView? Tune => this.GetVisualDescendants().OfType<TuneView>().FirstOrDefault();
 
     private void OnClosing(object? sender, WindowClosingEventArgs e)
     {
@@ -58,6 +59,59 @@ public partial class MainWindow : Window
         if (Shell.Live.IsConnected)
         {
             Shell.Live.Disconnect();
+        }
+    }
+
+    private async void OnShortcut(object? sender, KeyEventArgs e)
+    {
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            return;
+        }
+
+        var tune = Shell.Tune;
+        var typing = FocusManager?.GetFocusedElement() is TextBox;
+        switch (e.Key)
+        {
+            case Key.S when e.KeyModifiers.HasFlag(KeyModifiers.Shift):
+                e.Handled = true;
+                await SaveAsAsync();
+                break;
+            case Key.S:
+                e.Handled = true;
+                if (tune.Document?.Path is null)
+                {
+                    await SaveAsAsync();
+                }
+                else
+                {
+                    tune.Save();
+                }
+
+                break;
+            case Key.O:
+                e.Handled = true;
+                Shell.SelectedTab = ShellViewModel.TuneTab;
+                if (Tune is { } view)
+                {
+                    await view.OpenBinAsync();
+                }
+
+                break;
+            case Key.K:
+                e.Handled = true;
+                Shell.SelectedTab = ShellViewModel.TuneTab;
+                Dispatcher.UIThread.RunJobs();
+                Tune?.FocusSearch();
+                break;
+            case Key.Z when !typing:
+                e.Handled = true;
+                tune.Undo();
+                break;
+            case Key.Y when !typing:
+                e.Handled = true;
+                tune.Redo();
+                break;
         }
     }
 
@@ -85,59 +139,4 @@ public partial class MainWindow : Window
     private void RefreshButton_Click(object? sender, RoutedEventArgs e) => Shell.Live.RefreshPorts();
 
     private async void ConnectButton_Click(object? sender, RoutedEventArgs e) => await Shell.Live.ToggleConnectionAsync();
-
-    private void PinButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (ViewModel is null)
-        {
-            return;
-        }
-
-        if (sender is Button { CommandParameter: DecodedValueViewModel value })
-        {
-            ViewModel.TogglePinned(value);
-        }
-    }
-
-    private async void BrowseCsvButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (ViewModel is null)
-        {
-            return;
-        }
-
-        var defaultFileName = Path.GetFileName(ViewModel.CsvPath);
-        var selectedFile = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
-        {
-            Title = "Choose CSV log file",
-            SuggestedFileName = string.IsNullOrWhiteSpace(defaultFileName) ? "ms43-log.csv" : defaultFileName,
-            DefaultExtension = "csv",
-            FileTypeChoices =
-            [
-                new FilePickerFileType("CSV files")
-                {
-                    Patterns = ["*.csv"]
-                }
-            ]
-        });
-
-        if (selectedFile?.Path is { IsAbsoluteUri: true } selectedPath)
-        {
-            ViewModel.CsvPath = selectedPath.LocalPath;
-        }
-    }
-
-    private void OpenPerformanceWindow_Click(object sender, RoutedEventArgs e)
-    {
-        if (ViewModel is null)
-        {
-            return;
-        }
-
-        var perfWindow = new PerformanceWindow
-        {
-            DataContext = ViewModel
-        };
-        perfWindow.Show(this);
-    }
 }
