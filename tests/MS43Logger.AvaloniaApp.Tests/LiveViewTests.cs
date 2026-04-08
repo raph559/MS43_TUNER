@@ -69,4 +69,29 @@ public class LiveViewTests
         live.SetRedline(GaugeViewModel.RedlineFrom(null));
         Assert.Null(live.Gauges[0].RedFrom);
     }
+
+    [AvaloniaFact]
+    public void DrivingSamplesFillDialsAndSparklines()
+    {
+        var (window, live) = ShowLive("ms43x");
+        live.SetRedline(7104);
+        var definition = BundledDefinitions.Load("ms43x");
+        var channels = definition.MatchChannels(Array.Empty<string>());
+        live.IsConnected = true;
+
+        for (var i = 0; i < 200; i++)
+        {
+            var payload = new byte[73];
+            var rpm = 1800 + i * 20;
+            payload[0x04] = (byte)(rpm & 0xFF);
+            payload[0x05] = (byte)(rpm >> 8);
+            payload[0x14] = (byte)(i * 3);
+            payload[0x2C] = (byte)(140 - i / 4);
+            live.ShowSample(definition.DecodePayload(payload, channels));
+        }
+
+        Assert.All(live.Gauges, gauge => Assert.NotNull(gauge.Value));
+        Assert.Contains(live.LiveValues, value => value.History.Count == 200);
+        Screens.Save(window, "live-night");
+    }
 }
