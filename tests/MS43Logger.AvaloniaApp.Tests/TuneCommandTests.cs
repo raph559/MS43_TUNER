@@ -195,4 +195,24 @@ public sealed class ReviewFixTests : IDisposable
             Assert.True(Find.Named<Button>(window, name).IsEffectivelyVisible, name);
         }
     }
+
+    [AvaloniaFact]
+    public async Task FactsFollowEdits()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (_, shell) = await TuneScreen.OpenAsync(select: "c_lc_n_max");
+        shell.Tune.Value!.Input = "4000";
+        shell.Tune.Value.Apply();
+        Assert.Contains(shell.Tune.Facts, fact => fact.Label == "Raw" && fact.Text == "125 (0x7D)");
+
+        shell.Tune.SelectedItem = shell.Tune.Document!.Xdf.FindByTitle("ip_iga_ron98_pl__n__maf");
+        shell.Tune.Editor!.Selection = new CellRange(0, 0, 19, 15);
+        shell.Tune.Editor.Apply(new EditRequest(EditKind.Set, 60));
+        Assert.Equal("60.0 °CRK", shell.Tune.LegendMin);
+        Assert.Equal("60.0 °CRK", shell.Tune.LegendMax);
+    }
 }
