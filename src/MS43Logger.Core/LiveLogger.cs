@@ -6,7 +6,8 @@ public interface IPayloadSource
     byte[] PollPayload();
 }
 
-public sealed record LiveSample(DateTimeOffset Time, long Index, IReadOnlyList<DecodedValue> Values);
+/// <param name="Payload">The frame's data bytes as polled; channels' raw values are read from it.</param>
+public sealed record LiveSample(DateTimeOffset Time, long Index, IReadOnlyList<DecodedValue> Values, ReadOnlyMemory<byte> Payload = default);
 
 /// <summary>
 /// The polling loop: poll, decode, publish, pause. Same rules as before the move out of the window:
@@ -79,7 +80,7 @@ public sealed class LiveLogger
                     Status?.Invoke(this, "Resumed");
                 }
 
-                SampleReceived?.Invoke(this, new LiveSample(DateTimeOffset.UtcNow, index++, values));
+                SampleReceived?.Invoke(this, new LiveSample(DateTimeOffset.UtcNow, index++, values, payload));
                 if (_pause > TimeSpan.Zero)
                 {
                     await Task.Delay(_pause, token);
