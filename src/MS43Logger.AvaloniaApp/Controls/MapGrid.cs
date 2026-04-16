@@ -63,6 +63,15 @@ public sealed class MapGrid : Control
     public Rect CellBounds(int row, int col) =>
         new(RowHeaderWidth + col * (_cellWidth + Gap), TitleHeight + HeaderHeight + row * (CellHeight + Gap), _cellWidth, CellHeight);
 
+    /// <summary>A fractional cell position (row 5.5 = halfway between the centres of rows 5 and 6) in control coordinates.</summary>
+    public Point CursorPoint(double row, double col)
+    {
+        var r = (int)Math.Floor(row);
+        var c = (int)Math.Floor(col);
+        var centre = CellBounds(r, c).Center;
+        return new Point(centre.X + (col - c) * (_cellWidth + Gap), centre.Y + (row - r) * (CellHeight + Gap));
+    }
+
     public bool TryHitCell(Point point, out int row, out int col)
     {
         row = col = -1;
@@ -224,6 +233,47 @@ public sealed class MapGrid : Control
                 Text(context, _typed + "▏", display, 12.5, ink, new Point(anchor.Center.X, anchor.Center.Y - 8.5), 0.5);
             }
         }
+    }
+
+    /// <summary>The engine's position: crosshair, the cells the ECU reads outlined by weight, the fading trail and a dot at the fix.</summary>
+    private void DrawLive(DrawingContext context, LiveCursorState live, TableValues values)
+    {
+        var colour = ThemeBrushes.Cursor(this, live.IsStale);
+        Pen PenOf(double thickness, double opacity) => new(new SolidColorBrush(colour, opacity), thickness);
+        var fix = live.Fix;
+        var at = CursorPoint(fix.Row?.Position ?? 0, fix.Col?.Position ?? 0);
+        var first = CellBounds(0, 0);
+        var last = CellBounds(values.Rows - 1, values.Cols - 1);
+        var hair = PenOf(1, 0.7);
+        if (values.Cols > 1)
+        {
+            context.DrawLine(hair, new Point(at.X, first.Top), new Point(at.X, last.Bottom));
+        }
+
+        if (values.Rows > 1)
+        {
+            context.DrawLine(hair, new Point(first.Left, at.Y), new Point(last.Right, at.Y));
+        }
+
+        foreach (var cell in fix.Cells)
+        {
+            context.DrawRectangle(null, PenOf(1 + 2 * cell.Weight, 0.35 + 0.65 * cell.Weight), CellBounds(cell.Row, cell.Col).Inflate(1), 4, 4);
+        }
+
+        Point? previous = null;
+        foreach (var point in live.Trail)
+        {
+            var p = CursorPoint(point.Row, point.Col);
+            if (previous is Point from)
+            {
+                context.DrawLine(PenOf(1, point.Opacity * 0.5), from, p);
+            }
+
+            context.DrawEllipse(new SolidColorBrush(colour, point.Opacity), null, p, 2.5, 2.5);
+            previous = p;
+        }
+
+        context.DrawEllipse(new SolidColorBrush(colour), new Pen(ThemeBrushes.Get(this, "DialBrush"), 1.5), at, 4, 4);
     }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
