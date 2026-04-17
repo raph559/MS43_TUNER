@@ -52,14 +52,18 @@ public sealed class TuneViewModel : ViewModelBase
     private string? _errorMessage;
     private bool _isBusy;
 
-    public TuneViewModel(AppSettings settings)
+    public TuneViewModel(AppSettings settings, TimeProvider? time = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        LiveCursor = new LiveCursorController(time);
     }
 
     public event EventHandler? DocumentOpened;
 
     public AppSettings Settings => _settings;
+
+    /// <summary>Places the logger's latest sample on the table shown.</summary>
+    public LiveCursorController LiveCursor { get; }
 
     public ObservableCollection<RailEntry> Rail { get; } = new();
 
@@ -250,6 +254,7 @@ public sealed class TuneViewModel : ViewModelBase
                         }
                     };
                 }
+                LiveCursor.Bind(Document, Editor);
                 OnPropertyChanged(nameof(SelectedKindText));
                 OnPropertyChanged(nameof(ShowsSurface));
                 OnPropertyChanged(nameof(ShowsCurve));
@@ -348,6 +353,7 @@ public sealed class TuneViewModel : ViewModelBase
         _settings.Save();
         _expanded.Clear();
         SelectedItem = null;
+        LiveCursor.Bind(document, null);
         OnPropertyChanged(nameof(HasDocument));
         OnPropertyChanged(nameof(DirtyText));
         RebuildRail();
