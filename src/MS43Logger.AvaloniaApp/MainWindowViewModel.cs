@@ -19,7 +19,6 @@ namespace MS43Logger.AvaloniaApp;
 
 public class MainWindowViewModel : INotifyPropertyChanged
 {
-    private const int ConsecutivePollTimeoutLimit = 3;
     private string _selectedPort;
     private ObservableCollection<string> _availablePorts;
     private ObservableCollection<DecodedValueViewModel> _liveValues;
@@ -32,9 +31,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private CancellationTokenSource _pollingCts;
     private DispatcherTimer _uiTimer;
     private readonly Stopwatch _sessionStopwatch = new();
-    private readonly Stopwatch _sampleClock = new();
-    private readonly SampleRateMeter _rateMeter = new();
-    private readonly object _rateLock = new();
+    private LiveLogger _logger;
     private string _rateText = "No samples yet";
     private StreamWriter _csvWriter;
     private string _searchText = string.Empty;
@@ -73,6 +70,12 @@ public class MainWindowViewModel : INotifyPropertyChanged
         "COOLANTTEMP",
         "BATTERYVOLTAGE",
         "FUELPULSEAVG",
+        "N",
+        "MAFIGA",
+        "IGAAVG",
+        "TCO",
+        "LAM1",
+        "VB",
     };
 
     public string[] AdxVariants { get; } = { "b22", "b25", "b30", "ms43x" };
@@ -83,7 +86,13 @@ public class MainWindowViewModel : INotifyPropertyChanged
     public string SelectedVariant
     {
         get => _selectedVariant;
-        set => SetField(ref _selectedVariant, value);
+        set
+        {
+            if (SetField(ref _selectedVariant, value))
+            {
+                PreviewChannels();
+            }
+        }
     }
 
     public ObservableCollection<string> AvailablePorts
@@ -119,7 +128,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     public bool IsNotConnected => !IsConnected;
 
-    public string ConnectionButtonText => IsConnected ? "DISCONNECT" : "CONNECT";
+    public string ConnectionButtonText => IsConnected ? "Disconnect" : "Connect";
 
     public string StatusText
     {
@@ -233,6 +242,28 @@ public class MainWindowViewModel : INotifyPropertyChanged
         set => SetField(ref _samplesPerSecond, value);
     }
 
+    private double _engineSpeedLevel;
+
+    /// <summary>Engine speed as a fraction of 8 000 rpm, for the logo needle.</summary>
+    public double EngineSpeedLevel
+    {
+        get => _engineSpeedLevel;
+        set => SetField(ref _engineSpeedLevel, value);
+    }
+
+    public IReadOnlyList<GaugeViewModel> Gauges { get; } = GaugeViewModel.CreateCluster();
+
+    /// <summary>Puts the rev counter's red zone at the open tune's limiter, or removes it.</summary>
+    public void SetRedline(double? rpm) => Gauges[0].RedFrom = rpm;
+
+    private void ResolveGauges(IReadOnlyList<AdxValueDefinition> channels)
+    {
+        foreach (var gauge in Gauges)
+        {
+            gauge.ChannelId = gauge.Candidates.FirstOrDefault(id => channels.Any(channel => channel.Id == id));
+        }
+    }
+
     public string RateText
     {
         get => _rateText;
@@ -279,6 +310,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             "MS43 Logs",
             $"ms43-{DateTime.Now:yyyyMMdd-HHmmss}.csv");
+        PreviewChannels();
     }
 
     public event EventHandler<string> ConnectionFailed;
@@ -328,24 +360,10 @@ public class MainWindowViewModel : INotifyPropertyChanged
             IsConnected = true;
             SampleCount = 0;
             ResetRate();
-            _sampleClock.Restart();
+            ResolveGauges(channels);
             StatusText = BuildConnectedStatus(channels.Count);
 
-            _allLiveValues.Clear();
-            foreach (var channel in channels)
-            {
-                _allLiveValues.Add(new DecodedValueViewModel
-                {
-                    Id = channel.Id,
-                    Title = channel.DisplayName.ToUpperInvariant(),
-                    Units = SanitizeUnits(channel.Units),
-                    Value = "--",
-                    AccentBrush = GetAccentBrush(channel.Id, channel.DisplayName),
-                    IsPinned = DefaultPinnedChannels.Contains(channel.Id)
-                });
-            }
-
-            ApplyFilter();
+            BuildChannelRows(channels);
 
             _pollingCts = new CancellationTokenSource();
             _ = PollSensorsAsync(channels, _pollingCts.Token);
@@ -365,91 +383,96 @@ public class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
-    private async Task PollSensorsAsync(IReadOnlyList<AdxValueDefinition> channels, CancellationToken token)
+    /// <summary>Shows the selected definition's channels and dials before connecting.</summary>
+    public void PreviewChannels()
     {
-        await Task.Run(async () =>
+        if (IsConnected)
         {
-            var consecutivePollTimeouts = 0;
+            return;
+        }
 
-            while (!token.IsCancellationRequested)
+        try
+        {
+            var channels = BundledDefinitions.Load(SelectedVariant).MatchChannels(Array.Empty<string>());
+            BuildChannelRows(channels);
+            ResolveGauges(channels);
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Cannot read the {SelectedVariant} definition: {ex.Message}";
+        }
+    }
+
+    private void BuildChannelRows(IReadOnlyList<AdxValueDefinition> channels)
+    {
+        var pinned = _allLiveValues.Where(value => value.IsPinned).Select(value => value.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _allLiveValues.Clear();
+        foreach (var channel in channels)
+        {
+            _allLiveValues.Add(new DecodedValueViewModel
             {
-                try
-                {
-                    var payload = _session.PollPayload();
-                    lock (_rateLock)
-                    {
-                        _rateMeter.Record(_sampleClock.Elapsed);
-                    }
+                Id = channel.Id,
+                Title = channel.DisplayName,
+                Units = SanitizeUnits(channel.Units),
+                Value = "–",
+                AccentBrush = GetAccentBrush(channel.Id, channel.DisplayName),
+                IsPinned = pinned.Contains(channel.Id) || DefaultPinnedChannels.Contains(channel.Id),
+            });
+        }
 
-                    var decoded = _currentDefinition.DecodePayload(payload, channels);
-                    WriteCsvRow(decoded);
-                    var resumedAfterTimeout = consecutivePollTimeouts > 0;
-                    consecutivePollTimeouts = 0;
+        ApplyFilter();
+    }
 
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        if (resumedAfterTimeout)
-                        {
-                            StatusText = BuildConnectedStatus(channels.Count);
-                        }
-                        SampleCount++;
-                        foreach (var decodedValue in decoded)
-                        {
-                            var vm = _allLiveValues.FirstOrDefault(value => value.Id == decodedValue.Definition.Id);
-                            if (vm is not null)
-                            {
-                                var digits = Math.Clamp(decodedValue.Definition.DigitCount, 0, 6);
-                                vm.Value = decodedValue.Value.ToString($"F{digits}", CultureInfo.InvariantCulture);
-                            }
+    private Task PollSensorsAsync(IReadOnlyList<AdxValueDefinition> channels, CancellationToken token)
+    {
+        var logger = new LiveLogger();
+        _logger = logger;
+        logger.SampleReceived += (_, sample) =>
+        {
+            WriteCsvRow(sample.Values);
+            Dispatcher.UIThread.Post(() => ShowSample(sample.Values));
+        };
+        logger.Status += (_, status) => Dispatcher.UIThread.Post(() =>
+            StatusText = status == "Resumed" ? BuildConnectedStatus(channels.Count) : status);
+        logger.Failed += (_, error) => Dispatcher.UIThread.Post(() =>
+        {
+            StatusText = $"Polling error: {error.Message}";
+            ConnectionFailed?.Invoke(this, "Polling error: " + error);
+            Disconnect();
+        });
 
-                            if (string.Equals(decodedValue.Definition.Id, "VEHICLESPEED", StringComparison.OrdinalIgnoreCase))
-                            {
-                                UpdateAccelerationTimes(decodedValue.Value);
-                            }
-                        }
-                    });
-                }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
-                catch (TimeoutException ex)
-                {
-                    consecutivePollTimeouts++;
-                    if (consecutivePollTimeouts < ConsecutivePollTimeoutLimit)
-                    {
-                        var timeoutCount = consecutivePollTimeouts;
-                        Dispatcher.UIThread.Post(() =>
-                        {
-                            StatusText = $"Polling timeout ({timeoutCount}/{ConsecutivePollTimeoutLimit}). Retrying...";
-                        });
+        return logger.RunAsync(_session, _currentDefinition, channels, token);
+    }
 
-                        await Task.Delay(50, token);
-                        continue;
-                    }
-
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        StatusText = $"Polling error: {ex.Message}";
-                        ConnectionFailed?.Invoke(this, "Polling error: " + ex.ToString());
-                        Disconnect();
-                    });
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        StatusText = $"Polling error: {ex.Message}";
-                        ConnectionFailed?.Invoke(this, "Polling error: " + ex.ToString());
-                        Disconnect();
-                    });
-                    break;
-                }
-
-                await Task.Delay(20, token);
+    internal void ShowSample(IReadOnlyList<DecodedValue> decoded)
+    {
+        SampleCount++;
+        foreach (var decodedValue in decoded)
+        {
+            var id = decodedValue.Definition.Id;
+            var vm = _allLiveValues.FirstOrDefault(value => value.Id == id);
+            if (vm is not null)
+            {
+                var digits = Math.Clamp(decodedValue.Definition.DigitCount, 0, 6);
+                vm.Value = decodedValue.Value.ToString($"F{digits}", CultureInfo.InvariantCulture);
+                vm.Push(decodedValue.Value);
             }
-        }, token);
+
+            foreach (var gauge in Gauges.Where(gauge => gauge.ChannelId == id))
+            {
+                gauge.Value = decodedValue.Value;
+            }
+
+            if (id is "N" or "RPM")
+            {
+                EngineSpeedLevel = Math.Clamp(decodedValue.Value / 8000.0, 0, 1);
+            }
+
+            if (string.Equals(id, "VEHICLESPEED", StringComparison.OrdinalIgnoreCase))
+            {
+                UpdateAccelerationTimes(decodedValue.Value);
+            }
+        }
     }
 
     private string BuildConnectedStatus(int channelCount)
@@ -466,7 +489,11 @@ public class MainWindowViewModel : INotifyPropertyChanged
         _uiTimer = null;
 
         _sessionStopwatch.Stop();
-        _sampleClock.Stop();
+        foreach (var gauge in Gauges)
+        {
+            gauge.Value = null;
+        }
+
         ElapsedTime = "00:00:00";
         ResetRate();
         IsConnected = false;
@@ -578,11 +605,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     private void UpdateSampleRate()
     {
-        RateStats stats;
-        lock (_rateLock)
-        {
-            stats = _rateMeter.Current;
-        }
+        var stats = _logger?.Rate;
 
         SamplesPerSecond = stats?.SamplesPerSecond ?? 0;
         RateText = stats is null
@@ -592,11 +615,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     private void ResetRate()
     {
-        lock (_rateLock)
-        {
-            _rateMeter.Reset();
-        }
-
+        _logger = null;
         SamplesPerSecond = 0;
         RateText = "No samples yet";
     }
@@ -654,7 +673,29 @@ public class DecodedValueViewModel : INotifyPropertyChanged
     private string _value;
     private bool _isPinned;
 
+    private int _historyVersion;
+
     public string Id { get; set; }
+
+    public SampleHistory History { get; } = new();
+
+    /// <summary>Changes with every new sample so the sparkline redraws.</summary>
+    public int HistoryVersion
+    {
+        get => _historyVersion;
+        private set
+        {
+            _historyVersion = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HistoryVersion)));
+        }
+    }
+
+    public void Push(double value)
+    {
+        History.Add(value);
+        HistoryVersion++;
+    }
+
     public string Title { get; set; }
     public string Units { get; set; } = string.Empty;
     public IBrush AccentBrush { get; set; } = new SolidColorBrush(Color.Parse("#00e5ff"));

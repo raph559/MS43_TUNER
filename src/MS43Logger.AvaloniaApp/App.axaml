@@ -6,81 +6,14 @@
 
     <Application.Styles>
         <FluentTheme />
+        <StyleInclude Source="avares://MS43Logger.AvaloniaApp/Theme/Controls.axaml" />
     </Application.Styles>
 
     <Application.Resources>
         <ResourceDictionary>
-            <ResourceDictionary.ThemeDictionaries>
-                <ResourceDictionary x:Key="Dark">
-                    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#0b1117" />
-                    <SolidColorBrush x:Key="HeaderBackgroundBrush" Color="#141c24" />
-                    <SolidColorBrush x:Key="HeaderBorderBrush" Color="#22303d" />
-                    <SolidColorBrush x:Key="SidebarBackgroundBrush" Color="#10171f" />
-                    <SolidColorBrush x:Key="PanelBorderBrush" Color="#1f2a36" />
-                    <SolidColorBrush x:Key="SurfaceBackgroundBrush" Color="#17212b" />
-                    <SolidColorBrush x:Key="SurfaceMutedBackgroundBrush" Color="#1c2833" />
-                    <SolidColorBrush x:Key="SurfaceBorderBrush" Color="#273443" />
-                    <SolidColorBrush x:Key="PrimaryTextBrush" Color="#eef4fb" />
-                    <SolidColorBrush x:Key="SecondaryTextBrush" Color="#b5c2cf" />
-                    <SolidColorBrush x:Key="TertiaryTextBrush" Color="#8ea0b3" />
-                    <SolidColorBrush x:Key="MutedTextBrush" Color="#7d8da0" />
-                    <SolidColorBrush x:Key="SectionLabelBrush" Color="#7fc7ff" />
-                    <SolidColorBrush x:Key="InputBackgroundBrush" Color="#111922" />
-                    <SolidColorBrush x:Key="InputForegroundBrush" Color="#eef4fb" />
-                    <SolidColorBrush x:Key="InputBorderBrush" Color="#304255" />
-                    <SolidColorBrush x:Key="NeutralButtonBackgroundBrush" Color="#22303d" />
-                    <SolidColorBrush x:Key="NeutralButtonForegroundBrush" Color="#d7e3ef" />
-                    <SolidColorBrush x:Key="ConnectButtonBackgroundBrush" Color="#2fb56d" />
-                    <SolidColorBrush x:Key="ConnectButtonForegroundBrush" Color="#07110b" />
-                    <SolidColorBrush x:Key="StatusBadgeBackgroundBrush" Color="#183927" />
-                    <SolidColorBrush x:Key="StatusBadgeTextBrush" Color="#d9ffe7" />
-                    <SolidColorBrush x:Key="StatusConnectedBrush" Color="#2fb56d" />
-                    <SolidColorBrush x:Key="StatusDisconnectedBrush" Color="#6a7b8d" />
-                    <SolidColorBrush x:Key="TipBackgroundBrush" Color="#0f151b" />
-                    <SolidColorBrush x:Key="TipHeaderBrush" Color="#8fd0ff" />
-                    <SolidColorBrush x:Key="TipTextBrush" Color="#d8e4ef" />
-                    <SolidColorBrush x:Key="PinButtonBackgroundBrush" Color="#22303d" />
-                    <SolidColorBrush x:Key="PinButtonForegroundBrush" Color="#ffd67a" />
-                    <SolidColorBrush x:Key="FooterBackgroundBrush" Color="#0f151c" />
-                    <SolidColorBrush x:Key="FooterForegroundBrush" Color="#aab8c5" />
-                    <SolidColorBrush x:Key="FooterAccentBrush" Color="#eef4fb" />
-                </ResourceDictionary>
-
-                <ResourceDictionary x:Key="Light">
-                    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#f3efe7" />
-                    <SolidColorBrush x:Key="HeaderBackgroundBrush" Color="#d8c3a5" />
-                    <SolidColorBrush x:Key="HeaderBorderBrush" Color="#b89b74" />
-                    <SolidColorBrush x:Key="SidebarBackgroundBrush" Color="#f8f4ed" />
-                    <SolidColorBrush x:Key="PanelBorderBrush" Color="#dec9a8" />
-                    <SolidColorBrush x:Key="SurfaceBackgroundBrush" Color="#fffaf4" />
-                    <SolidColorBrush x:Key="SurfaceMutedBackgroundBrush" Color="#efe1cf" />
-                    <SolidColorBrush x:Key="SurfaceBorderBrush" Color="#e7d5ba" />
-                    <SolidColorBrush x:Key="PrimaryTextBrush" Color="#2d241d" />
-                    <SolidColorBrush x:Key="SecondaryTextBrush" Color="#5e4f42" />
-                    <SolidColorBrush x:Key="TertiaryTextBrush" Color="#9b8469" />
-                    <SolidColorBrush x:Key="MutedTextBrush" Color="#6a5949" />
-                    <SolidColorBrush x:Key="SectionLabelBrush" Color="#8b6f50" />
-                    <SolidColorBrush x:Key="InputBackgroundBrush" Color="#fffaf4" />
-                    <SolidColorBrush x:Key="InputForegroundBrush" Color="#2d241d" />
-                    <SolidColorBrush x:Key="InputBorderBrush" Color="#dcc5a3" />
-                    <SolidColorBrush x:Key="NeutralButtonBackgroundBrush" Color="#fffaf4" />
-                    <SolidColorBrush x:Key="NeutralButtonForegroundBrush" Color="#4a3f34" />
-                    <SolidColorBrush x:Key="ConnectButtonBackgroundBrush" Color="#2f7d4c" />
-                    <SolidColorBrush x:Key="ConnectButtonForegroundBrush" Color="#ffffff" />
-                    <SolidColorBrush x:Key="StatusBadgeBackgroundBrush" Color="#e5f4e9" />
-                    <SolidColorBrush x:Key="StatusBadgeTextBrush" Color="#2d241d" />
-                    <SolidColorBrush x:Key="StatusConnectedBrush" Color="#2f7d4c" />
-                    <SolidColorBrush x:Key="StatusDisconnectedBrush" Color="#aa8e70" />
-                    <SolidColorBrush x:Key="TipBackgroundBrush" Color="#2d241d" />
-                    <SolidColorBrush x:Key="TipHeaderBrush" Color="#d8c3a5" />
-                    <SolidColorBrush x:Key="TipTextBrush" Color="#fff8ef" />
-                    <SolidColorBrush x:Key="PinButtonBackgroundBrush" Color="#f4e8d8" />
-                    <SolidColorBrush x:Key="PinButtonForegroundBrush" Color="#8b6f50" />
-                    <SolidColorBrush x:Key="FooterBackgroundBrush" Color="#2d241d" />
-                    <SolidColorBrush x:Key="FooterForegroundBrush" Color="#d8c3a5" />
-                    <SolidColorBrush x:Key="FooterAccentBrush" Color="#fff8ef" />
-                </ResourceDictionary>
-            </ResourceDictionary.ThemeDictionaries>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://MS43Logger.AvaloniaApp/Theme/Tokens.axaml" />
+            </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

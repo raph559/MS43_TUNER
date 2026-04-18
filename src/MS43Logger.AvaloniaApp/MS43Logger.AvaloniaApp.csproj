@@ -20,6 +20,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="MS43Logger.AvaloniaApp.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\MS43Logger.Core\MS43Logger.Core.csproj" />
   </ItemGroup>
 </Project>

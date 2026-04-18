@@ -3,319 +3,75 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="using:MS43Logger.AvaloniaApp"
-        mc:Ignorable="d" d:DesignWidth="1240" d:DesignHeight="820"
+        xmlns:shell="using:MS43Logger.AvaloniaApp.Shell"
+        xmlns:views="using:MS43Logger.AvaloniaApp.Views"
+        mc:Ignorable="d" d:DesignWidth="1440" d:DesignHeight="900"
         x:Class="MS43Logger.AvaloniaApp.MainWindow"
-        x:DataType="local:MainWindowViewModel"
-        Title="MS43 Logger"
-        Background="{DynamicResource AppBackgroundBrush}"
-        FontFamily="avares://Avalonia.Fonts.Inter/Assets#Inter"
-        MinWidth="980" MinHeight="680">
+        x:DataType="local:ShellViewModel"
+        Title="MS43 Tuner"
+        Width="1440" Height="900"
+        MinWidth="1024" MinHeight="680">
 
-    <Window.Styles>
-        <Style Selector="Button">
-            <Setter Property="CornerRadius" Value="10"/>
-            <Setter Property="Padding" Value="16,10"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Cursor" Value="Hand"/>
-        </Style>
-        <Style Selector="TextBox">
-            <Setter Property="CornerRadius" Value="10"/>
-            <Setter Property="Padding" Value="12,9"/>
-            <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}"/>
-            <Setter Property="Foreground" Value="{DynamicResource InputForegroundBrush}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource InputBorderBrush}"/>
-        </Style>
-        <Style Selector="ComboBox">
-            <Setter Property="CornerRadius" Value="10"/>
-            <Setter Property="Foreground" Value="{DynamicResource InputForegroundBrush}"/>
-        </Style>
-        <Style Selector="CheckBox">
-            <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
-        </Style>
-    </Window.Styles>
-
-    <Grid RowDefinitions="Auto,*,Auto">
-        <Border Grid.Row="0"
-                Background="{DynamicResource HeaderBackgroundBrush}"
-                Padding="24,20"
-                BorderBrush="{DynamicResource HeaderBorderBrush}"
-                BorderThickness="0,0,0,1">
-            <Grid ColumnDefinitions="2*,3*">
-                <StackPanel Grid.Column="0" Spacing="6">
-                    <TextBlock Text="MS43 LOGGER"
-                               FontSize="28"
-                               FontWeight="Black"
-                               Foreground="{DynamicResource PrimaryTextBrush}"/>
-                    <TextBlock Text="Desktop logger for MS4X extended logging over DS2 K-line"
-                               FontSize="13"
-                               Foreground="{DynamicResource SecondaryTextBrush}"/>
+    <Grid RowDefinitions="58,*,36">
+        <!-- Header: mark, screens, open file, connection -->
+        <Border Grid.Row="0" Background="{DynamicResource PaneBrush}" BorderBrush="{DynamicResource BezelBrush}" BorderThickness="0,0,0,1" Padding="16,0">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center" Margin="0,0,22,0">
+                    <shell:AppMark IsLive="{Binding Live.IsConnected}" Level="{Binding Live.EngineSpeedLevel}" />
+                    <TextBlock Classes="display" Text="MS43 Tuner" FontSize="16" VerticalAlignment="Center" />
                 </StackPanel>
 
-                <Grid Grid.Column="1"
-                      ColumnDefinitions="Auto,120,Auto,Auto,100,*,Auto"
-                      RowDefinitions="Auto,Auto"
-                      ColumnSpacing="10"
-                      RowSpacing="10"
-                      VerticalAlignment="Center">
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="PORT"
-                               FontSize="10" FontWeight="Bold"
-                               Foreground="{DynamicResource MutedTextBrush}"
-                               VerticalAlignment="Center"/>
-                    <ComboBox Grid.Row="0" Grid.Column="1"
-                              ItemsSource="{Binding AvailablePorts}"
-                              SelectedItem="{Binding SelectedPort}"
-                              Background="{DynamicResource InputBackgroundBrush}"
-                              Height="38"/>
-                    <Button Grid.Row="0" Grid.Column="2"
-                            Content="REFRESH"
-                            Click="RefreshButton_Click"
-                            Background="{DynamicResource NeutralButtonBackgroundBrush}"
-                            Foreground="{DynamicResource NeutralButtonForegroundBrush}"/>
-                    <TextBlock Grid.Row="0" Grid.Column="3" Text="VARIANT"
-                               FontSize="10" FontWeight="Bold"
-                               Foreground="{DynamicResource MutedTextBrush}"
-                               VerticalAlignment="Center"/>
-                    <ComboBox Grid.Row="0" Grid.Column="4"
-                              ItemsSource="{Binding AdxVariants}"
-                              SelectedItem="{Binding SelectedVariant}"
-                              Background="{DynamicResource InputBackgroundBrush}"
-                              Height="38"/>
-                    <Button Grid.Row="0" Grid.Column="5" Grid.ColumnSpan="2"
-                            Content="{Binding ConnectionButtonText}"
-                            Click="ConnectButton_Click"
-                            Background="{DynamicResource ConnectButtonBackgroundBrush}"
-                            Foreground="{DynamicResource ConnectButtonForegroundBrush}"
-                            HorizontalAlignment="Right"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <ToggleButton Name="TabLive" Classes="tab" Content="Live" IsChecked="{Binding IsLive}" />
+                    <ToggleButton Name="TabTune" Classes="tab" Content="Tune" IsChecked="{Binding IsTune}" />
+                </StackPanel>
 
-                    <CheckBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
-                              Content="Write CSV log"
-                              IsChecked="{Binding EnableCsvLogging}"
-                              VerticalAlignment="Center"/>
-                    <TextBox Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="4"
-                             Text="{Binding CsvPath}"
-                             Watermark="CSV output path"
-                             IsEnabled="{Binding EnableCsvLogging}"/>
-                    <Button Grid.Row="1" Grid.Column="6"
-                            Content="BROWSE"
-                            Click="BrowseCsvButton_Click"
-                            IsEnabled="{Binding EnableCsvLogging}"
-                            Background="{DynamicResource NeutralButtonBackgroundBrush}"
-                            Foreground="{DynamicResource NeutralButtonForegroundBrush}"/>
-                </Grid>
+                <Border Grid.Column="2" Margin="22,0,22,0" VerticalAlignment="Center" HorizontalAlignment="Left" BorderBrush="{DynamicResource BezelBrush}" BorderThickness="1"
+                        CornerRadius="8" Background="{DynamicResource DialBrush}" ClipToBounds="True">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Name="PlateFile" Text="{Binding Tune.PlateFile}" Margin="12,6" FontWeight="SemiBold" MaxWidth="260" TextTrimming="CharacterEllipsis" />
+                        <Border BorderBrush="{DynamicResource BezelBrush}" BorderThickness="1,0,0,0" IsVisible="{Binding Tune.HasDocument}">
+                            <TextBlock Text="{Binding Tune.PlateFirmware}" Margin="12,6" Foreground="{DynamicResource OkBrush}" />
+                        </Border>
+                        <Border BorderBrush="{DynamicResource BezelBrush}" BorderThickness="1,0,0,0" IsVisible="{Binding Tune.HasDocument}">
+                            <TextBlock Text="{Binding Tune.PlateXdf}" Margin="12,6" Foreground="{DynamicResource Ink2Brush}" MaxWidth="200" TextTrimming="CharacterEllipsis" />
+                        </Border>
+                        <Border BorderBrush="{DynamicResource BezelBrush}" BorderThickness="1,0,0,0" IsVisible="{Binding Tune.HasDocument}">
+                            <TextBlock Name="PlateDirty" Text="{Binding Tune.DirtyText}" Margin="12,6" />
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <ComboBox ItemsSource="{Binding Live.AvailablePorts}" SelectedItem="{Binding Live.SelectedPort}" MinWidth="92" ToolTip.Tip="Serial port" />
+                    <Button Classes="ghost" Content="↻" Click="RefreshButton_Click" ToolTip.Tip="Refresh ports" />
+                    <ComboBox ItemsSource="{Binding Live.AdxVariants}" SelectedItem="{Binding Live.SelectedVariant}" MinWidth="84" ToolTip.Tip="ADX definition" />
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="6,0">
+                        <Ellipse Width="8" Height="8" Fill="{DynamicResource NeedleBrush}" IsVisible="{Binding Live.IsConnected}" />
+                        <Ellipse Width="8" Height="8" Fill="{DynamicResource Ink3Brush}" IsVisible="{Binding Live.IsNotConnected}" />
+                        <TextBlock Classes="num" Text="{Binding Live.RateText}" Foreground="{DynamicResource Ink2Brush}" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <Button Classes="primary" Content="{Binding Live.ConnectionButtonText}" Click="ConnectButton_Click" MinWidth="104" HorizontalContentAlignment="Center" />
+                </StackPanel>
             </Grid>
         </Border>
 
-        <Grid Grid.Row="1" ColumnDefinitions="310,*">
-            <Border Grid.Column="0"
-                    Background="{DynamicResource SidebarBackgroundBrush}"
-                    BorderBrush="{DynamicResource PanelBorderBrush}"
-                    BorderThickness="0,0,1,0"
-                    Padding="20">
-                <StackPanel Spacing="18">
-                    <Border Background="{DynamicResource SurfaceBackgroundBrush}" CornerRadius="16" Padding="16" BorderBrush="{DynamicResource SurfaceBorderBrush}" BorderThickness="1">
-                        <StackPanel Spacing="10">
-                            <TextBlock Text="SESSION"
-                                       FontSize="12"
-                                       FontWeight="Bold"
-                                       Foreground="{DynamicResource SectionLabelBrush}"/>
-                            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" RowSpacing="10" ColumnSpacing="10">
-                                <Border Grid.Row="0" Grid.Column="0" Background="{DynamicResource SurfaceMutedBackgroundBrush}" CornerRadius="12" Padding="12">
-                                    <StackPanel>
-                                        <TextBlock Text="STATUS" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource SectionLabelBrush}"/>
-                                        <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                                    </StackPanel>
-                                </Border>
-                                <Border Grid.Row="0" Grid.Column="1" Background="{DynamicResource SurfaceMutedBackgroundBrush}" CornerRadius="12" Padding="12">
-                                    <StackPanel>
-                                        <TextBlock Text="ELAPSED" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource SectionLabelBrush}"/>
-                                        <TextBlock Text="{Binding ElapsedTime}" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                                    </StackPanel>
-                                </Border>
-                                <Border Grid.Row="1" Grid.ColumnSpan="2" Background="{DynamicResource TipBackgroundBrush}" CornerRadius="12" Padding="14">
-                                    <StackPanel Spacing="4">
-                                        <TextBlock Text="CONNECT TIP" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TipHeaderBrush}"/>
-                                        <TextBlock Text="If the ECU rejects the baud switch while running, connect before engine start."
-                                                   TextWrapping="Wrap"
-                                                   FontSize="12"
-                                                   Foreground="{DynamicResource TipTextBrush}"/>
-                                    </StackPanel>
-                                </Border>
-                            </Grid>
-                        </StackPanel>
-                    </Border>
+        <!-- Screens -->
+        <Panel Grid.Row="1">
+            <views:LiveView DataContext="{Binding Live}" IsVisible="{Binding $parent[Window].((local:ShellViewModel)DataContext).IsLive}" />
+            <views:TuneView DataContext="{Binding Tune}" IsVisible="{Binding $parent[Window].((local:ShellViewModel)DataContext).IsTune}" />
+        </Panel>
 
-                    <Button Content="OPEN PERFORMANCE DASHBOARD"
-                            Click="OpenPerformanceWindow_Click"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Center"
-                            Background="{DynamicResource NeutralButtonBackgroundBrush}"
-                            Foreground="{DynamicResource NeutralButtonForegroundBrush}"/>
-
-                    <Border Background="{DynamicResource SurfaceBackgroundBrush}" CornerRadius="16" Padding="16" BorderBrush="{DynamicResource SurfaceBorderBrush}" BorderThickness="1">
-                        <StackPanel Spacing="10">
-                            <TextBlock Text="CHANNEL FILTER"
-                                       FontSize="12"
-                                       FontWeight="Bold"
-                                       Foreground="{DynamicResource SectionLabelBrush}"/>
-                            <TextBox Text="{Binding SearchText}"
-                                     Watermark="Search by ID, title, or units"/>
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <CheckBox Content="Pinned only"
-                                          IsChecked="{Binding ShowPinnedOnly}"/>
-                                <TextBlock Text="{Binding PinnedCount, StringFormat='{}{0} pinned'}"
-                                           FontSize="12"
-                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                           VerticalAlignment="Center"/>
-                            </StackPanel>
-                            <TextBlock Text="{Binding VisibleChannelCount, StringFormat='{}{0} channels visible'}"
-                                       FontSize="12"
-                                       Foreground="{DynamicResource SecondaryTextBrush}"/>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-            </Border>
-
-            <Grid Grid.Column="1" RowDefinitions="Auto,*" Margin="0">
-                <Border Grid.Row="0"
-                        Background="{DynamicResource SurfaceBackgroundBrush}"
-                        Padding="20,18"
-                        BorderBrush="{DynamicResource SurfaceBorderBrush}"
-                        BorderThickness="0,0,0,1">
-                    <Grid ColumnDefinitions="*,Auto">
-                        <StackPanel>
-                            <TextBlock Text="LIVE CHANNELS"
-                                       FontSize="14"
-                                       FontWeight="Black"
-                                       Foreground="{DynamicResource PrimaryTextBrush}"/>
-                            <TextBlock Text="All decoded channels from the selected bundled MS4X ADX definition"
-                                       FontSize="12"
-                                       Foreground="{DynamicResource SecondaryTextBrush}"/>
-                        </StackPanel>
-                        <Border Grid.Column="1"
-                                CornerRadius="999"
-                                Background="{DynamicResource StatusBadgeBackgroundBrush}"
-                                Padding="12,6"
-                                VerticalAlignment="Center">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Ellipse Width="8" Height="8" Fill="{DynamicResource StatusConnectedBrush}" IsVisible="{Binding IsConnected}"/>
-                                <Ellipse Width="8" Height="8" Fill="{DynamicResource StatusDisconnectedBrush}" IsVisible="{Binding IsNotConnected}"/>
-                                <TextBlock Text="{Binding ConnectionButtonText}"
-                                           FontSize="11"
-                                           FontWeight="Bold"
-                                           Foreground="{DynamicResource StatusBadgeTextBrush}"/>
-                            </StackPanel>
-                        </Border>
-                    </Grid>
+        <!-- Status bar -->
+        <Border Grid.Row="2" Background="{DynamicResource PaneBrush}" BorderBrush="{DynamicResource BezelBrush}" BorderThickness="0,1,0,0" Padding="16,0">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Text="{Binding Live.StatusText}" Foreground="{DynamicResource Ink3Brush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <Border Grid.Column="1" Classes="seg" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <ToggleButton Name="NightButton" Classes="seg" Content="Night" IsChecked="{Binding IsNight}" />
+                        <ToggleButton Name="DayButton" Classes="seg" Content="Day" IsChecked="{Binding IsDay}" />
+                    </StackPanel>
                 </Border>
-
-                <ScrollViewer Grid.Row="1"
-                              HorizontalScrollBarVisibility="Disabled"
-                              VerticalScrollBarVisibility="Auto"
-                              Padding="16">
-                    <ItemsControl ItemsSource="{Binding LiveValues}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel Orientation="Horizontal"/>
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="local:DecodedValueViewModel">
-                                <Border Width="220"
-                                        Height="140"
-                                        Margin="8"
-                                        Background="{DynamicResource SurfaceBackgroundBrush}"
-                                        CornerRadius="18"
-                                        BorderBrush="{DynamicResource SurfaceBorderBrush}"
-                                        BorderThickness="1">
-                                    <Grid RowDefinitions="Auto,*,Auto" ColumnDefinitions="*,Auto" Margin="16">
-                                        <Border Grid.ColumnSpan="2"
-                                                Background="{Binding AccentBrush}"
-                                                Height="6"
-                                                CornerRadius="999"
-                                                HorizontalAlignment="Stretch"/>
-                                        <Button Grid.Column="1"
-                                                Content="{Binding PinGlyph}"
-                                                Click="PinButton_Click"
-                                                CommandParameter="{Binding}"
-                                                Width="32"
-                                                Height="32"
-                                                Padding="0"
-                                                CornerRadius="999"
-                                                Background="{DynamicResource PinButtonBackgroundBrush}"
-                                                Foreground="{DynamicResource PinButtonForegroundBrush}"
-                                                HorizontalContentAlignment="Center"
-                                                VerticalContentAlignment="Center"
-                                                HorizontalAlignment="Right"
-                                                VerticalAlignment="Top"/>
-                                        <TextBlock Grid.Row="1"
-                                                   Grid.ColumnSpan="2"
-                                                   Text="{Binding Title}"
-                                                   FontSize="11"
-                                                   FontWeight="Bold"
-                                                   Foreground="{DynamicResource SecondaryTextBrush}"
-                                                   TextWrapping="Wrap"
-                                                   MaxLines="2"
-                                                   Margin="0,12,0,8"/>
-                                        <StackPanel Grid.Row="2" Spacing="4">
-                                            <TextBlock Text="{Binding Value}"
-                                                       FontSize="32"
-                                                       FontWeight="Black"
-                                                       Foreground="{DynamicResource PrimaryTextBrush}"/>
-                                            <TextBlock Text="{Binding Units}"
-                                                       FontSize="12"
-                                                       Foreground="{DynamicResource TertiaryTextBrush}"/>
-                                        </StackPanel>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
-            </Grid>
-        </Grid>
-
-        <Border Grid.Row="2"
-                Background="{DynamicResource FooterBackgroundBrush}"
-                Padding="18,12">
-            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="20">
-                <TextBlock Text="MS43 + MS4X extended logger desktop dashboard"
-                           Foreground="{DynamicResource FooterForegroundBrush}"
-                           FontSize="11"
-                           VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1"
-                           Text="{Binding RateText, StringFormat='Rate: {0}'}"
-                           Foreground="{DynamicResource FooterAccentBrush}"
-                           FontSize="11"
-                           FontWeight="Bold"
-                           VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="2"
-                           Text="{Binding SelectedVariant, StringFormat='Variant: {0}'}"
-                           Foreground="{DynamicResource FooterAccentBrush}"
-                           FontSize="11"
-                           FontWeight="Bold"
-                           VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="3"
-                           Text="{Binding SelectedPort, StringFormat='Port: {0}'}"
-                           Foreground="{DynamicResource FooterAccentBrush}"
-                           FontSize="11"
-                           FontWeight="Bold"
-                           VerticalAlignment="Center"/>
-                <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                    <TextBlock Text="THEME:"
-                               FontSize="10" FontWeight="Bold"
-                               Foreground="{DynamicResource FooterAccentBrush}"
-                               VerticalAlignment="Center"/>
-                    <ComboBox ItemsSource="{Binding ThemeModes}"
-                              SelectedItem="{Binding SelectedTheme}"
-                              Background="Transparent"
-                              BorderThickness="0"
-                              Foreground="{DynamicResource FooterAccentBrush}"
-                              FontSize="11"
-                              FontWeight="Bold"
-                              Padding="6,4"
-                              MinHeight="20"/>
-                </StackPanel>
             </Grid>
         </Border>
     </Grid>

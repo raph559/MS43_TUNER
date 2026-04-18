@@ -2,7 +2,7 @@ using System.IO.Ports;
 
 namespace MS43Logger.Core;
 
-public sealed class Ds2Session : IDisposable
+public sealed class Ds2Session : IDisposable, IPayloadSource
 {
     private const int PollRetryCount = 2;
     private readonly AdxDefinition _definition;
