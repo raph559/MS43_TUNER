@@ -18,6 +18,13 @@
     <Style Selector="TextBlock.secondary">
         <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
     </Style>
+    <!-- Orange means "now": only the live cursor's readout uses it. -->
+    <Style Selector="TextBlock.readout">
+        <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+    </Style>
+    <Style Selector="TextBlock.readout.live">
+        <Setter Property="Foreground" Value="{DynamicResource NeedleBrush}" />
+    </Style>
     <Style Selector="TextBlock.heading">
         <Setter Property="FontSize" Value="15" />
         <Setter Property="FontWeight" Value="SemiBold" />

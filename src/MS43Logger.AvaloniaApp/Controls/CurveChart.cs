@@ -130,6 +130,51 @@ public sealed class CurveChart : Control
             var selected = Editor.Selection is CellRange range && (vertical ? range.Contains(i, 0) : range.Contains(0, i));
             context.DrawEllipse(selected ? ThemeBrushes.Get(this, "InkBrush") : ink2, null, At(i), selected ? 4.5 : 3, selected ? 4.5 : 3);
         }
+
+        if (Editor.Live is { } live && (vertical ? live.Fix.Row : live.Fix.Col) is AxisPosition position)
+        {
+            // The engine's position: a line at the fractional point, the points the ECU reads ringed by weight, the trail, the value.
+            var colour = ThemeBrushes.Cursor(this, live.IsStale);
+            double X(double index)
+            {
+                var i = Math.Min((int)index, count - 1);
+                var next = Math.Min(i + 1, count - 1);
+                return plot.Left + (xs[i] + (index - i) * (xs[next] - xs[i]) - xMin) / (xMax - xMin) * plot.Width;
+            }
+
+            double Y(double value) => plot.Bottom - (Math.Clamp(value, yMin, yMax) - yMin) / (yMax - yMin) * plot.Height;
+            double ValueAt(double index)
+            {
+                var i = Math.Min((int)index, count - 1);
+                var next = Math.Min(i + 1, count - 1);
+                return ys[i] + (index - i) * (ys[next] - ys[i]);
+            }
+
+            var x = X(position.Position);
+            context.DrawLine(new Pen(new SolidColorBrush(colour, 0.7), 1), new Point(x, plot.Top), new Point(x, plot.Bottom));
+            foreach (var cell in live.Fix.Cells)
+            {
+                var i = vertical ? cell.Row : cell.Col;
+                if (double.IsFinite(ys[i]))
+                {
+                    context.DrawEllipse(null, new Pen(new SolidColorBrush(colour, 0.35 + 0.65 * cell.Weight), 1 + 2 * cell.Weight), At(i), 6.5, 6.5);
+                }
+            }
+
+            foreach (var point in live.Trail)
+            {
+                var index = vertical ? point.Row : point.Col;
+                if (double.IsFinite(ValueAt(index)))
+                {
+                    context.DrawEllipse(new SolidColorBrush(colour, point.Opacity), null, new Point(X(index), Y(ValueAt(index))), 2.5, 2.5);
+                }
+            }
+
+            if (double.IsFinite(live.Fix.Value))
+            {
+                context.DrawEllipse(new SolidColorBrush(colour), new Pen(ThemeBrushes.Get(this, "DialBrush"), 1.5), new Point(x, Y(live.Fix.Value)), 4.5, 4.5);
+            }
+        }
     }
 
     /// <summary>Enough decimals that neighbouring scale labels differ.</summary>

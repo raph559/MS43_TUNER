@@ -233,6 +233,11 @@ public sealed class MapGrid : Control
                 Text(context, _typed + "▏", display, 12.5, ink, new Point(anchor.Center.X, anchor.Center.Y - 8.5), 0.5);
             }
         }
+
+        if (editor.Live is { } live)
+        {
+            DrawLive(context, live, values);
+        }
     }
 
     /// <summary>The engine's position: crosshair, the cells the ECU reads outlined by weight, the fading trail and a dot at the fix.</summary>

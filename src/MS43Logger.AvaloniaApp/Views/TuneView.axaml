@@ -145,6 +145,8 @@
                                 </Grid>
                                 <controls:Surface3D Name="Surface" Height="250" Editor="{Binding Editor}" IsVisible="{Binding ShowsSurface}" />
                                 <controls:CurveChart Name="Curve" Height="220" Editor="{Binding Editor}" IsVisible="{Binding ShowsCurve}" />
+                                <TextBlock Name="LiveReadout" Classes="num readout" Classes.live="{Binding LiveCursor.ReadoutIsLive}" Text="{Binding LiveCursor.Readout}"
+                                           TextWrapping="Wrap" IsVisible="{Binding LiveCursor.Readout, Converter={x:Static ObjectConverters.IsNotNull}}" />
                             </StackPanel>
                         </Border>
                         <Border Padding="18,16" IsVisible="{Binding SelectedItem, Converter={x:Static ObjectConverters.IsNotNull}}">
