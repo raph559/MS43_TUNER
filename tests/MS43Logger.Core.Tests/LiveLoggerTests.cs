@@ -76,6 +76,30 @@ public class LiveLoggerTests
         Assert.Null(failure);
     }
 
+    [Fact]
+    public void ReadRawFollowsTheChannelLayout()
+    {
+        var payload = LivePayloads.Build(Ms43x, ("N", 2480 | 3 << 13), ("TCO", 124));
+        var n = Ms43x.Values.First(v => v.Id == "N");
+        var tco = Ms43x.Values.First(v => v.Id == "TCO");
+
+        Assert.Equal(27056, AdxDefinition.ReadRaw(n, payload));
+        Assert.Equal(2480, Ms43x.DecodePayload(payload, [n])[0].Value);
+        Assert.Equal(124, AdxDefinition.ReadRaw(tco, payload));
+    }
+
+    [Fact]
+    public async Task LoggerPublishesThePayload()
+    {
+        var logger = new LiveLogger(pause: TimeSpan.Zero);
+        var samples = new List<LiveSample>();
+        logger.SampleReceived += (_, sample) => samples.Add(sample);
+
+        await logger.RunAsync(new FakeSource(() => Payload(1), () => Payload(2)), Ms43x, Ms43x.MatchChannels(["N"]), CancellationToken.None);
+
+        Assert.Equal(Payload(2), samples[1].Payload.ToArray());
+    }
+
     [Theory]
     [InlineData(0, -225)]
     [InlineData(8000, 45)]
