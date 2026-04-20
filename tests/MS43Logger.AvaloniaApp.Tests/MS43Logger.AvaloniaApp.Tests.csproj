@@ -17,6 +17,9 @@
     <Using Include="Xunit" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="..\MS43Logger.Core.Tests\LivePayloads.cs" Link="LivePayloads.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\src\MS43Logger.AvaloniaApp\MS43Logger.AvaloniaApp.csproj" />
     <ProjectReference Include="..\..\src\MS43Logger.Core\MS43Logger.Core.csproj" />
   </ItemGroup>
