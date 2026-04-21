@@ -61,4 +61,129 @@ public class LiveCursorDrawingTests
 
     private static Rect BoundsInWindow(Control control, MainWindow window) =>
         new(InWindow(control, window, default), control.Bounds.Size);
+
+    [AvaloniaFact]
+    public async Task CursorPointIsBetweenCellCentres()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, _, _) = await LiveFeed.OpenAsync();
+        var grid = Find.Named<MapGrid>(window, "MapGrid");
+        var a = grid.CellBounds(5, 1).Center;
+        var b = grid.CellBounds(6, 2).Center;
+
+        Assert.Equal(new Point((a.X + b.X) / 2, (a.Y + b.Y) / 2), grid.CursorPoint(5.5, 1.5));
+        Assert.Equal(a, grid.CursorPoint(5, 1));
+    }
+
+    [AvaloniaFact]
+    public async Task OrangeOutlinesTheCellsAroundTheEngine()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, _) = await LiveFeed.OpenAsync();
+        var grid = Find.Named<MapGrid>(window, "MapGrid");
+        using (var before = new Frame(window))
+        {
+            Assert.False(before.AnyNeedle(BoundsInWindow(grid, window)));
+        }
+
+        LiveFeed.Push(shell, ("N", 2480), ("MAFIGA", 1415));
+        shell.Tune.LiveCursor.Tick();
+        var fix = shell.Tune.Editor!.Live!.Fix;
+        using var frame = new Frame(window);
+
+        Assert.True(frame.AnyNeedle(new Rect(InWindow(grid, window, grid.CursorPoint(fix.Row!.Value.Position, fix.Col!.Value.Position)), new Size(1, 1))));
+        var heavy = grid.CellBounds(6, 1);
+        Assert.True(frame.AnyOrangeNear(InWindow(grid, window, new Point(heavy.Left - 1, heavy.Center.Y))));
+        var far = grid.CellBounds(15, 12);
+        Assert.False(frame.AnyOrangeNear(InWindow(grid, window, new Point(far.Left - 1, far.Center.Y))));
+        Screens.Save(window, "live-cursor-map-night");
+
+        shell.IsNight = false;
+        Screens.Save(window, "live-cursor-map-day");
+    }
+
+    [AvaloniaFact]
+    public async Task StaleCursorIsNotOrange()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, time) = await LiveFeed.OpenAsync();
+        var grid = Find.Named<MapGrid>(window, "MapGrid");
+        LiveFeed.Push(shell, ("N", 2480), ("MAFIGA", 1415));
+        shell.Tune.LiveCursor.Tick();
+        time.Advance(TimeSpan.FromSeconds(2));
+        shell.Tune.LiveCursor.Tick();
+        var fix = shell.Tune.Editor!.Live!.Fix;
+
+        using var frame = new Frame(window);
+        Assert.True(shell.Tune.Editor.Live.IsStale);
+        Assert.False(frame.AnyNeedle(BoundsInWindow(grid, window)));
+        Assert.False(frame.AnyOrangeNear(InWindow(grid, window, grid.CursorPoint(fix.Row!.Value.Position, fix.Col!.Value.Position)), 1));
+    }
+
+    [AvaloniaFact]
+    public async Task CurveAndSurfaceDrawTheirMarker()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, _) = await LiveFeed.OpenAsync();
+        var surface = Find.Named<Surface3D>(window, "Surface");
+        using (var before = new Frame(window))
+        {
+            Assert.False(before.AnyNeedle(BoundsInWindow(surface, window)));
+        }
+
+        LiveFeed.Push(shell, ("N", 2480), ("MAFIGA", 1415));
+        shell.Tune.LiveCursor.Tick();
+        using (var frame = new Frame(window))
+        {
+            Assert.True(frame.AnyNeedle(BoundsInWindow(surface, window)));
+        }
+
+        shell.Tune.SelectedItem = shell.Tune.Document!.Xdf.FindByTitle("id_t_tco_puc_deacc__tco");
+        var curve = Find.Named<CurveChart>(window, "Curve");
+        LiveFeed.Push(shell, ("TCO", 124));
+        shell.Tune.LiveCursor.Tick();
+        using (var frame = new Frame(window))
+        {
+            Assert.True(frame.AnyNeedle(BoundsInWindow(curve, window)));
+        }
+
+        Screens.Save(window, "live-cursor-curve");
+    }
+
+    [AvaloniaFact]
+    public async Task ScreensForReview()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, time) = await LiveFeed.OpenAsync("ip_map_ve_1__map__n");
+        foreach (var (map, n) in new[] { (2400L, 1500L), (2700L, 1800L), (3000L, 2000L), (3300L, 2300L) })
+        {
+            LiveFeed.Push(shell, ("MAP", map), ("N", n));
+            shell.Tune.LiveCursor.Tick();
+            time.Advance(TimeSpan.FromMilliseconds(120));
+        }
+
+        Screens.Save(window, "live-cursor-ve");
+        shell.Tune.SelectedItem = shell.Tune.Document!.Xdf.FindByTitle("id_lam_tco_min__tco_st");
+        Screens.Save(window, "live-cursor-no-input");
+    }
 }
