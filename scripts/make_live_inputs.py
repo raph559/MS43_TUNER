@@ -15,6 +15,9 @@ INPUTS = [
     ("E0E4", "N", 0x04, 16, 0x1FFF, 0, 0, 8191, False, "frame 0x04 = E0E4 & 0x1FFF, gear in bits 13-15 (0C:467E)"),
     ("807F", "N", 0x04, 16, 0x1FFF, 5, 0, 255, False, "0x128B0: 807F = E0E4 > 0x1FE0 ? 0xFF : E0E4 >> 5"),
     ("8080", "N", 0x04, 16, 0x1FFF, 5, 0, 255, False, "0x128CA: 8080 = 807F"),
+    ("81AC", "N", 0x04, 16, 0xE000, 13, 0, 7, False,
+     "frame 0x04 bits 13-15 = 81AC bits 0-2 (0C:467E); 81AC is 0, 80FA (<= 6, else 1) or the 5..0 of "
+     "id_gear__n_vs_cru (0x58D18-0x58D7E), so all of it fits"),
     ("E33A", "MAFTI", 0x12, 16, 0xFFFF, 0, 0, 65535, False, FRAME % 0x12 + " = E33A"),
     ("E33B", "MAFTI", 0x12, 16, 0xFFFF, 8, 0, 255, False, "high byte of E33A; no byte writes to E33B in the code"),
     ("E32C", "MAFIGA", 0x14, 16, 0xFFFF, 0, 0, 65535, False, FRAME % 0x14 + " = E32C"),

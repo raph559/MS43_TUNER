@@ -15,6 +15,7 @@
     {"ram": "E0E4", "channel": "N", "offset": "0x04", "bits": 16, "mask": "0x1FFF", "shift": 0, "add": 0, "max": 8191, "approximate": false, "evidence": "frame 0x04 = E0E4 & 0x1FFF, gear in bits 13-15 (0C:467E)"},
     {"ram": "807F", "channel": "N", "offset": "0x04", "bits": 16, "mask": "0x1FFF", "shift": 5, "add": 0, "max": 255, "approximate": false, "evidence": "0x128B0: 807F = E0E4 > 0x1FE0 ? 0xFF : E0E4 >> 5"},
     {"ram": "8080", "channel": "N", "offset": "0x04", "bits": 16, "mask": "0x1FFF", "shift": 5, "add": 0, "max": 255, "approximate": false, "evidence": "0x128CA: 8080 = 807F"},
+    {"ram": "81AC", "channel": "N", "offset": "0x04", "bits": 16, "mask": "0xE000", "shift": 13, "add": 0, "max": 7, "approximate": false, "evidence": "frame 0x04 bits 13-15 = 81AC bits 0-2 (0C:467E); 81AC is 0, 80FA (<= 6, else 1) or the 5..0 of id_gear__n_vs_cru (0x58D18-0x58D7E), so all of it fits"},
     {"ram": "E33A", "channel": "MAFTI", "offset": "0x12", "bits": 16, "mask": "0xFFFF", "shift": 0, "add": 0, "max": 65535, "approximate": false, "evidence": "frame 0x12 (0B B0 frame built by 0C:467E) = E33A"},
     {"ram": "E33B", "channel": "MAFTI", "offset": "0x12", "bits": 16, "mask": "0xFFFF", "shift": 8, "add": 0, "max": 255, "approximate": false, "evidence": "high byte of E33A; no byte writes to E33B in the code"},
     {"ram": "E32C", "channel": "MAFIGA", "offset": "0x14", "bits": 16, "mask": "0xFFFF", "shift": 0, "add": 0, "max": 65535, "approximate": false, "evidence": "frame 0x14 (0B B0 frame built by 0C:467E) = E32C"},
