@@ -153,6 +153,49 @@ public static class TableEdits
         return new EditPlan(f, raw == old ? Array.Empty<CellChange>() : new[] { new CellChange(0, 0, old, raw) }, Array.Empty<string>());
     }
 
+    /// <summary>
+    /// Writes <paramref name="source"/>'s raw values for <paramref name="item"/> into the document: every differing cell of a
+    /// table (an axis copy that would make the axis go down is refused), a value, or a flag's own bit.
+    /// </summary>
+    public static EditPlan CopyFrom(CalibrationDocument d, XdfItem item, BinImage source)
+    {
+        ArgumentNullException.ThrowIfNull(d);
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(source);
+        switch (item)
+        {
+            case XdfTable table:
+                var values = Read(d, table);
+                var changes = new List<CellChange>();
+                ForEach(values, new CellRange(0, 0, values.Rows - 1, values.Cols - 1), (row, col) =>
+                {
+                    var raw = source.ReadElement(table.Z.Data, row * values.Cols + col);
+                    if (raw != values.Raw[row, col])
+                    {
+                        changes.Add(new CellChange(row, col, values.Raw[row, col], raw));
+                    }
+                });
+                var plan = Finish(d, table, values, changes);
+                if (changes.Count == 0)
+                {
+                    return plan;
+                }
+
+                // Cells copied onto other breakpoints mean something else: say so.
+                var moved = BinComparer.CompareTable(d.Xdf, d.Image, source, table).Axes
+                    .Select(axis => $"'{table.Title}': its {axis.Direction} axis{(axis.A.Name is { } name ? $" ({name})" : string.Empty)} still differs from the source, so the copied cells now sit on A's breakpoints.");
+                return plan with { Warnings = plan.Warnings.Concat(moved).ToList() };
+            case XdfConstant constant:
+                EnsureEditable(constant.Title, constant.Data);
+                return SetConstantRaw(d, constant, source.ReadElement(constant.Data, 0));
+            case XdfFlag flag:
+                EnsureEditable(flag.Title, flag.Data);
+                return SetFlag(d, flag, (source.ReadElement(flag.Data, 0) & flag.Mask) != 0);
+            default:
+                throw new ArgumentException($"Unknown item type {item.GetType().Name}.", nameof(item));
+        }
+    }
+
     /// <summary>True for tables in the "Axis" category or linked as an axis by another table.</summary>
     public static bool IsAxis(XdfDefinition xdf, XdfTable table)
     {
