@@ -22,8 +22,10 @@ public sealed record EditRequest(EditKind Kind, double Value = 0, string? Text =
 /// <summary>One open table (map, curve or axis): its values, the selection, and edits through the undo history.</summary>
 public sealed class TableEditorViewModel : ViewModelBase, IDisposable
 {
-    private readonly CalibrationDocument _document;
-    private readonly EditHistory _history;
+    public const string ReadOnlyMessage = "This grid is read-only. Edit A on the Tune tab, or copy from B.";
+
+    private readonly CalibrationDocument? _document;
+    private readonly EditHistory? _history;
     private TableValues _values;
     private CellRange? _selection;
     private bool _showRaw;
@@ -40,6 +42,24 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
         _changedCells = FindChangedCells();
         _document.Changed += OnDocumentChanged;
     }
+
+    private TableEditorViewModel(TableValues values, IReadOnlySet<(int Row, int Col)> marked, bool isDelta)
+    {
+        Table = values.Table;
+        _values = values;
+        _changedCells = marked;
+        IsDelta = isDelta;
+    }
+
+    /// <summary>A read-only grid of fixed values (a comparison's A, B or B − A); <paramref name="marked"/> get the changed-cell dot.</summary>
+    public static TableEditorViewModel Snapshot(TableValues values, IReadOnlySet<(int Row, int Col)> marked, bool isDelta = false) =>
+        new(values ?? throw new ArgumentNullException(nameof(values)), marked ?? throw new ArgumentNullException(nameof(marked)), isDelta);
+
+    /// <summary>True for snapshots: edits are refused with <see cref="ReadOnlyMessage"/>.</summary>
+    public bool IsReadOnly => _document is null;
+
+    /// <summary>True when the values are B − A differences, drawn on the diverging scale.</summary>
+    public bool IsDelta { get; }
 
     /// <summary>Raised after an edit was written, with the cells it touched.</summary>
     public event EventHandler<IReadOnlyList<(int Row, int Col)>>? Edited;
@@ -65,6 +85,12 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
     public bool Apply(EditRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        if (_document is not { } document || _history is not { } history)
+        {
+            Message = ReadOnlyMessage;
+            return false;
+        }
+
         if (Selection is not CellRange range)
         {
             Message = "Select cells first.";
@@ -75,17 +101,17 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
         {
             var plan = request.Kind switch
             {
-                EditKind.Set => TableEdits.Set(_document, Table, range, request.Value),
-                EditKind.Add => TableEdits.Add(_document, Table, range, request.Value),
-                EditKind.Scale => TableEdits.Scale(_document, Table, range, request.Value),
-                EditKind.Interpolate => TableEdits.Interpolate(_document, Table, range),
-                EditKind.Smooth => TableEdits.Smooth(_document, Table, range),
-                EditKind.Step => TableEdits.Step(_document, Table, range, (int)request.Value),
-                EditKind.Paste => TableEdits.Paste(_document, Table, range.Row0, range.Col0, TableClipboard.Parse(request.Text ?? string.Empty)),
+                EditKind.Set => TableEdits.Set(document, Table, range, request.Value),
+                EditKind.Add => TableEdits.Add(document, Table, range, request.Value),
+                EditKind.Scale => TableEdits.Scale(document, Table, range, request.Value),
+                EditKind.Interpolate => TableEdits.Interpolate(document, Table, range),
+                EditKind.Smooth => TableEdits.Smooth(document, Table, range),
+                EditKind.Step => TableEdits.Step(document, Table, range, (int)request.Value),
+                EditKind.Paste => TableEdits.Paste(document, Table, range.Row0, range.Col0, TableClipboard.Parse(request.Text ?? string.Empty)),
                 _ => throw new ArgumentOutOfRangeException(nameof(request)),
             };
 
-            _history.Apply(plan, Label(request, plan));
+            history.Apply(plan, Label(request, plan));
             Message = plan.Warnings.Count > 0 ? string.Join(" ", plan.Warnings) : plan.Changes.Count == 0 ? "Nothing changed: the cells already hold those values." : null;
             if (plan.Changes.Count > 0)
             {
@@ -107,7 +133,7 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
 
     private void OnDocumentChanged(object? sender, EventArgs e)
     {
-        Values = _document.Reader.ReadTable(Table);
+        Values = _document!.Reader.ReadTable(Table);
         ChangedCells = FindChangedCells();
     }
 
@@ -115,7 +141,7 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
     {
         var data = Table.Z.Data;
         var changed = new HashSet<(int, int)>();
-        if (!_document.Saved.Contains(data))
+        if (_document is null || !_document.Saved.Contains(data))
         {
             return changed;
         }

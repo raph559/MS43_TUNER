@@ -7,6 +7,7 @@ public sealed class ShellViewModel : ViewModelBase
 {
     public const string LiveTab = "Live";
     public const string TuneTab = "Tune";
+    public const string CompareTab = "Compare";
 
     private string _selectedTab = LiveTab;
     private bool _isNight = true;
@@ -56,6 +57,8 @@ public sealed class ShellViewModel : ViewModelBase
 
     public TuneViewModel Tune { get; }
 
+    public CompareViewModel Compare { get; }
+
     public string SelectedTab
     {
         get => _selectedTab;
@@ -94,6 +97,22 @@ public sealed class ShellViewModel : ViewModelBase
             if (value)
             {
                 SelectedTab = TuneTab;
+            }
+            else
+            {
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool IsCompare
+    {
+        get => SelectedTab == CompareTab;
+        set
+        {
+            if (value)
+            {
+                SelectedTab = CompareTab;
             }
             else
             {

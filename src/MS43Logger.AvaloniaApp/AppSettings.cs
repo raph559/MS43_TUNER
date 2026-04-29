@@ -20,6 +20,9 @@ public sealed class AppSettings
 
     public string? LastBin { get; set; }
 
+    /// <summary>The bin last opened as B on the Compare tab.</summary>
+    public string? LastCompareBin { get; set; }
+
     /// <summary>XDF path to open for each firmware software id, e.g. "43X001".</summary>
     public Dictionary<string, string> XdfByFirmware { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
