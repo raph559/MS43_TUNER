@@ -46,6 +46,18 @@ public static class HeatRamp
         return Stops[^1].Colour;
     }
 
+    /// <summary>
+    /// The B − A scale: <paramref name="middle"/> (the pane colour) at 0, <paramref name="up"/> at +1, <paramref name="down"/> at −1,
+    /// mixed by |t|^0.7 so small changes still show.
+    /// </summary>
+    public static Color Diverging(double t, Color middle, Color down, Color up)
+    {
+        t = double.IsNaN(t) ? 0 : Math.Clamp(t, -1, 1);
+        var end = t >= 0 ? up : down;
+        var k = Math.Pow(Math.Abs(t), 0.7);
+        return Avalonia.Media.Color.FromRgb(Mix(middle.R, end.R, k), Mix(middle.G, end.G, k), Mix(middle.B, end.B, k));
+    }
+
     /// <summary>Dark text on light cells, light text on dark cells.</summary>
     public static Color TextOn(Color background) =>
         0.2126 * background.R + 0.7152 * background.G + 0.0722 * background.B > 135 ? DarkText : LightText;

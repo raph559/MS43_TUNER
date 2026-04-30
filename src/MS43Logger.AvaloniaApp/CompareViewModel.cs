@@ -62,6 +62,26 @@ public sealed class CompareViewModel : ViewModelBase
     private bool _stale = true;
     private bool _isVisible;
 
+    public CompareViewModel(TuneViewModel tune)
+    {
+        _tune = tune ?? throw new ArgumentNullException(nameof(tune));
+        tune.DocumentOpened += (_, _) =>
+        {
+            Watch(tune.Document);
+            OnPropertyChanged(nameof(FileA));
+            OnPropertyChanged(nameof(HasA));
+            Invalidate();
+        };
+        Watch(tune.Document);
+        tune.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(TuneViewModel.DiffersOnly) && tune.DiffersOnly && _stale)
+            {
+                Refresh();
+            }
+        };
+    }
+
     /// <summary>Asks the shell to show an item on the Tune tab.</summary>
     public event EventHandler<XdfItem>? ShowInTuneRequested;
 
@@ -193,6 +213,22 @@ public sealed class CompareViewModel : ViewModelBase
 
     public string? LegendMax { get; private set; }
 
+    public bool IsVisible
+    {
+        get => _isVisible;
+        set
+        {
+            if (SetField(ref _isVisible, value) && value)
+            {
+                ReopenLast();
+                if (_stale)
+                {
+                    Refresh();
+                }
+            }
+        }
+    }
+
     internal static string UnitsOf(XdfItem item)
     {
         var units = item switch
@@ -202,6 +238,56 @@ public sealed class CompareViewModel : ViewModelBase
             _ => string.Empty,
         };
         return units.Trim() == "-" ? string.Empty : units.Trim();
+    }
+
+    /// <summary>Opens B; a file that is not a 512 KiB bin is refused and the current B stays.</summary>
+    public bool OpenB(string path)
+    {
+        try
+        {
+            var image = BinImage.Load(path);
+            _b = image;
+            FileB = Path.GetFileName(path);
+            ErrorMessage = null;
+            _tune.Settings.LastCompareBin = Path.GetFullPath(path);
+            _tune.Settings.Save();
+            OnPropertyChanged(nameof(HasB));
+            OnPropertyChanged(nameof(NeedsB));
+            Refresh();
+            return true;
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            ErrorMessage = error.Message;
+            return false;
+        }
+    }
+
+    /// <summary>Compares A with B again; keeps the selected item when it still differs.</summary>
+    public void Refresh()
+    {
+        _stale = false;
+        OnPropertyChanged(nameof(FileA));
+        var document = _tune.Document;
+        FirmwareWarning = document is not null && _b is not null && FirmwareIdentifier.Identify(_b).SoftwareId is var idB && idB != document.Firmware.SoftwareId
+            ? $"B is firmware {idB ?? "unknown"}, A is {document.Firmware.SoftwareId ?? "unknown"}. Items are compared at the same addresses, where B may hold something else."
+            : null;
+        Result = document is not null && _b is not null ? BinComparer.Compare(document.Xdf, document.Image, _b) : null;
+        _tune.CompareWith(Result is null ? null : FileB, Result?.Items.Select(item => item.Item).ToHashSet());
+
+        var keep = Selected is { } current ? Result?.Items.FirstOrDefault(item => item.Item == current.Item) : null;
+        if (_showsBytes && Result is { Unmapped.Count: > 0 })
+        {
+            RebuildList();
+            return;
+        }
+
+        _showsBytes = false;
+        _selected = keep ?? Visible().FirstOrDefault();
+        OnPropertyChanged(nameof(Selected));
+        OnPropertyChanged(nameof(ShowsBytes));
+        BuildDetail();
+        RebuildList();
     }
 
     public void ShowBytes()
@@ -242,6 +328,39 @@ public sealed class CompareViewModel : ViewModelBase
         if (Selected is { } selected)
         {
             ShowInTuneRequested?.Invoke(this, selected.Item);
+        }
+    }
+
+    private void ReopenLast()
+    {
+        if (_b is null && HasA && _tune.Settings.LastCompareBin is { } last && File.Exists(last))
+        {
+            OpenB(last);
+        }
+    }
+
+    private void Watch(CalibrationDocument? document)
+    {
+        if (_watched is not null)
+        {
+            _watched.Changed -= OnDocumentChanged;
+        }
+
+        _watched = document;
+        if (document is not null)
+        {
+            document.Changed += OnDocumentChanged;
+        }
+    }
+
+    private void OnDocumentChanged(object? sender, EventArgs e) => Invalidate();
+
+    private void Invalidate()
+    {
+        _stale = true;
+        if (IsVisible || _tune.HasCompare)
+        {
+            Refresh();
         }
     }
 

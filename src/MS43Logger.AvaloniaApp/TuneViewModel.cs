@@ -23,7 +23,7 @@ public enum SaveChoice
     Cancel,
 }
 
-public sealed record RailItem(XdfItem Item, ItemKind Kind, bool IsPinned, bool IsModified, bool IsCurrent, bool IsIndented) : RailEntry
+public sealed record RailItem(XdfItem Item, ItemKind Kind, bool IsPinned, bool IsModified, bool IsCurrent, bool IsIndented, bool IsDifferent = false) : RailEntry
 {
     public string Title => Item.Title;
 }
@@ -45,6 +45,9 @@ public sealed class TuneViewModel : ViewModelBase
     private string _toolValue = string.Empty;
     private string _searchText = string.Empty;
     private bool _modifiedOnly;
+    private bool _differsOnly;
+    private IReadOnlySet<XdfItem>? _compareItems;
+    private string? _compareFileB;
     private string _plateFile = "No bin open";
     private string? _plateFirmware;
     private string? _plateXdf;
@@ -214,6 +217,40 @@ public sealed class TuneViewModel : ViewModelBase
                 RebuildRail();
             }
         }
+    }
+
+    /// <summary>Items that differ from the Compare tab's B; null while no B is open.</summary>
+    public IReadOnlySet<XdfItem>? CompareItems { get => _compareItems; private set => SetField(ref _compareItems, value); }
+
+    public string? CompareFileB { get => _compareFileB; private set => SetField(ref _compareFileB, value); }
+
+    public bool HasCompare => CompareItems is not null;
+
+    /// <summary>Lists only the items that differ from B.</summary>
+    public bool DiffersOnly
+    {
+        get => _differsOnly;
+        set
+        {
+            if (SetField(ref _differsOnly, value && CompareItems is not null))
+            {
+                RebuildRail();
+            }
+        }
+    }
+
+    /// <summary>Set by the Compare screen after each comparison; null items when there is no B.</summary>
+    public void CompareWith(string? fileB, IReadOnlySet<XdfItem>? items)
+    {
+        CompareFileB = fileB;
+        CompareItems = items;
+        OnPropertyChanged(nameof(HasCompare));
+        if (items is null)
+        {
+            DiffersOnly = false;
+        }
+
+        RebuildRail();
     }
 
     public XdfItem? SelectedItem
@@ -447,16 +484,25 @@ public sealed class TuneViewModel : ViewModelBase
         }
 
         var modified = document.ModifiedItems().ToHashSet();
+        var differs = CompareItems ?? new HashSet<XdfItem>();
         RailItem Entry(XdfItem item, bool indented) =>
-            new(item, catalog.Kind(item), _settings.IsPinned(item.Title), modified.Contains(item), ReferenceEquals(item, SelectedItem), indented);
+            new(item, catalog.Kind(item), _settings.IsPinned(item.Title), modified.Contains(item), ReferenceEquals(item, SelectedItem), indented, differs.Contains(item));
 
         if (SearchText.Trim().Length > 0)
         {
-            foreach (var item in catalog.Search(SearchText).Where(item => !ModifiedOnly || modified.Contains(item)))
+            foreach (var item in catalog.Search(SearchText).Where(item => (!ModifiedOnly || modified.Contains(item)) && (!DiffersOnly || differs.Contains(item))))
             {
                 Rail.Add(Entry(item, false));
             }
 
+            return;
+        }
+
+        if (DiffersOnly)
+        {
+            var listed = differs.Where(item => !ModifiedOnly || modified.Contains(item)).OrderBy(item => item.Title, StringComparer.OrdinalIgnoreCase).ToList();
+            Rail.Add(new RailGroup(listed.Count == 0 ? $"Nothing differs from {CompareFileB}" : $"Differs from {CompareFileB}"));
+            listed.ForEach(item => Rail.Add(Entry(item, false)));
             return;
         }
 

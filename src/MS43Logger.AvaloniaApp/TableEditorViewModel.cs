@@ -129,7 +129,13 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
 
     public string Copy() => Selection is CellRange range ? TableClipboard.Format(Values, range) : string.Empty;
 
-    public void Dispose() => _document.Changed -= OnDocumentChanged;
+    public void Dispose()
+    {
+        if (_document is not null)
+        {
+            _document.Changed -= OnDocumentChanged;
+        }
+    }
 
     private void OnDocumentChanged(object? sender, EventArgs e)
     {
