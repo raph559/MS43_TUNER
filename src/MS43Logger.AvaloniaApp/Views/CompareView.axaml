@@ -1,0 +1,206 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:MS43Logger.AvaloniaApp"
+             xmlns:core="using:MS43Logger.Core.Tuning"
+             xmlns:controls="using:MS43Logger.AvaloniaApp.Controls"
+             x:Class="MS43Logger.AvaloniaApp.Views.CompareView"
+             x:DataType="local:CompareViewModel">
+    <Panel>
+        <!-- No A yet -->
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="440" IsVisible="{Binding !HasA}">
+            <TextBlock Classes="display" FontSize="21" Text="Open a bin on the Tune tab first" HorizontalAlignment="Center" />
+            <TextBlock Name="NoAText" Classes="secondary" TextWrapping="Wrap" TextAlignment="Center"
+                       Text="Compare uses the open bin as A and its XDF for both files. Then pick the bin to compare it with." />
+        </StackPanel>
+
+        <!-- A open, no B -->
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14" MaxWidth="460" IsVisible="{Binding NeedsB}">
+            <TextBlock Classes="display" FontSize="21" Text="Open the bin to compare with" HorizontalAlignment="Center" />
+            <TextBlock Classes="secondary" TextWrapping="Wrap" TextAlignment="Center"
+                       Text="{Binding FileA, StringFormat='{}{0} is A. B opens read-only; you can copy items from it into A, with undo.'}" />
+            <Button Classes="primary" Content="Open B…" Click="OpenB_Click" HorizontalAlignment="Center" />
+            <TextBlock Text="{Binding ErrorMessage}" IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}"
+                       Foreground="{DynamicResource UpBrush}" TextWrapping="Wrap" TextAlignment="Center" />
+        </StackPanel>
+
+        <Grid ColumnDefinitions="380,*" IsVisible="{Binding HasB}">
+            <!-- Differences -->
+            <Border Background="{DynamicResource PaneBrush}" BorderBrush="{DynamicResource BezelBrush}" BorderThickness="0,0,1,0">
+                <Grid RowDefinitions="Auto,Auto,*">
+                    <Border BorderBrush="{DynamicResource BezelBrush}" BorderThickness="0,0,0,1" Padding="18,16,18,12">
+                        <StackPanel Spacing="7">
+                            <Grid ColumnDefinitions="22,8,*">
+                                <Border Background="{DynamicResource InkBrush}" CornerRadius="4" VerticalAlignment="Center">
+                                    <TextBlock Text="A" FontWeight="SemiBold" FontSize="11" Foreground="{DynamicResource DialBrush}" HorizontalAlignment="Center" />
+                                </Border>
+                                <TextBlock Grid.Column="2" Name="FileAText" Text="{Binding FileA}" FontWeight="Medium" TextTrimming="CharacterEllipsis" />
+                            </Grid>
+                            <Grid ColumnDefinitions="22,8,*,Auto">
+                                <Border BorderBrush="{DynamicResource Ink3Brush}" BorderThickness="1" CornerRadius="4" VerticalAlignment="Center">
+                                    <TextBlock Text="B" FontWeight="SemiBold" FontSize="11" Foreground="{DynamicResource Ink2Brush}" HorizontalAlignment="Center" />
+                                </Border>
+                                <TextBlock Grid.Column="2" Name="FileBText" Text="{Binding FileB}" FontWeight="Medium" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                <Button Grid.Column="3" Classes="ghost" Content="Change…" Click="OpenB_Click" ToolTip.Tip="Compare with another bin" />
+                            </Grid>
+                            <TextBlock Text="{Binding ErrorMessage}" IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                       Foreground="{DynamicResource UpBrush}" TextWrapping="Wrap" />
+                            <Border Padding="10,7" CornerRadius="6" BorderThickness="3,1,1,1" BorderBrush="{DynamicResource UpBrush}"
+                                    IsVisible="{Binding FirmwareWarning, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                <TextBlock Name="FirmwareWarningText" Text="{Binding FirmwareWarning}" TextWrapping="Wrap" />
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
+                    <ItemsControl Grid.Row="1" ItemsSource="{Binding Chips}" Margin="18,10" IsVisible="{Binding HasDifferences}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel ItemSpacing="6" LineSpacing="6" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="local:KindChip">
+                                <ToggleButton Classes="pill" Content="{Binding Label}" IsChecked="{Binding IsOn, Mode=OneWay}" Tag="{Binding Key}" Click="Kind_Click" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <ListBox Name="DiffList" Grid.Row="2" ItemsSource="{Binding Entries}" SelectionChanged="List_SelectionChanged" Padding="0,0,0,18"
+                             IsVisible="{Binding HasDifferences}">
+                        <ListBox.DataTemplates>
+                            <DataTemplate DataType="local:CompareGroup">
+                                <TextBlock Text="{Binding Title}" Classes="muted" FontSize="12" Margin="0,10,0,2" />
+                            </DataTemplate>
+                            <DataTemplate DataType="local:CompareRow">
+                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" Margin="0,3">
+                                    <TextBlock Classes="num" Text="{Binding Title}" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource InkBrush}"
+                                               FontWeight="{Binding IsCurrent, Converter={x:Static local:Converters.Bold}}" />
+                                    <TextBlock Grid.Column="1" Classes="num" Text="{Binding Summary}" Margin="12,0,0,0" MaxWidth="170" TextTrimming="CharacterEllipsis"
+                                               HorizontalAlignment="Right" />
+                                    <TextBlock Grid.Row="1" Classes="muted" FontSize="12" Text="{Binding Detail}" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Classes="muted" FontSize="12" Text="{Binding Units}" HorizontalAlignment="Right" />
+                                </Grid>
+                            </DataTemplate>
+                            <DataTemplate DataType="local:CompareBytesRow">
+                                <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" Margin="0,3"
+                                           FontWeight="{Binding IsCurrent, Converter={x:Static local:Converters.Bold}}" />
+                            </DataTemplate>
+                        </ListBox.DataTemplates>
+                    </ListBox>
+
+                    <StackPanel Grid.Row="2" Margin="18,18" Spacing="8" IsVisible="{Binding IsIdentical}">
+                        <TextBlock Name="IdenticalText" Classes="display" FontSize="16" TextWrapping="Wrap" Text="The two files are identical through this XDF." />
+                        <TextBlock Classes="secondary" Text="{Binding UnmappedSummary}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- The selected difference -->
+            <Grid Grid.Column="1" RowDefinitions="Auto,Auto,Auto,*,Auto">
+                <StackPanel Margin="26,18,26,10" Spacing="6" IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <TextBlock Name="CompareTitle" Classes="display" FontSize="21" Text="{Binding Selected.Item.Title, FallbackValue=''}" TextWrapping="Wrap" />
+                    <WrapPanel ItemSpacing="6" LineSpacing="6">
+                        <Border Classes="chip"><TextBlock Text="{Binding Selected.Category, FallbackValue=''}" /></Border>
+                        <Border Classes="chip" IsVisible="{Binding CellsText, Converter={x:Static ObjectConverters.IsNotNull}}"><TextBlock Text="{Binding CellsText}" /></Border>
+                        <Border Classes="chip" IsVisible="{Binding LargestText, Converter={x:Static ObjectConverters.IsNotNull}}"><TextBlock Text="{Binding LargestText}" /></Border>
+                    </WrapPanel>
+                    <TextBlock Classes="secondary" Text="{Binding Description}" TextWrapping="Wrap" MaxWidth="720" HorizontalAlignment="Left"
+                               IsVisible="{Binding Description, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                </StackPanel>
+
+                <Border Name="AxisBanner" Grid.Row="1" Margin="26,0,26,10" Padding="14,10" CornerRadius="6" BorderThickness="3,1,1,1"
+                        BorderBrush="{DynamicResource Bezel2Brush}" Background="{DynamicResource PaneBrush}"
+                        IsVisible="{Binding AxisBanner, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <TextBlock Text="{Binding AxisBanner}" TextWrapping="Wrap" Foreground="{DynamicResource Ink2Brush}" />
+                </Border>
+
+                <!-- Actions -->
+                <WrapPanel Grid.Row="2" Margin="26,2,26,12" ItemSpacing="8" LineSpacing="8" IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <Border Classes="seg" VerticalAlignment="Center" IsVisible="{Binding ShowsTable}">
+                        <StackPanel Orientation="Horizontal">
+                            <ToggleButton Name="ViewDelta" Classes="seg" Content="B − A" IsChecked="{Binding IsDeltaView}" />
+                            <ToggleButton Name="ViewA" Classes="seg" Content="A" IsChecked="{Binding IsAView}" />
+                            <ToggleButton Name="ViewB" Classes="seg" Content="B" IsChecked="{Binding IsBView}" />
+                        </StackPanel>
+                    </Border>
+                    <Button Name="CopyFromB" Content="Copy B into A" Click="Copy_Click" ToolTip.Tip="Write B's value of this item into A. Undo with Ctrl Z." />
+                    <Button Content="Edit in Tune" Click="EditInTune_Click" ToolTip.Tip="Open this item of A on the Tune tab" />
+                </WrapPanel>
+
+                <!-- Table: one grid at a time -->
+                <ScrollViewer Grid.Row="3" HorizontalScrollBarVisibility="Auto" Padding="26,4,26,0" IsVisible="{Binding ShowsTable}">
+                    <controls:MapGrid Name="CompareGrid" Editor="{Binding Grid}" HorizontalAlignment="Left" VerticalAlignment="Top" MaxWidth="1240" />
+                </ScrollViewer>
+
+                <!-- Value, switch or flag: A and B side by side -->
+                <WrapPanel Grid.Row="3" Margin="26,6,26,12" ItemSpacing="34" IsVisible="{Binding ShowsValue}">
+                    <StackPanel>
+                        <TextBlock Classes="muted" FontSize="12" Text="{Binding FileA, StringFormat='A, {0}'}" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Name="ValueAText" Classes="display" FontSize="34" FontWeight="Light" Text="{Binding Selected.ValueA, FallbackValue=''}" />
+                            <TextBlock Classes="muted" Text="{Binding Units}" VerticalAlignment="Bottom" Margin="0,0,0,7" />
+                        </StackPanel>
+                    </StackPanel>
+                    <StackPanel>
+                        <TextBlock Classes="muted" FontSize="12" Text="{Binding FileB, StringFormat='B, {0}'}" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Name="ValueBText" Classes="display" FontSize="34" FontWeight="Light" Text="{Binding Selected.ValueB, FallbackValue=''}" />
+                            <TextBlock Classes="muted" Text="{Binding Units}" VerticalAlignment="Bottom" Margin="0,0,0,7" />
+                        </StackPanel>
+                    </StackPanel>
+                </WrapPanel>
+
+                <!-- Bytes outside the XDF -->
+                <StackPanel Grid.Row="0" Grid.RowSpan="4" Margin="26,18" Spacing="10" IsVisible="{Binding ShowsBytes}">
+                    <TextBlock Classes="display" FontSize="21" Text="Bytes outside the XDF" />
+                    <TextBlock Classes="secondary" TextWrapping="Wrap" MaxWidth="720" HorizontalAlignment="Left"
+                               Text="These bytes differ but no XDF item covers them. They are listed so nothing hides; they cannot be copied. Runs up to 8 equal bytes apart are shown as one range." />
+                    <ScrollViewer MaxHeight="560">
+                        <ItemsControl ItemsSource="{Binding Unmapped}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="core:UnmappedRange">
+                                    <Grid ColumnDefinitions="200,110,150,*" Margin="0,0,0,5">
+                                        <TextBlock Classes="num">
+                                            <TextBlock.Text>
+                                                <MultiBinding StringFormat="0x{0:X5}–0x{1:X5}">
+                                                    <Binding Path="Offset" />
+                                                    <Binding Path="End" />
+                                                </MultiBinding>
+                                            </TextBlock.Text>
+                                        </TextBlock>
+                                        <TextBlock Grid.Column="1" Classes="num" Text="{Binding Length, StringFormat='{}{0:N0} bytes'}" HorizontalAlignment="Right" Margin="0,0,16,0" />
+                                        <TextBlock Grid.Column="2" Classes="num muted" Text="{Binding Differing, StringFormat='{}{0:N0} differ'}" />
+                                        <TextBlock Grid.Column="3" Text="{Binding Area}" Foreground="{DynamicResource Ink2Brush}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </StackPanel>
+
+                <!-- Legend and messages -->
+                <StackPanel Grid.Row="4" Margin="26,12,26,16" Spacing="8">
+                    <StackPanel Spacing="5" MaxWidth="420" HorizontalAlignment="Left" IsVisible="{Binding ShowsTable}">
+                        <Border Height="8" CornerRadius="4" IsVisible="{Binding IsDeltaView}">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                                    <GradientStop Offset="0" Color="{DynamicResource DownColor}" />
+                                    <GradientStop Offset="0.5" Color="{DynamicResource PaneColor}" />
+                                    <GradientStop Offset="1" Color="{DynamicResource UpColor}" />
+                                </LinearGradientBrush>
+                            </Border.Background>
+                        </Border>
+                        <Border Height="8" CornerRadius="4" Background="{x:Static controls:HeatRamp.Brush}" IsVisible="{Binding !IsDeltaView}" />
+                        <Grid ColumnDefinitions="*,*" Width="420">
+                            <TextBlock Classes="num muted" FontSize="12" Text="{Binding LegendMin}" />
+                            <TextBlock Grid.Column="1" Classes="num muted" FontSize="12" Text="{Binding LegendMax}" HorizontalAlignment="Right" />
+                        </Grid>
+                    </StackPanel>
+                    <TextBlock Name="CompareMessage" Text="{Binding Message}" TextWrapping="Wrap" Foreground="{DynamicResource Ink2Brush}"
+                               IsVisible="{Binding Message, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    <TextBlock Text="{Binding Grid.Message, FallbackValue=''}" TextWrapping="Wrap" Foreground="{DynamicResource Ink2Brush}"
+                               IsVisible="{Binding Grid.Message, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False}" />
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Panel>
+</UserControl>
