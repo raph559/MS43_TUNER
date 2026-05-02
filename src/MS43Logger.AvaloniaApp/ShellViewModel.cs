@@ -29,7 +29,15 @@ public sealed class ShellViewModel : ViewModelBase
                 tune.Settings.Variant = live.SelectedVariant;
                 tune.Settings.Save();
             }
+
+            if (e.PropertyName == nameof(MainWindowViewModel.IsConnected) && !live.IsConnected)
+            {
+                tune.LiveCursor.Clear();
+            }
         };
+
+        live.SampleShown += (_, sample) => tune.LiveCursor.Push(sample, live.CurrentDefinition);
+        tune.LiveCursor.IsVisible = IsTune;
 
         tune.DocumentOpened += (_, _) =>
         {
@@ -57,6 +65,7 @@ public sealed class ShellViewModel : ViewModelBase
             {
                 OnPropertyChanged(nameof(IsLive));
                 OnPropertyChanged(nameof(IsTune));
+                Tune.LiveCursor.IsVisible = IsTune;
             }
         }
     }

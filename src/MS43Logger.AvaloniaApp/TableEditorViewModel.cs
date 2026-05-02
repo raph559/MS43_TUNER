@@ -28,6 +28,7 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
     private CellRange? _selection;
     private bool _showRaw;
     private string? _message;
+    private LiveCursorState? _live;
     private IReadOnlySet<(int Row, int Col)> _changedCells = new HashSet<(int, int)>();
 
     public TableEditorViewModel(CalibrationDocument document, EditHistory history, XdfTable table)
@@ -54,6 +55,9 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
     public string? Message { get => _message; set => SetField(ref _message, value); }
 
     public IReadOnlySet<(int Row, int Col)> ChangedCells { get => _changedCells; private set => SetField(ref _changedCells, value); }
+
+    /// <summary>The engine's position on this table while the logger runs; null when there is none to show.</summary>
+    public LiveCursorState? Live { get => _live; set => SetField(ref _live, value); }
 
     public string Units => Table.Z.Units;
 

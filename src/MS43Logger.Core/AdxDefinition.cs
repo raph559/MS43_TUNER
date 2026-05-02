@@ -270,6 +270,18 @@ public sealed class AdxDefinition
         }
     }
 
+    /// <summary>The channel's integer value as it sits in the payload, before its equation.</summary>
+    public static long ReadRaw(AdxValueDefinition value, ReadOnlySpan<byte> payload)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        if (value.FloatingPoint)
+        {
+            throw new InvalidOperationException($"'{value.DisplayName}' is a floating-point value and has no integer raw value.");
+        }
+
+        return (long)ExtractNativeValue(value, payload);
+    }
+
     private static double ExtractNativeValue(AdxValueDefinition definition, ReadOnlySpan<byte> payload)
     {
         if (definition.SizeInBits <= 0)

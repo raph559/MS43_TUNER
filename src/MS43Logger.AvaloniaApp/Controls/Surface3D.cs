@@ -158,6 +158,30 @@ public sealed class Surface3D : Control
         var ink3 = ThemeBrushes.Get(this, "Ink3Brush");
         Label(context, values.Y.Units.Length > 0 ? values.Y.Units : "rows", font, ink3, P(-0.14, 0.5, 0).Point);
         Label(context, values.X.Units.Length > 0 ? values.X.Units : "columns", font, ink3, P(0.5, 1.13, 0).Point);
+
+        if (Editor.Live is { } live)
+        {
+            // The engine's position on the surface, with a drop line to the floor and the fading trail.
+            var colour = ThemeBrushes.Cursor(this, live.IsStale);
+            double Height(double value) => double.IsFinite(value) && max > min ? Math.Clamp((value - min) / (max - min), 0, 1) : 0;
+            Point On(double row, double col, double value) => P(col / (values.Cols - 1), row / (values.Rows - 1), Height(value)).Point;
+            double ValueAt(double row, double col)
+            {
+                int r = Math.Min((int)row, values.Rows - 1), c = Math.Min((int)col, values.Cols - 1);
+                return CellWeights.Interpolate(values.Physical, CellWeights.Around(new AxisPosition(r, row - r, 0), new AxisPosition(c, col - c, 0), values.Rows, values.Cols));
+            }
+
+            foreach (var point in live.Trail)
+            {
+                context.DrawEllipse(new SolidColorBrush(colour, point.Opacity), null, On(point.Row, point.Col, ValueAt(point.Row, point.Col)), 2.5, 2.5);
+            }
+
+            var fix = live.Fix;
+            double fixRow = fix.Row?.Position ?? 0, fixCol = fix.Col?.Position ?? 0;
+            var top = On(fixRow, fixCol, fix.Value);
+            context.DrawLine(new Pen(new SolidColorBrush(colour, 0.8), 1), P(fixCol / (values.Cols - 1), fixRow / (values.Rows - 1), 0).Point, top);
+            context.DrawEllipse(new SolidColorBrush(colour), new Pen(ThemeBrushes.Get(this, "DialBrush"), 1.5), top, 4.5, 4.5);
+        }
     }
 
     private static byte Shade(byte value, double factor) => (byte)Math.Clamp(Math.Round(value * factor), 0, 255);
