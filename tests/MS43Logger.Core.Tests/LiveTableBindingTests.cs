@@ -92,6 +92,25 @@ public class LiveTableBindingTests
     }
 
     [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void GearComesFromTheTopBitsOfTheRpmWord()
+    {
+        var document = Car();
+        var curve = LiveTableBinding.Resolve(Map, document, Table(document, "id_n_max_mt__gear"));
+        Assert.True(curve.HasInput, curve.Reason);
+        Assert.Null(curve.CheckLogger(Ms43x));
+        var fix = Locate(document, curve, ("N", 2480 | 3 << 13));
+        Assert.Equal(new AxisPosition(3, 0, 0), fix.Row);
+        Assert.Equal(3, fix.Inputs[0].Input);
+
+        var boost = LiveTableBinding.Resolve(Map, document, Table(document, "ip_bc_map_req_ron98__gear__n"));
+        Assert.True(boost.HasInput, boost.Reason);
+        var both = Locate(document, boost, ("N", 2480 | 3 << 13));
+        Assert.Equal(new AxisPosition(3, 0, 0), both.Row);
+        Assert.Equal(3, both.Inputs[0].Input);
+        Assert.Equal(2480, both.Inputs[1].Input);
+    }
+
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
     public void AxisTableShowsItsInput()
     {
         var document = Car();
