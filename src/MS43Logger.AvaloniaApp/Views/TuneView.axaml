@@ -21,10 +21,12 @@
         <Grid ColumnDefinitions="264,*,340" IsVisible="{Binding HasDocument}">
             <!-- Map rail -->
             <Border Background="{DynamicResource PaneBrush}" BorderBrush="{DynamicResource BezelBrush}" BorderThickness="0,0,1,0">
-                <Grid RowDefinitions="Auto,Auto,*">
+                <Grid RowDefinitions="Auto,Auto,Auto,*">
                     <TextBox Name="SearchBox" Margin="14,14,14,6" Text="{Binding SearchText}" Watermark="Search maps and values   Ctrl K" />
                     <CheckBox Grid.Row="1" Margin="16,0,16,4" Content="Changed only" IsChecked="{Binding ModifiedOnly}" />
-                    <ListBox Name="RailList" Grid.Row="2" ItemsSource="{Binding Rail}" SelectionChanged="Rail_SelectionChanged" Padding="0,4,0,18">
+                    <CheckBox Name="DiffersOnlyBox" Grid.Row="2" Margin="16,0,16,4" Content="Differs from B" IsChecked="{Binding DiffersOnly}" IsVisible="{Binding HasCompare}"
+                              ToolTip.Tip="{Binding CompareFileB, StringFormat='Items that differ from {0} (B on the Compare tab)'}" />
+                    <ListBox Name="RailList" Grid.Row="3" ItemsSource="{Binding Rail}" SelectionChanged="Rail_SelectionChanged" Padding="0,4,0,18">
                         <ListBox.DataTemplates>
                             <DataTemplate DataType="local:RailGroup">
                                 <TextBlock Text="{Binding Title}" Classes="muted" FontSize="12" Margin="0,10,0,2" />
@@ -36,13 +38,15 @@
                                 </Grid>
                             </DataTemplate>
                             <DataTemplate DataType="local:RailItem">
-                                <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="{Binding IsIndented, Converter={x:Static local:Converters.Indent}}">
+                                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="{Binding IsIndented, Converter={x:Static local:Converters.Indent}}">
                                     <controls:ItemGlyph Kind="{Binding Kind}" VerticalAlignment="Center" Margin="0,0,9,0" />
                                     <TextBlock Grid.Column="1" Classes="num" Text="{Binding Title}" TextTrimming="CharacterEllipsis"
                                                FontWeight="{Binding IsCurrent, Converter={x:Static local:Converters.Bold}}" />
                                     <Ellipse Grid.Column="2" Width="5" Height="5" Margin="6,0,0,0" Fill="{DynamicResource InkBrush}" IsVisible="{Binding IsModified}"
                                              ToolTip.Tip="Changed since the last save" />
-                                    <TextBlock Grid.Column="3" Text="★" Margin="6,0,0,0" Foreground="{DynamicResource Ink2Brush}" IsVisible="{Binding IsPinned}" />
+                                    <Ellipse Grid.Column="3" Width="7" Height="7" Margin="6,0,0,0" Stroke="{DynamicResource Ink2Brush}" StrokeThickness="1.2"
+                                             IsVisible="{Binding IsDifferent}" ToolTip.Tip="Differs from B on the Compare tab" />
+                                    <TextBlock Grid.Column="4" Text="★" Margin="6,0,0,0" Foreground="{DynamicResource Ink2Brush}" IsVisible="{Binding IsPinned}" />
                                 </Grid>
                             </DataTemplate>
                         </ListBox.DataTemplates>
