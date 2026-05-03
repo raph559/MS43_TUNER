@@ -251,6 +251,23 @@ public sealed class CompareTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task EditInTuneSelectsTheItem()
+    {
+        if (!Available)
+        {
+            return;
+        }
+
+        var (_, shell, compare) = await Open();
+        compare.Selected = Item(compare, "c_inj_flow");
+
+        compare.ShowInTune();
+
+        Assert.True(shell.IsTune);
+        Assert.Equal("c_inj_flow", shell.Tune.SelectedItem!.Title);
+    }
+
+    [AvaloniaFact]
     public void CompareWithoutABinAsksForOne()
     {
         var window = new MainWindow();
@@ -262,5 +279,153 @@ public sealed class CompareTests : IDisposable
 
         Assert.False(shell.Compare.HasA);
         Assert.True(Find.Named<TextBlock>(window, "NoAText").IsEffectivelyVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task TuneRailFiltersItemsThatDifferFromB()
+    {
+        if (!Available)
+        {
+            return;
+        }
+
+        var (window, shell, compare) = await Open();
+        var tune = shell.Tune;
+        shell.SelectedTab = ShellViewModel.TuneTab;
+
+        Assert.Equal("MS43X001_release_E46_M54B25.bin", tune.CompareFileB);
+        tune.DiffersOnly = true;
+
+        var items = tune.Rail.OfType<RailItem>().ToList();
+        Assert.Equal(compare.Result!.Items.Count, items.Count);
+        Assert.All(items, item => Assert.True(item.IsDifferent));
+        Assert.Contains(tune.Rail.OfType<RailGroup>(), group => group.Title.Contains("MS43X001_release_E46_M54B25.bin"));
+        Screens.Save(window, "tune-differs-from-b");
+
+        tune.SearchText = "c_inj";
+        Assert.Equal(new[] { "c_inj_flow" }, tune.Rail.OfType<RailItem>().Select(item => item.Title));
+    }
+
+    [AvaloniaFact]
+    public async Task DiffersFilterFollowsEditsOnTheTuneTab()
+    {
+        if (!Available)
+        {
+            return;
+        }
+
+        var (_, shell, _) = await Open();
+        var tune = shell.Tune;
+        shell.SelectedTab = ShellViewModel.TuneTab;
+        tune.DiffersOnly = true;
+        var flow = (XdfConstant)tune.Document!.Xdf.FindByTitle("c_inj_flow")!;
+
+        tune.History!.Apply(TableEdits.CopyFrom(tune.Document, flow, BinImage.Load(Release!)), "Copy");
+
+        Assert.DoesNotContain("c_inj_flow", tune.Rail.OfType<RailItem>().Select(item => item.Title));
+    }
+
+    [AvaloniaFact]
+    public async Task DiffersFilterIsHiddenWithoutB()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell) = await TuneScreen.OpenAsync(select: null);
+
+        Assert.Null(shell.Tune.CompareItems);
+        Assert.False(Find.Named<CheckBox>(window, "DiffersOnlyBox").IsVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task CopyOfATableOnAnotherAxisSaysSo()
+    {
+        if (!Available)
+        {
+            return;
+        }
+
+        var (_, _, compare) = await Open();
+        compare.Selected = Item(compare, "ip_iga_ron98_pl__n__maf");
+
+        Assert.True(compare.CopySelectedFromB());
+
+        Assert.Contains("ldpm_n_14", compare.Message);
+    }
+
+    [AvaloniaFact]
+    public async Task RailRingsFollowEditsWithTheFilterOff()
+    {
+        if (!Available)
+        {
+            return;
+        }
+
+        var (_, shell, _) = await Open();
+        var tune = shell.Tune;
+        shell.SelectedTab = ShellViewModel.TuneTab;
+        tune.SearchText = "c_inj_flow";
+        Assert.True(tune.Rail.OfType<RailItem>().Single(item => item.Title == "c_inj_flow").IsDifferent);
+        var flow = (XdfConstant)tune.Document!.Xdf.FindByTitle("c_inj_flow")!;
+
+        tune.History!.Apply(TableEdits.CopyFrom(tune.Document, flow, BinImage.Load(Release!)), "Copy");
+
+        Assert.False(tune.Rail.OfType<RailItem>().Single(item => item.Title == "c_inj_flow").IsDifferent);
+    }
+
+    [AvaloniaFact]
+    public async Task ClickingTheActiveKindChipKeepsItOn()
+    {
+        if (!Available)
+        {
+            return;
+        }
+
+        var (window, _, compare) = await Open();
+        ToggleButton Chip(string label) => window.GetVisualDescendants().OfType<ToggleButton>().First(button => button.Classes.Contains("pill") && (button.Content as string)!.StartsWith(label));
+        var all = Chip("All");
+        var centre = all.TranslatePoint(new Avalonia.Point(all.Bounds.Width / 2, all.Bounds.Height / 2), window)!.Value;
+
+        window.MouseDown(centre, Avalonia.Input.MouseButton.Left);
+        window.MouseUp(centre, Avalonia.Input.MouseButton.Left);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal("all", compare.Kind);
+        Assert.True(Chip("All").IsChecked);
+    }
+
+    [AvaloniaFact]
+    public async Task BytesViewShowsWholeRanges()
+    {
+        if (!Available)
+        {
+            return;
+        }
+
+        var (window, _, compare) = await Open();
+
+        compare.ShowBytes();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), block => block.Text == "0x03C43–0x03C9B");
+        Screens.Save(window, "compare-bytes");
+    }
+
+    [AvaloniaFact]
+    public async Task FileAFollowsSaveAs()
+    {
+        if (!Available)
+        {
+            return;
+        }
+
+        var (window, shell, _) = await Open();
+
+        Assert.True(shell.Tune.Save(Path.Combine(_folder, "NEW.bin")));
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal("NEW.bin", Find.Named<TextBlock>(window, "FileAText").Text);
     }
 }
