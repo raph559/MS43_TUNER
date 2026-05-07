@@ -83,7 +83,7 @@ public sealed class ValueCodec
 
         if (double.IsNaN(physical))
         {
-            return "—";
+            return "n/a";
         }
 
         var text = outputType == 2
@@ -94,10 +94,39 @@ public sealed class ValueCodec
         return text.StartsWith('-') && text.AsSpan(1).IndexOfAnyExcept("0.") < 0 ? text[1..] : text;
     }
 
-    private static (long Min, long Max) RawRange(XdfData data)
+    internal static (long Min, long Max) RawRange(XdfData data)
     {
         var bits = data.ElementBits;
         return data.Signed ? (-(1L << (bits - 1)), (1L << (bits - 1)) - 1) : (0, (1L << bits) - 1);
+    }
+
+    /// <summary>
+    /// The physical values <paramref name="data"/> can hold. A linear equation gives the values at both raw ends and
+    /// the step between neighbouring raws; any other equation is scanned over every raw value (up to 16 bits) and has
+    /// no step. The ends are NaN when the equation cannot be evaluated.
+    /// </summary>
+    internal (double Min, double Max, double? Step) Storable(XdfMath math, XdfData data)
+    {
+        ArgumentNullException.ThrowIfNull(math);
+        ArgumentNullException.ThrowIfNull(data);
+        var links = LinkValues(math, 0);
+        var (min, max) = RawRange(data);
+        if (TryLinear(math, links, min, max, out var at0, out var slope))
+        {
+            var atMax = ToPhysical(math, max, links);
+            return (Math.Min(at0, atMax), Math.Max(at0, atMax), Math.Abs(slope));
+        }
+
+        if (data.ElementBits > 16)
+        {
+            var low = ToPhysical(math, min, links);
+            var high = ToPhysical(math, max, links);
+            return (Math.Min(low, high), Math.Max(low, high), null);
+        }
+
+        // Table() stores values that cannot be evaluated as +infinity.
+        var finite = Table(math, links, min, max).Where(double.IsFinite).ToArray();
+        return finite.Length == 0 ? (double.NaN, double.NaN, null) : (finite.Min(), finite.Max(), null);
     }
 
     private double ToPhysical(XdfMath math, long raw, IReadOnlyDictionary<string, double>? links)

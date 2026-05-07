@@ -211,7 +211,7 @@ public sealed class LiveTableBinding
             parts.Add(Part(col, "columns"));
         }
 
-        return "Live input: " + string.Join(" × ", parts) + ".";
+        return "Live input: " + string.Join(", ", parts) + ".";
     }
 
     /// <summary>Null when <paramref name="adx"/> carries every channel this table needs where the input map expects it; otherwise the reason.</summary>

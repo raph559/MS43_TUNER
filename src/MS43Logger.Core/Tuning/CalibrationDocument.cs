@@ -82,18 +82,21 @@ public sealed class CalibrationDocument
     /// Writes the working image to <paramref name="path"/> (default: the open file). The first time an existing file is
     /// overwritten in this session its previous bytes go to <c>&lt;file&gt;.bak</c>. The image is written to a temporary
     /// file and moved into place, so a failure leaves the target as it was. Changed items are appended to the edit log.
+    /// <paramref name="options"/> can turn the .bak and the edit log off. A log that cannot be written throws
+    /// <see cref="EditLogException"/> after the save has completed and <see cref="Changed"/> has been raised.
     /// </summary>
-    public void Save(string? path = null, DateTime? now = null)
+    public void Save(string? path = null, DateTime? now = null, SaveOptions? options = null)
     {
+        options ??= new SaveOptions();
         var target = System.IO.Path.GetFullPath(path ?? Path ?? throw new InvalidOperationException("Choose where to save this file."));
         var when = now ?? DateTime.Now;
-        var entries = LogEntries(when);
+        var entries = options.AppendEditLog ? LogEntries(when) : null;
 
         var temp = target + ".tmp";
         try
         {
             File.WriteAllBytes(temp, Image.ToArray());
-            if (File.Exists(target) && MarkBackedUp(target))
+            if (options.KeepBackup && File.Exists(target) && MarkBackedUp(target))
             {
                 File.Copy(target, target + ".bak", overwrite: true);
                 BackupWritten = true;
@@ -111,8 +114,25 @@ public sealed class CalibrationDocument
 
         Saved = Image.Clone();
         Path = target;
-        EditLog.Append(target, entries);
+        EditLogException? logFailure = null;
+        if (entries is not null)
+        {
+            try
+            {
+                EditLog.Append(target, entries);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                // The bin is already in place; only the log missed its lines (it may be open in another program).
+                logFailure = new EditLogException(EditLog.PathFor(target), error);
+            }
+        }
+
         RaiseChanged();
+        if (logFailure is not null)
+        {
+            throw logFailure;
+        }
     }
 
     // Files already backed up while this app runs: reopening a file must not replace the .bak of its original bytes.

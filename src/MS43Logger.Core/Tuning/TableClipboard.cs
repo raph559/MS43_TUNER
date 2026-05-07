@@ -21,7 +21,7 @@ public static class TableClipboard
             for (var col = range.Col0; col <= range.Col1; col++)
             {
                 var value = values.Physical[row, col];
-                cells.Add(double.IsFinite(value) ? value.ToString("R", CultureInfo.InvariantCulture) : "—");
+                cells.Add(double.IsFinite(value) ? value.ToString("R", CultureInfo.InvariantCulture) : "n/a");
             }
 
             lines.Add(string.Join('\t', cells));

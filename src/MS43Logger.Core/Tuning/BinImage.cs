@@ -29,7 +29,7 @@ public sealed class BinImage
         ArgumentNullException.ThrowIfNull(bytes);
         if (bytes.Length != Size)
         {
-            throw new InvalidDataException($"{name} is {bytes.Length} bytes; an MS43 bin must be exactly {Size} bytes (512 KiB).");
+            throw new InvalidDataException($"{name} is {bytes.Length} bytes. An MS43 bin is exactly {Size} bytes (512 KiB).");
         }
 
         return new BinImage((byte[])bytes.Clone(), name);
@@ -70,7 +70,7 @@ public sealed class BinImage
         return ranges;
     }
 
-    /// <summary>Writes element <paramref name="index"/> (row-major) of <paramref name="data"/>; nothing changes when the value or position is invalid.</summary>
+    /// <summary>Writes element <paramref name="index"/> (row-major) of <paramref name="data"/>; a value or position it cannot hold throws, and nothing changes.</summary>
     public void WriteElement(XdfData data, int index, long raw)
     {
         var offset = ElementOffset(data, index);
