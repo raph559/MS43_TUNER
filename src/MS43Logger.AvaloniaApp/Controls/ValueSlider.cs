@@ -96,6 +96,45 @@ public sealed class ValueSlider : Control
     private double ValueAt(double x) =>
         Minimum + (Bounds.Width > 0 ? Math.Clamp(x / Bounds.Width, 0, 1) : 0) * (Maximum - Minimum);
 
+    public override void Render(DrawingContext context)
+    {
+        var pane = ThemeBrushes.Get(this, "PaneBrush");
+        var ink1 = ThemeBrushes.Get(this, "Ink1Brush");
+        var ink2 = ThemeBrushes.Get(this, "Ink2Brush");
+        var ink3 = ThemeBrushes.Get(this, "Ink3Brush");
+        var enabled = IsEffectivelyEnabled;
+        var thumb = ThumbCentre;
+
+        // The track, then Ink2 up to the value (Ink3 while the item cannot be edited).
+        context.DrawRectangle(ThemeBrushes.Get(this, "EdgeBrush"), null, new Rect(0, TrackY - 2, Bounds.Width, 4));
+        context.DrawRectangle(enabled ? ink2 : ink3, null, new Rect(0, TrackY - 2, thumb.X, 4));
+
+        foreach (var tick in new[] { TickLow, TickHigh })
+        {
+            if (tick is double value && value >= Minimum && value <= Maximum)
+            {
+                // A 1 px Pane casing on each side of a 2 px Ink2 bar, so the tick reads on the fill as on the track.
+                var x = Math.Round(X(value));
+                context.DrawRectangle(pane, null, new Rect(x - 2, TrackY - 6, 4, 12));
+                context.DrawRectangle(ink2, null, new Rect(x - 1, TrackY - 6, 2, 12));
+            }
+        }
+
+        if (IsFocused && Classes.Contains(":focus-visible"))
+        {
+            // The focus ring of system 1.3: the thumb's Pane ring is its 2 px gap, then 2 px of Ink1.
+            context.DrawEllipse(null, new Pen(ink1, 2), thumb, ThumbRadius + 3, ThumbRadius + 3);
+        }
+
+        context.DrawEllipse(pane, null, thumb, ThumbRadius + 2, ThumbRadius + 2);
+        context.DrawEllipse(enabled ? ink1 : ink3, null, thumb, ThumbRadius, ThumbRadius);
+
+        var data = new Typeface(ThemeBrushes.Font(this, "DataFont"));
+        var ui = new Typeface(ThemeBrushes.Font(this, "UiFont"));
+        Label(context, MinLabel, data, ui, ink3, 0, alignRight: false);
+        Label(context, MaxLabel, data, ui, ink3, Bounds.Width, alignRight: true);
+    }
+
     // An end label, "8160 rpm": the number in Bahnschrift, the unit in Segoe UI, as every number in a UI line.
     private static void Label(DrawingContext context, string? text, Typeface data, Typeface ui, IBrush brush, double x, bool alignRight)
     {
@@ -146,5 +185,110 @@ public sealed class ValueSlider : Control
         }
 
         InvalidateVisual();
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.KeyModifiers != KeyModifiers.None)
+        {
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.Escape when _dragging:
+                _dragging = false;
+                _held = false;
+                DragCancelled?.Invoke(this, EventArgs.Empty);
+                break;
+            case Key.Left or Key.Down when !_dragging:
+                StepRequested?.Invoke(this, -1);
+                break;
+            case Key.Right or Key.Up when !_dragging:
+                StepRequested?.Invoke(this, 1);
+                break;
+            case Key.PageDown when !_dragging:
+                StepRequested?.Invoke(this, -10);
+                break;
+            case Key.PageUp when !_dragging:
+                StepRequested?.Invoke(this, 10);
+                break;
+            case Key.Home when !_dragging:
+                JumpRequested?.Invoke(this, false);
+                break;
+            case Key.End when !_dragging:
+                JumpRequested?.Invoke(this, true);
+                break;
+            default:
+                return;
+        }
+
+        e.Handled = true;
+    }
+
+    protected override void OnPointerPressed(PointerPressedEventArgs e)
+    {
+        base.OnPointerPressed(e);
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        Focus(NavigationMethod.Pointer);
+        var x = e.GetPosition(this).X;
+        var thumb = ThumbCentre.X;
+        if (Math.Abs(x - thumb) <= ThumbHit)
+        {
+            // Taking the thumb changes nothing: a drag moves the value by what the pointer moves, from where it was taken.
+            _held = true;
+            _grab = x - thumb;
+            _pressedX = x;
+            e.Pointer.Capture(this);
+        }
+        else
+        {
+            // A press on the track beside the thumb pages toward it, as Page Up and Page Down do.
+            StepRequested?.Invoke(this, x > thumb ? 10 : -10);
+        }
+
+        e.Handled = true;
+    }
+
+    protected override void OnPointerMoved(PointerEventArgs e)
+    {
+        base.OnPointerMoved(e);
+        var x = e.GetPosition(this).X;
+        if (!_held || (!_dragging && Math.Abs(x - _pressedX) < DragThreshold))
+        {
+            return;
+        }
+
+        _dragging = true;
+        DragUpdated?.Invoke(this, ValueAt(x - _grab));
+    }
+
+    protected override void OnPointerReleased(PointerReleasedEventArgs e)
+    {
+        base.OnPointerReleased(e);
+        var dragging = _dragging;
+        _dragging = false;
+        _held = false;
+        e.Pointer.Capture(null);
+        if (dragging)
+        {
+            DragCommitted?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+    {
+        base.OnPointerCaptureLost(e);
+        _held = false;
+        if (_dragging)
+        {
+            _dragging = false;
+            DragCancelled?.Invoke(this, EventArgs.Empty);
+        }
     }
 }
