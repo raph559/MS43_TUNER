@@ -61,6 +61,10 @@ public sealed class CompareViewModel : ViewModelBase
     private string? _message;
     private bool _stale = true;
     private bool _isVisible;
+    private string _searchText = string.Empty;
+    private string? _scaleCaption;
+    private (double Low, double High) _scaleSpan;
+    private (string? Min, string? Mid, string? Max) _scaleLabels;
 
     public CompareViewModel(TuneViewModel tune)
     {
@@ -69,7 +73,9 @@ public sealed class CompareViewModel : ViewModelBase
         {
             Watch(tune.Document);
             OnPropertyChanged(nameof(FileA));
+            OnPropertyChanged(nameof(NoBText));
             OnPropertyChanged(nameof(HasA));
+            OnPropertyChanged(nameof(NeedsB));
             Invalidate();
         };
         Watch(tune.Document);
@@ -125,12 +131,35 @@ public sealed class CompareViewModel : ViewModelBase
 
     public IReadOnlyList<UnmappedRange> Unmapped => Result?.Unmapped ?? Array.Empty<UnmappedRange>();
 
-    /// <summary>"18 ranges, 11,907 bytes outside the XDF (11,436 differ)": ranges may span a few equal bytes.</summary>
+    /// <summary>"18 ranges, 11907 bytes outside the XDF (11436 differ)", no digit grouping (system 3.3); ranges may span a few equal bytes.</summary>
     public string UnmappedSummary => Result is not { } result
         ? string.Empty
         : result.Unmapped.Count == 0
             ? "No bytes differ outside the XDF"
-            : $"{result.Unmapped.Count} {(result.Unmapped.Count == 1 ? "range" : "ranges")}, {result.UnmappedBytes.ToString("N0", CultureInfo.InvariantCulture)} bytes outside the XDF ({result.DifferingBytes.ToString("N0", CultureInfo.InvariantCulture)} differ)";
+            : $"{result.Unmapped.Count} {(result.Unmapped.Count == 1 ? "range" : "ranges")}, {result.UnmappedBytes.ToString(CultureInfo.InvariantCulture)} bytes outside the XDF ({result.DifferingBytes.ToString(CultureInfo.InvariantCulture)} differ)";
+
+    /// <summary>The No B state's line (system 7.3): "A is CAR.bin. B can be any 512 KiB MS43 bin; both are read through A's XDF."</summary>
+    public string NoBText => $"A is {FileA}. B can be any 512 KiB MS43 bin; both are read through A's XDF.";
+
+    /// <summary>A range of the bytes outside the XDF, "0x03C43 to 0x03C9B", both ends included.</summary>
+    public static string RangeText(UnmappedRange range)
+    {
+        ArgumentNullException.ThrowIfNull(range);
+        return string.Format(CultureInfo.InvariantCulture, "0x{0:X5} to 0x{1:X5}", range.Offset, range.End);
+    }
+
+    /// <summary>Filters the list by item title and description (system 5.15), as the Tune rail's search does.</summary>
+    public string SearchText
+    {
+        get => _searchText;
+        set
+        {
+            if (SetField(ref _searchText, value ?? string.Empty))
+            {
+                RebuildList();
+            }
+        }
+    }
 
     public IReadOnlyList<KindChip> Chips { get => _chips; private set => SetField(ref _chips, value); }
 
@@ -213,6 +242,29 @@ public sealed class CompareViewModel : ViewModelBase
 
     public string? LegendMax { get; private set; }
 
+    /// <summary>
+    /// The line under the grid (system 2.5, 5.15): "B − A: -21.0 to +61.1 °CRK, 293 of 320 cells differ" on B − A, and
+    /// "Colour: -23.6 to 72.0 °CRK." on A or B, whose cells take the map colours.
+    /// </summary>
+    public string? ScaleCaption { get => _scaleCaption; private set => SetField(ref _scaleCaption, value); }
+
+    /// <summary>The B − A bar's ends as signed fractions of the largest difference, so it shows only the mixes in use.</summary>
+    public double ScaleLow => _scaleSpan.Low;
+
+    public double ScaleHigh => _scaleSpan.High;
+
+    /// <summary>The A or B scale's labels: the lowest, middle and highest value shown.</summary>
+    public string? ScaleMinLabel => _scaleLabels.Min;
+
+    public string? ScaleMidLabel => _scaleLabels.Mid;
+
+    public string? ScaleMaxLabel => _scaleLabels.Max;
+
+    /// <summary>"B − A: -992 rpm" under a value's two readings; null for tables, switches and flags.</summary>
+    public string? ValueDeltaText => Selected is { Item: XdfConstant constant, Kind: ItemKind.Value, LargestChange: double delta } && !_showsBytes
+        ? $"B − A: {Signed(delta, constant.DecimalPlaces)}{(Units.Length > 0 ? " " + Units : string.Empty)}"
+        : null;
+
     public bool IsVisible
     {
         get => _isVisible;
@@ -258,7 +310,8 @@ public sealed class CompareViewModel : ViewModelBase
         }
         catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            ErrorMessage = error.Message;
+            // System 7.3: "Not opened: stock.bin is 262144 bytes. An MS43 bin is exactly 524288 bytes (512 KiB)."
+            ErrorMessage = "Not opened: " + error.Message;
             return false;
         }
     }
@@ -367,7 +420,11 @@ public sealed class CompareViewModel : ViewModelBase
     private IEnumerable<ItemDifference> Visible()
     {
         var kinds = KindFilters.Single(filter => filter.Key == Kind).Kinds;
-        return Result?.Items.Where(item => kinds.Contains(item.Kind)) ?? Enumerable.Empty<ItemDifference>();
+        var query = SearchText.Trim();
+        return Result?.Items.Where(item => kinds.Contains(item.Kind) && (query.Length == 0
+                   || item.Item.Title.Contains(query, StringComparison.OrdinalIgnoreCase)
+                   || item.Item.Description.Contains(query, StringComparison.OrdinalIgnoreCase)))
+               ?? Enumerable.Empty<ItemDifference>();
     }
 
     private void RebuildList()
@@ -402,7 +459,7 @@ public sealed class CompareViewModel : ViewModelBase
             ? BinComparer.CompareTable(document.Xdf, document.Image, _b, table)
             : null;
         BuildGrid();
-        foreach (var name in new[] { nameof(ShowsTable), nameof(ShowsValue), nameof(AxisBanner), nameof(Units), nameof(Description), nameof(CellsText), nameof(LargestText) })
+        foreach (var name in new[] { nameof(ShowsTable), nameof(ShowsValue), nameof(AxisBanner), nameof(Units), nameof(Description), nameof(CellsText), nameof(LargestText), nameof(ValueDeltaText) })
         {
             OnPropertyChanged(name);
         }
@@ -410,41 +467,52 @@ public sealed class CompareViewModel : ViewModelBase
 
     private void BuildGrid()
     {
+        ScaleCaption = null;
+        _scaleSpan = (0, 0);
+        _scaleLabels = (null, null, null);
         if (_table is not { } table || _showsBytes)
         {
             Grid = null;
-            LegendMin = LegendMax = null;
         }
         else
         {
             Grid = View switch
             {
-                "a" => TableEditorViewModel.Snapshot(table.A, table.Changed),
-                "b" => TableEditorViewModel.Snapshot(table.B, table.Changed),
+                "a" => TableEditorViewModel.Snapshot(table.A, table.Changed, mark: CellMark.Differs),
+                "b" => TableEditorViewModel.Snapshot(table.B, table.Changed, mark: CellMark.Differs),
                 // Colour already shows every change on B − A; the changed-cell dots would only add noise.
                 _ => TableEditorViewModel.Snapshot(table.Delta, new HashSet<(int Row, int Col)>(), isDelta: true),
             };
             var z = table.A.Table.Z;
             var units = Units.Length > 0 ? " " + Units : string.Empty;
             var finite = Grid.Values.Physical.Cast<double>().Where(double.IsFinite).ToList();
-            if (finite.Count == 0)
+            if (finite.Count > 0 && Grid.IsDelta)
             {
-                LegendMin = LegendMax = null;
-            }
-            else if (Grid.IsDelta)
-            {
+                // The range of B − A in this item, signed as the cells print it, then how many cells differ.
+                var (low, high) = (finite.Min(), finite.Max());
                 var largest = finite.Max(Math.Abs);
-                LegendMin = largest == 0 ? "no change" : $"{BinComparer.FormatDelta(-largest, 0, z, raw: false)}{units}, B lower";
-                LegendMax = largest == 0 ? "no change" : $"{BinComparer.FormatDelta(largest, 0, z, raw: false)}{units}, B higher";
+                _scaleSpan = largest > 0 ? (low / largest, high / largest) : (0, 0);
+                ScaleCaption = $"B − A: {BinComparer.FormatDelta(low, 0, z, raw: false)} to {BinComparer.FormatDelta(high, 0, z, raw: false)}{units}, {CellsText}";
             }
-            else
+            else if (finite.Count > 0)
             {
-                LegendMin = ValueCodec.Format(finite.Min(), 0, z.DecimalPlaces, null, 16).Replace('-', '−') + units;
-                LegendMax = ValueCodec.Format(finite.Max(), 0, z.DecimalPlaces, null, 16).Replace('-', '−') + units;
+                string Number(double value) => ValueCodec.Format(value, 0, z.DecimalPlaces, null, 16);
+                var range = Grid.ColourRange;
+                _scaleLabels = (Number(range.Min), Number((range.Min + range.Max) / 2), Number(range.Max));
+                ScaleCaption = $"Colour: {Number(range.Min)} to {Number(range.Max)}{units}.";
             }
         }
 
-        OnPropertyChanged(nameof(LegendMin));
-        OnPropertyChanged(nameof(LegendMax));
+        foreach (var name in new[] { nameof(ScaleLow), nameof(ScaleHigh), nameof(ScaleMinLabel), nameof(ScaleMidLabel), nameof(ScaleMaxLabel) })
+        {
+            OnPropertyChanged(name);
+        }
+    }
+
+    // A signed difference in the item's decimals: "-992", "+0.75", and "0" for none.
+    private static string Signed(double delta, int? decimals)
+    {
+        var size = ValueCodec.Format(Math.Abs(delta), 0, decimals, null, 16);
+        return delta == 0 ? size : (delta > 0 ? "+" : "-") + size;
     }
 }
