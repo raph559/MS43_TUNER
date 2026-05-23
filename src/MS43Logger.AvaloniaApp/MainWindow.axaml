@@ -24,6 +24,7 @@
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                     <ToggleButton Name="TabLive" Classes="tab" Content="Live" IsChecked="{Binding IsLive}" />
                     <ToggleButton Name="TabTune" Classes="tab" Content="Tune" IsChecked="{Binding IsTune}" />
+                    <ToggleButton Name="TabCompare" Classes="tab" Content="Compare" IsChecked="{Binding IsCompare}" />
                 </StackPanel>
 
                 <Border Grid.Column="2" Margin="22,0,22,0" VerticalAlignment="Center" HorizontalAlignment="Left" BorderBrush="{DynamicResource BezelBrush}" BorderThickness="1"
@@ -60,6 +61,7 @@
         <Panel Grid.Row="1">
             <views:LiveView DataContext="{Binding Live}" IsVisible="{Binding $parent[Window].((local:ShellViewModel)DataContext).IsLive}" />
             <views:TuneView DataContext="{Binding Tune}" IsVisible="{Binding $parent[Window].((local:ShellViewModel)DataContext).IsTune}" />
+            <views:CompareView DataContext="{Binding Compare}" IsVisible="{Binding $parent[Window].((local:ShellViewModel)DataContext).IsCompare}" />
         </Panel>
 
         <!-- Status bar -->

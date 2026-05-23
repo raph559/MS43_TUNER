@@ -20,6 +20,11 @@ static int Run(string[] args)
             return RunShow(args.Skip(1).ToArray());
         }
 
+        if (args.Length > 0 && args[0] == "diff")
+        {
+            return DiffCommand.Run(args[1..], Console.Out, Console.Error);
+        }
+
         var options = CliOptions.Parse(args);
         if (options.ShowHelp)
         {
@@ -265,6 +270,7 @@ static void PrintUsage()
     Console.WriteLine("  ms43-logger --port COM3 [options]");
     Console.WriteLine("  ms43-logger rate PATH.csv     Logging rate of an existing CSV log.");
     Console.WriteLine("  ms43-logger show --bin PATH --xdf PATH NAME [--raw]   Print a table, value or flag.");
+    Console.WriteLine("  ms43-logger diff A.bin B.bin --xdf PATH   List the items and bytes that differ between two bins.");
     Console.WriteLine();
     Console.WriteLine("Options:");
     Console.WriteLine("  --port COMx           Serial port for the K-line adapter.");
