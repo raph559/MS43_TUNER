@@ -27,7 +27,6 @@ public sealed class MapGrid : Control
     public static readonly TimeSpan FlashTime = TimeSpan.FromMilliseconds(450);
 
     private const double RowHeaderWidth = 48;
-    private const double TitleHeight = 22;
     private const double HeaderHeight = 22;
     private const double Gap = 2;
     private const double Radius = 4;
@@ -41,7 +40,6 @@ public sealed class MapGrid : Control
     private double _rowHeight = MaxRow;
     private (int Row, int Col) _anchor;
     private bool _dragging;
-    private string _typed = string.Empty;
     private IReadOnlyList<(int Row, int Col)> _flashCells = Array.Empty<(int, int)>();
     private DateTime _flashStart;
     private ScrollViewer? _viewport;
@@ -257,42 +255,17 @@ public sealed class MapGrid : Control
             return;
         }
 
-        var display = ThemeBrushes.Font(this, "DisplayFont");
-        var ui = ThemeBrushes.Font(this, "UiFont");
-        var ink = ThemeBrushes.Get(this, "InkBrush");
-        var ink3 = ThemeBrushes.Get(this, "Ink3Brush");
-        var tickPen = new Pen(ThemeBrushes.Get(this, "Bezel2Brush"), 1);
-
-        // Axis titles: the column axis above the grid, the row axis in the corner.
-        // A one-column curve has no column axis: its values carry the item's units instead.
-        var curve = values.Cols == 1;
-        Text(context, curve ? CurveUnits(values) : $"{Axis(values.X)} →", ui, 12.5, ink3, new Point(RowHeaderWidth, 2), 0);
-        Text(context, values.Y.Units.Length > 0 ? values.Y.Units : "row", ui, 11.5, ink3, new Point(RowHeaderWidth - 10, TitleHeight + HeaderHeight - 17), 1);
-
-        for (var c = 0; c < values.Cols; c++)
-        {
-            var cell = CellBounds(0, c);
-            if (!curve)
-            {
-                Text(context, Label(values.X, c), display, 12, ink3, new Point(cell.Center.X, TitleHeight + 4), 0.5);
-                context.DrawLine(tickPen, new Point(cell.Center.X, TitleHeight + HeaderHeight - 6), new Point(cell.Center.X, TitleHeight + HeaderHeight - 2));
-            }
-        }
-
-        for (var r = 0; r < values.Rows; r++)
-        {
-            var cell = CellBounds(r, 0);
-            Text(context, Label(values.Y, r), display, 12, ink3, new Point(RowHeaderWidth - 12, cell.Center.Y - 8), 1);
-            context.DrawLine(tickPen, new Point(RowHeaderWidth - 6, cell.Center.Y), new Point(RowHeaderWidth - 2, cell.Center.Y));
-        }
-
-        var finite = values.Physical.Cast<double>().Where(double.IsFinite).ToList();
-        var min = finite.Count > 0 ? finite.Min() : 0;
-        var max = finite.Count > 0 ? finite.Max() : 1;
-        var largest = finite.Count > 0 ? finite.Max(Math.Abs) : 0;
-        var (middle, down, up) = (ThemeBrushes.Color(this, "PaneBrush"), ThemeBrushes.Color(this, "DownBrush"), ThemeBrushes.Color(this, "UpBrush"));
-        var flash = _flashCells.Count > 0 ? Math.Max(0, 1 - (DateTime.UtcNow - _flashStart).TotalMilliseconds / FlashTime.TotalMilliseconds) : 0;
-        var z = values.Table.Z;
+        var data = new Typeface(ThemeBrushes.Font(this, "DataFont"));
+        var dataBold = new Typeface(ThemeBrushes.Font(this, "DataFont"), FontStyle.Normal, FontWeight.SemiBold);
+        var pane = ThemeBrushes.Color(this, "PaneBrush");
+        var fillColour = ThemeBrushes.Color(this, "FillBrush");
+        var ink1 = ThemeBrushes.Color(this, "Ink1Brush");
+        var ink2 = ThemeBrushes.Color(this, "Ink2Brush");
+        var ink3 = ThemeBrushes.Color(this, "Ink3Brush");
+        var night = ThemeBrushes.IsNight(this);
+        var range = editor.ColourRange;
+        var largest = values.Physical.Cast<double>().Where(double.IsFinite).Select(Math.Abs).DefaultIfEmpty(0).Max();
+        var flashAt = IsFlashing ? (DateTime.UtcNow - _flashStart).TotalMilliseconds / FlashTime.TotalMilliseconds : 1;
 
         for (var r = 0; r < values.Rows; r++)
         {
@@ -300,90 +273,159 @@ public sealed class MapGrid : Control
             {
                 var bounds = CellBounds(r, c);
                 var physical = values.Physical[r, c];
-                var colour = !double.IsFinite(physical) ? ThemeBrushes.Color(this, "RaisedBrush")
-                    : editor.IsDelta ? HeatRamp.Diverging(largest > 0 ? physical / largest : 0, middle, down, up)
-                    : HeatRamp.Color(max > min ? (physical - min) / (max - min) : 0.5);
-                var text = new SolidColorBrush(HeatRamp.TextOn(colour));
-                context.DrawRectangle(new SolidColorBrush(colour), null, bounds, 3, 3);
-                if (flash > 0 && _flashCells.Contains((r, c)))
+                Color fill, text;
+                var hatched = range.Hatched.Contains((r, c));
+                if (!double.IsFinite(physical))
                 {
-                    context.DrawRectangle(new SolidColorBrush(Colors.White, 0.5 * flash), null, bounds, 3, 3);
+                    (fill, text) = (fillColour, ink3);
+                }
+                else if (editor.IsDelta)
+                {
+                    fill = MapRamp.Diverging(largest > 0 ? physical / largest : 0, pane,
+                        ThemeBrushes.Color(this, "DivBelowBrush"), ThemeBrushes.Color(this, "DivAboveBrush"));
+                    text = physical == 0 ? ink3 : MapRamp.TextOn(fill);
+                }
+                else if (hatched)
+                {
+                    (fill, text) = (pane, ink1);
+                }
+                else
+                {
+                    fill = MapRamp.Color(range.IsConstant ? 0.5 : (physical - range.Min) / (range.Max - range.Min), night);
+                    text = MapRamp.TextOn(fill);
                 }
 
-                var shown = editor.IsDelta ? BinComparer.FormatDelta(physical, values.Raw[r, c], z, editor.ShowRaw)
-                    : editor.ShowRaw
-                    ? values.Raw[r, c].ToString(CultureInfo.InvariantCulture)
-                    : ValueCodec.Format(physical, values.Raw[r, c], z.DecimalPlaces, z.OutputType, z.Data.ElementBits).Replace('-', '−');
-                Text(context, shown, display, 12.5, text, new Point(bounds.Center.X, bounds.Center.Y - 8.5), 0.5);
+                if (flashAt < 1 && _flashCells.Contains((r, c)))
+                {
+                    fill = FlashColour(MapRamp.TextOn(fill), fill, flashAt);
+                    text = MapRamp.TextOn(fill);
+                }
 
+                var shape = new RoundedRect(bounds, Radius);
+                context.DrawRectangle(new SolidColorBrush(fill), null, shape);
+                if (hatched)
+                {
+                    Hatch(context, shape, fillColour);
+                }
+
+                Text(context, CellText(r, c), data, 12, text, bounds, 0.5);
                 if (editor.ChangedCells.Contains((r, c)))
                 {
-                    context.DrawEllipse(text, null, new Point(bounds.Right - 5, bounds.Top + 5), 2, 2);
+                    Mark(context, editor.Mark, bounds, text);
                 }
             }
         }
 
         if (editor.Selection is CellRange selection)
         {
-            var first = CellBounds(selection.Row0, selection.Col0);
-            var last = CellBounds(selection.Row1, selection.Col1);
-            var box = new Rect(first.TopLeft, last.BottomRight).Inflate(2);
-            context.DrawRectangle(null, new Pen(ThemeBrushes.Get(this, "DialBrush"), 3), box, 4, 4);
-            context.DrawRectangle(null, new Pen(ink, 2), box, 4, 4);
+            var box = new Rect(CellBounds(selection.Row0, selection.Col0).TopLeft, CellBounds(selection.Row1, selection.Col1).BottomRight);
+            context.DrawRectangle(null, new Pen(new SolidColorBrush(ink1), 2), new RoundedRect(box.Inflate(1), Radius + 1));
+            context.DrawRectangle(null, new Pen(new SolidColorBrush(pane), 1), new RoundedRect(box.Deflate(0.5), Radius));
+        }
 
-            if (_typed.Length > 0)
-            {
-                var anchor = CellBounds(_anchor.Row, _anchor.Col);
-                context.DrawRectangle(ThemeBrushes.Get(this, "RaisedBrush"), new Pen(ThemeBrushes.Get(this, "NeedleBrush"), 2), anchor, 3, 3);
-                Text(context, _typed + "▏", display, 12.5, ink, new Point(anchor.Center.X, anchor.Center.Y - 8.5), 0.5);
-            }
+        if (editor.TypedText.Length > 0)
+        {
+            // Typing: the active cell turns Pane with a 2 px Ink1 inset border; the digits sit right, with a caret.
+            var cell = CellBounds(editor.ActiveCell.Row, editor.ActiveCell.Col);
+            context.DrawRectangle(new SolidColorBrush(pane), new Pen(new SolidColorBrush(ink1), 2), new RoundedRect(cell.Deflate(1), Radius - 1));
+            var typed = Measure(editor.TypedText, data);
+            var right = cell.Right - 8;
+            context.DrawText(Formatted(editor.TypedText, data, 12, ink1), new Point(right - typed.Width - 2, cell.Center.Y - typed.Height / 2));
+            context.DrawLine(new Pen(new SolidColorBrush(ink1), 1), new Point(right, cell.Center.Y - 7), new Point(right, cell.Center.Y + 7));
         }
 
         if (editor.Live is { } live)
         {
-            DrawLive(context, live, values);
+            DrawLive(context, live, values, pane, ink3);
+        }
+
+        DrawHeaders(context, values, editor, data, dataBold, pane, fillColour, ink1, ink2, ink3);
+
+        if (editor.Live is { IsStale: false } ticking)
+        {
+            DrawTicks(context, ticking, values);
+        }
+
+        if (IsFocused && Classes.Contains(":focus-visible"))
+        {
+            // The focus ring of system 1.3 around the active cell, above everything: a Pane gap, then 2 px Ink1.
+            var cell = CellBounds(editor.ActiveCell.Row, editor.ActiveCell.Col);
+            context.DrawRectangle(null, new Pen(new SolidColorBrush(pane), 2), new RoundedRect(cell.Inflate(1), Radius + 1));
+            context.DrawRectangle(null, new Pen(new SolidColorBrush(ink1), 2), new RoundedRect(cell.Inflate(3), Radius + 3));
         }
     }
 
-    /// <summary>The engine's position: crosshair, the cells the ECU reads outlined by weight, the fading trail and a dot at the fix.</summary>
-    private void DrawLive(DrawingContext context, LiveCursorState live, TableValues values)
+    // Row and column headers and the corner, drawn at the scroll offset so they stay in view (system 8).
+    private void DrawHeaders(DrawingContext context, TableValues values, TableEditorViewModel editor, Typeface data, Typeface dataBold,
+        Color pane, Color fill, Color ink1, Color ink2, Color ink3)
     {
-        var colour = ThemeBrushes.Cursor(this, live.IsStale);
-        Pen PenOf(double thickness, double opacity) => new(new SolidColorBrush(colour, opacity), thickness);
-        var fix = live.Fix;
-        var at = CursorPoint(fix.Row?.Position ?? 0, fix.Col?.Position ?? 0);
-        var first = CellBounds(0, 0);
-        var last = CellBounds(values.Rows - 1, values.Cols - 1);
-        var hair = PenOf(1, 0.7);
-        if (values.Cols > 1)
+        var scroll = Scroll;
+        var selection = editor.Selection;
+        var paneBrush = new SolidColorBrush(pane);
+        var fillBrush = new SolidColorBrush(fill);
+
+        // The headers' bands cover the cells scrolled under them.
+        context.DrawRectangle(paneBrush, null, new Rect(scroll.X, scroll.Y, Bounds.Width, HeaderHeight + Gap));
+        context.DrawRectangle(paneBrush, null, new Rect(scroll.X, scroll.Y, RowHeaderWidth + Gap, Bounds.Height));
+        for (var c = 0; c < values.Cols; c++)
         {
-            context.DrawLine(hair, new Point(at.X, first.Top), new Point(at.X, last.Bottom));
+            var on = selection is CellRange s && c >= s.Col0 && c <= s.Col1;
+            var bounds = ColumnHeaderBounds(c);
+            context.DrawRectangle(on ? fillBrush : paneBrush, null, new RoundedRect(bounds, Radius));
+            Text(context, ColumnLabel(values, c), on ? dataBold : data, 12, on ? ink1 : ink2, bounds, 0.5);
         }
 
-        if (values.Rows > 1)
+        for (var r = 0; r < values.Rows; r++)
         {
-            context.DrawLine(hair, new Point(first.Left, at.Y), new Point(last.Right, at.Y));
+            var on = selection is CellRange s && r >= s.Row0 && r <= s.Row1;
+            var bounds = RowHeaderBounds(r);
+            context.DrawRectangle(on ? fillBrush : paneBrush, null, new RoundedRect(bounds, Radius));
+            Text(context, editor.RowLabel(r), on ? dataBold : data, 12, on ? ink1 : ink2, bounds.Deflate(new Thickness(0, 0, 8, 0)), 1);
         }
 
-        foreach (var cell in fix.Cells)
+        var corner = new Rect(scroll.X, scroll.Y, RowHeaderWidth, HeaderHeight);
+        context.DrawRectangle(paneBrush, null, corner);
+        var units = editor.NumberRows ? string.Empty : values.Y.Units;
+        if (units.Length > 0)
         {
-            context.DrawRectangle(null, PenOf(1 + 2 * cell.Weight, 0.35 + 0.65 * cell.Weight), CellBounds(cell.Row, cell.Col).Inflate(1), 4, 4);
+            var label = Formatted(units, new Typeface(ThemeBrushes.Font(this, "UiFont")), 11, ink3);
+            context.DrawText(label, new Point(corner.Right - 8 - label.Width, corner.Bottom - 2 - label.Height));
+        }
+    }
+
+    /// <summary>The engine's position (system 2.4): an 8 px Now dot with a Pane halo and a trail thinning with age.</summary>
+    private void DrawLive(DrawingContext context, LiveCursorState live, TableValues values, Color pane, Color ink3)
+    {
+        var now = ThemeBrushes.Color(this, "NowBrush");
+        var halo = new SolidColorBrush(pane);
+        var at = Clamped(live.Fix, values);
+        if (live.IsStale)
+        {
+            // Stale: an Ink3 ring with the halo; no trail, no ticks.
+            context.DrawEllipse(null, new Pen(halo, 5), at, 3.25, 3.25);
+            context.DrawEllipse(null, new Pen(new SolidColorBrush(ink3), 1.5), at, 3.25, 3.25);
+            return;
         }
 
-        Point? previous = null;
-        foreach (var point in live.Trail)
+        var points = live.Trail.Select(point => CursorPoint(point.Row, point.Col)).ToList();
+        for (var i = 1; i < points.Count; i++)
         {
-            var p = CursorPoint(point.Row, point.Col);
-            if (previous is Point from)
-            {
-                context.DrawLine(PenOf(1, point.Opacity * 0.5), from, p);
-            }
-
-            context.DrawEllipse(new SolidColorBrush(colour, point.Opacity), null, p, 2.5, 2.5);
-            previous = p;
+            // Age shows as width, newest 2 px down to 1 px, so every segment keeps its contrast; each has a Pane casing.
+            var width = MotionSettings.AnimationsEnabled ? 1 + (double)i / (points.Count - 1) : 2;
+            context.DrawLine(new Pen(halo, width + 2, lineCap: PenLineCap.Round), points[i - 1], points[i]);
+            context.DrawLine(new Pen(new SolidColorBrush(now), width, lineCap: PenLineCap.Round), points[i - 1], points[i]);
         }
 
-        context.DrawEllipse(new SolidColorBrush(colour), new Pen(ThemeBrushes.Get(this, "DialBrush"), 1.5), at, 4, 4);
+        if (live.Fix.Inputs.Any(input => input.Clamped != 0))
+        {
+            // Off the map: a Now ring clamped to the grid's edge.
+            context.DrawEllipse(null, new Pen(halo, 5), at, 3.25, 3.25);
+            context.DrawEllipse(null, new Pen(new SolidColorBrush(now), 1.5), at, 3.25, 3.25);
+            return;
+        }
+
+        context.DrawEllipse(halo, null, at, 6, 6);
+        context.DrawEllipse(new SolidColorBrush(now), null, at, 4, 4);
     }
 
     // 3 px Now bars in the header gutters at the cursor's position, over the sticky headers.
@@ -639,26 +681,6 @@ public sealed class MapGrid : Control
         InvalidateVisual();
     }
 
-    private static string CurveUnits(TableValues values) => values.Table.Z.Units.Length > 0 ? values.Table.Z.Units : string.Empty;
-
-    private static string Axis(AxisValues axis) =>
-        string.Join(", ", new[] { axis.Name, axis.Units }.Where(part => !string.IsNullOrWhiteSpace(part)));
-
-    private static string Label(AxisValues axis, int index) =>
-        index < axis.Labels.Count ? axis.Labels[index].Replace('-', '−') : string.Empty;
-
-    /// <summary>Draws text with its top at <paramref name="at"/>.Y; <paramref name="align"/> 0 = left, 0.5 = centre, 1 = right of <paramref name="at"/>.X.</summary>
-    private static void Text(DrawingContext context, string text, FontFamily family, double size, IBrush brush, Point at, double align)
-    {
-        if (string.IsNullOrEmpty(text))
-        {
-            return;
-        }
-
-        var formatted = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface(family), size, brush);
-        context.DrawText(formatted, new Point(at.X - formatted.Width * align, at.Y));
-    }
-
     // A one-column table shows its single column's unit as the header (the value's units, else the axis's).
     private static string ColumnLabel(TableValues values, int col) =>
         values.Cols == 1 ? (values.Table.Z.Units.Length > 0 ? values.Table.Z.Units : values.X.Units)
@@ -675,5 +697,17 @@ public sealed class MapGrid : Control
     {
         var formatted = Formatted(text, face, 12, Colors.Black);
         return new Size(formatted.Width, formatted.Height);
+    }
+
+    /// <summary>Draws text centred vertically in <paramref name="box"/>; <paramref name="align"/> 0 = left, 0.5 = centre, 1 = right.</summary>
+    private static void Text(DrawingContext context, string text, Typeface face, double size, Color colour, Rect box, double align)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        var formatted = Formatted(text, face, size, colour);
+        context.DrawText(formatted, new Point(box.Left + (box.Width - formatted.Width) * align, box.Center.Y - formatted.Height / 2));
     }
 }
