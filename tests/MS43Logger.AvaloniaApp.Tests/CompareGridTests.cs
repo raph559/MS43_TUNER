@@ -62,18 +62,24 @@ public class CompareGridTests
     [AvaloniaFact]
     public void DivergingEndsAndMiddle()
     {
-        var middle = Color.Parse("#141920");
-        var down = Color.Parse("#4C8DFF");
-        var up = Color.Parse("#FF5C7A");
+        var pane = Color.Parse("#0A0B0D");
+        var below = Color.Parse("#6CA7F5");
+        var above = Color.Parse("#F87F99");
 
-        Assert.Equal(middle, HeatRamp.Diverging(0, middle, down, up));
-        Assert.Equal(up, HeatRamp.Diverging(1, middle, down, up));
-        Assert.Equal(down, HeatRamp.Diverging(-1, middle, down, up));
-        Assert.Equal(up, HeatRamp.Diverging(2, middle, down, up));
-        Assert.Equal(middle, HeatRamp.Diverging(double.NaN, middle, down, up));
-        var half = HeatRamp.Diverging(0.5, middle, down, up);
-        Assert.True(half.R > middle.R && half.R < up.R);
+        Assert.Equal(pane, MapRamp.Diverging(0, pane, below, above));
+        Assert.Equal(above, MapRamp.Diverging(1, pane, below, above));
+        Assert.Equal(below, MapRamp.Diverging(-1, pane, below, above));
+        Assert.Equal(above, MapRamp.Diverging(2, pane, below, above));
+        Assert.Equal(pane, MapRamp.Diverging(double.NaN, pane, below, above));
+
+        // The mid mixes of system 2.5, within 1 per channel.
+        Close(Color.Parse("#9D5263"), MapRamp.Diverging(0.5, pane, below, above));
+        Close(Color.Parse("#7595D3"), MapRamp.Diverging(-0.5, Colors.White, Color.Parse("#1F53B8"), Color.Parse("#CE2854")));
     }
+
+    private static void Close(Color expected, Color actual) =>
+        Assert.True(Math.Abs(expected.R - actual.R) <= 1 && Math.Abs(expected.G - actual.G) <= 1 && Math.Abs(expected.B - actual.B) <= 1,
+            $"expected {expected}, got {actual}");
 
     [AvaloniaFact]
     public void ReadOnlyGridRefusesTyping()
@@ -95,6 +101,50 @@ public class CompareGridTests
     }
 
     [AvaloniaFact]
+    public void DifferingCellsWearTheRing()
+    {
+        var editor = TableEditorViewModel.Snapshot(Row(1, 2, 3), new HashSet<(int, int)> { (0, 1) }, mark: CellMark.Differs);
+        var (window, grid) = Show(editor, ThemeVariant.Dark);
+        var cell = grid.CellBounds(0, 1);
+        Point At(double x, double y) => grid.TranslatePoint(new Point(x, y), window)!.Value;
+
+        // A 6 px ring 2 px inside the top-right corner: its rim takes the text colour, its middle keeps the fill.
+        var fill = PixelAt(window, At(cell.Left + 3, cell.Bottom - 3));
+        var rim = PixelAt(window, At(cell.Right - 5, cell.Top + 2));
+        var middle = PixelAt(window, At(cell.Right - 5, cell.Top + 5));
+        Assert.Equal(CellMark.Differs, editor.Mark);
+        Assert.True(Math.Abs(rim.R - MapRamp.TextOn(fill).R) < 90, $"rim {rim} is not the text colour");
+        Near(fill, middle);
+    }
+
+    [AvaloniaFact]
+    public void ZeroDeltaCellsArePaneWithInk3Text()
+    {
+        var editor = TableEditorViewModel.Snapshot(Row(-1, 0, 1), new HashSet<(int, int)> { (0, 0), (0, 2) }, isDelta: true);
+        var (window, grid) = Show(editor, ThemeVariant.Dark);
+        var cell = grid.CellBounds(0, 1);
+
+        // System 2.5: no difference keeps the Pane fill and prints the item's zero in Ink3, so changed cells carry the colour.
+        Assert.Equal("0.00", grid.CellText(0, 1));
+        Near(Color.Parse("#0A0B0D"), PixelAt(window, grid.TranslatePoint(new Point(cell.Left + 3, cell.Bottom - 3), window)!.Value));
+        // The brightest pixel inside the cell is its text: Ink3 (#858C97), not the white of a coloured cell.
+        var origin = grid.TranslatePoint(cell.TopLeft, window)!.Value;
+        using var frame = window.CaptureRenderedFrame()!;
+        using var buffer = frame.Lock();
+        var brightest = 0;
+        for (var y = (int)origin.Y + 2; y < (int)(origin.Y + cell.Height) - 2; y++)
+        {
+            for (var x = (int)origin.X + 2; x < (int)(origin.X + cell.Width) - 2; x++)
+            {
+                var pixel = Marshal.ReadInt32(buffer.Address, y * buffer.RowBytes + x * 4);
+                brightest = Math.Max(brightest, (pixel & 0xFF) + (pixel >> 8 & 0xFF) + (pixel >> 16 & 0xFF));
+            }
+        }
+
+        Assert.InRange(brightest, 0x85 + 0x8C + 0x97 - 30, 0x85 + 0x8C + 0x97 + 30);
+    }
+
+    [AvaloniaFact]
     public void DeltaGridColoursBySign()
     {
         var editor = TableEditorViewModel.Snapshot(Row(-1, 0, 1), new HashSet<(int, int)> { (0, 0), (0, 2) }, isDelta: true);
@@ -107,9 +157,9 @@ public class CompareGridTests
         }
 
         Assert.True(editor.IsDelta);
-        Near(Color.Parse("#4C8DFF"), PixelAt(window, Corner(0)));
-        Near(Color.Parse("#141920"), PixelAt(window, Corner(1)));
-        Near(Color.Parse("#FF5C7A"), PixelAt(window, Corner(2)));
+        Near(Color.Parse("#6CA7F5"), PixelAt(window, Corner(0)));
+        Near(Color.Parse("#0A0B0D"), PixelAt(window, Corner(1)));
+        Near(Color.Parse("#F87F99"), PixelAt(window, Corner(2)));
         Screens.Save(window, "compare-delta-row");
     }
 }

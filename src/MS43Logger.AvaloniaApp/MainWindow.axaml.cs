@@ -139,4 +139,13 @@ public partial class MainWindow : Window
     private void RefreshButton_Click(object? sender, RoutedEventArgs e) => Shell.Live.RefreshPorts();
 
     private async void ConnectButton_Click(object? sender, RoutedEventArgs e) => await Shell.Live.ToggleConnectionAsync();
+
+    public async System.Threading.Tasks.Task OpenBinAsync()
+    {
+        Shell.SelectedTab = ShellViewModel.TuneTab;
+        if (Tune is { } view)
+        {
+            await view.OpenBinAsync();
+        }
+    }
 }

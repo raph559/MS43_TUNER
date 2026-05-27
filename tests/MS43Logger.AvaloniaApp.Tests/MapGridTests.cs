@@ -1,9 +1,13 @@
+using System.Runtime.InteropServices;
 using System.Text;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Platform;
+using Avalonia.VisualTree;
 using MS43Logger.AvaloniaApp.Controls;
 using MS43Logger.Core.Tuning;
 
@@ -11,9 +15,9 @@ namespace MS43Logger.AvaloniaApp.Tests;
 
 public class MapGridTests
 {
-    private static async Task<(MainWindow Window, ShellViewModel Shell, MapGrid Grid)> Open()
+    private static async Task<(MainWindow Window, ShellViewModel Shell, MapGrid Grid)> Open(string? binPath = null)
     {
-        var (window, shell) = await TuneScreen.OpenAsync();
+        var (window, shell) = await TuneScreen.OpenAsync(binPath: binPath);
         var grid = Find.Named<MapGrid>(window, "MapGrid");
         return (window, shell, grid);
     }
@@ -22,14 +26,6 @@ public class MapGridTests
         grid.TranslatePoint(grid.CellBounds(row, col).Center, window)!.Value;
 
     private static long Raw(ShellViewModel shell, int row, int col) => shell.Tune.Editor!.Values.Raw[row, col];
-
-    [AvaloniaFact]
-    public void RampEndpointsMatchTokens()
-    {
-        Assert.Equal(Color.Parse("#0B1E33"), HeatRamp.Color(0));
-        Assert.Equal(Color.Parse("#F2F7EC"), HeatRamp.Color(1));
-        Assert.Equal(HeatRamp.Color(0), HeatRamp.Color(-3));
-    }
 
     [AvaloniaFact]
     public async Task RendersEveryCellAndHitTests()
@@ -123,6 +119,264 @@ public class MapGridTests
 
         Assert.Equal(31.5, editor.Values.Physical[0, 0]);
         Assert.Equal(-23.625, editor.Values.Physical[1, 2]);
+    }
+
+    private static Color PixelAt(TopLevel window, Point point)
+    {
+        using var frame = Screens.Capture(window)!;
+        using var buffer = frame.Lock();
+        var pixel = Marshal.ReadInt32(buffer.Address, (int)point.Y * buffer.RowBytes + (int)point.X * 4);
+        return buffer.Format == PixelFormat.Rgba8888
+            ? Color.FromRgb((byte)pixel, (byte)(pixel >> 8), (byte)(pixel >> 16))
+            : Color.FromRgb((byte)(pixel >> 16), (byte)(pixel >> 8), (byte)pixel);
+    }
+
+    private static bool Near(Color expected, Color actual, int tolerance = 8) =>
+        Math.Abs(expected.R - actual.R) <= tolerance && Math.Abs(expected.G - actual.G) <= tolerance && Math.Abs(expected.B - actual.B) <= tolerance;
+
+    private static Point InWindow(MapGrid grid, MainWindow window, Point point) => grid.TranslatePoint(point, window)!.Value;
+
+    [AvaloniaFact]
+    public async Task HatchedRowIsOutOfTheColourRange()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, grid) = await Open();
+
+        // Row 19 (6990 rpm) holds raw 0, -23.6 °CRK, in every column: an outlier at the storage limit (system 2.2).
+        Assert.Contains((19, 0), shell.Tune.Editor!.ColourRange.Hatched);
+        var cell = grid.CellBounds(19, 0);
+        var colour = PixelAt(window, InWindow(grid, window, new Point(cell.Left + 3, cell.Center.Y)));
+        Assert.False(Near(MapRamp.Color(0, night: true), colour) || Near(MapRamp.Color(1, night: true), colour), $"{colour} is a ramp end");
+    }
+
+    [AvaloniaFact]
+    public async Task CellTextUsesAsciiMinus()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (_, _, grid) = await Open();
+
+        Assert.Equal("-23.6", grid.CellText(19, 0));
+        Assert.Equal("6.4", grid.CellText(0, 0));
+    }
+
+    [AvaloniaFact]
+    public void ConstantMapIsDrawnInMap4()
+    {
+        var editor = TableEditorViewModel.Snapshot(CompareGridTests.Row(5, 5, 5), new HashSet<(int, int)>());
+        var grid = new MapGrid { Editor = editor, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top };
+        var window = new Window { Width = 600, Height = 200, RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Dark, Content = grid };
+        window.Show();
+
+        Assert.True(editor.ColourRange.IsConstant);
+        for (var col = 0; col < 3; col++)
+        {
+            var cell = grid.CellBounds(0, col);
+            var colour = PixelAt(window, grid.TranslatePoint(new Point(cell.Left + 4, cell.Bottom - 4), window)!.Value);
+            Assert.True(Near(Color.Parse("#368EB3"), colour), $"cell {col} is {colour}, not Map4");
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task KeyboardFocusShowsTheRingRoundTheActiveCell()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, grid) = await Open();
+        shell.Tune.Editor!.Selection = new CellRange(9, 5, 9, 5);
+        var cell = grid.CellBounds(9, 5);
+
+        // The ring of system 1.3 sits 2 to 4 px outside the active cell, after the 2 px Pane gap.
+        var ring = InWindow(grid, window, new Point(cell.Center.X, cell.Top - 3));
+        Assert.False(Near(Color.Parse("#F3F5F7"), PixelAt(window, ring)), "a ring before the grid has focus");
+
+        grid.Focus(NavigationMethod.Tab);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.True(Near(Color.Parse("#F3F5F7"), PixelAt(window, ring)), "no ring once the keyboard focuses the grid");
+    }
+
+    [AvaloniaFact]
+    public async Task SelectionRectangleIsInk()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, grid) = await Open();
+        shell.Tune.Editor!.Selection = new CellRange(9, 4, 12, 6);
+
+        // 2 px Ink1 outside the range, 1 px Pane keyline just inside it (system 2.4).
+        var first = grid.CellBounds(9, 5);
+        Assert.True(Near(Color.Parse("#F3F5F7"), PixelAt(window, InWindow(grid, window, new Point(first.Center.X, first.Top - 1)))), "no Ink1 line above the range");
+        Assert.True(Near(Color.Parse("#0A0B0D"), PixelAt(window, InWindow(grid, window, new Point(first.Center.X, first.Top + 0.5)))), "no Pane keyline inside the range");
+    }
+
+    [AvaloniaFact]
+    public async Task ChangedTriangleMarksEditedCell()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var folder = Path.Combine(Path.GetTempPath(), "ms43-grid-" + Guid.NewGuid().ToString("N"));
+        var (window, shell, grid) = await Open(TuneScreen.CopyCar(folder));
+        MotionSettings.AnimationsEnabled = false;
+        try
+        {
+            var editor = shell.Tune.Editor!;
+            editor.Selection = new CellRange(5, 5, 5, 5);
+            var cell = grid.CellBounds(5, 5);
+            var corner = InWindow(grid, window, new Point(cell.Right - 4, cell.Top + 3));
+            var before = PixelAt(window, corner);
+
+            editor.Apply(new EditRequest(EditKind.Step, 1));
+            editor.Selection = new CellRange(0, 0, 0, 0);
+
+            Assert.Equal(CellMark.Changed, editor.Mark);
+            var after = PixelAt(window, corner);
+            Assert.False(Near(before, after, 2), "the corner did not change");
+            var fill = PixelAt(window, InWindow(grid, window, new Point(cell.Left + 4, cell.Center.Y)));
+            Assert.True(Near(MapRamp.TextOn(fill), after, 40), $"the mark {after} is not the text colour on {fill}");
+        }
+        finally
+        {
+            MotionSettings.AnimationsEnabled = true;
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task TypingShowsTheEnterHint()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, grid) = await Open();
+        shell.Tune.Editor!.Selection = new CellRange(9, 4, 12, 6);
+        grid.Focus();
+
+        window.KeyTextInput("27.8");
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal("27.8", shell.Tune.Editor.TypedText);
+        Assert.Equal("Enter sets 12 cells to 27.8 °CRK. Esc cancels.", shell.Tune.Editor.TypingHint);
+        var keyLine = Find.Named<Control>(window, "KeyLine").GetVisualDescendants().OfType<NumberText>()
+            .Where(text => text.IsEffectivelyVisible).Select(text => text.Value);
+        Assert.Contains("Enter sets 12 cells to 27.8 °CRK. Esc cancels.", keyLine);
+
+        window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+
+        Assert.Equal(string.Empty, shell.Tune.Editor.TypedText);
+        Assert.Null(shell.Tune.Editor.TypingHint);
+    }
+
+    [AvaloniaFact]
+    public async Task ActiveCellIsWhereTheSelectionStarted()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, grid) = await Open();
+        window.MouseDown(CellCentre(grid, window, 2, 1), MouseButton.Left);
+        window.MouseUp(CellCentre(grid, window, 2, 1), MouseButton.Left);
+        window.MouseDown(CellCentre(grid, window, 4, 3), MouseButton.Left, RawInputModifiers.Shift);
+        window.MouseUp(CellCentre(grid, window, 4, 3), MouseButton.Left, RawInputModifiers.Shift);
+
+        Assert.Equal((2, 1), shell.Tune.Editor!.ActiveCell);
+
+        window.KeyPressQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
+
+        Assert.Equal((5, 3), shell.Tune.Editor.ActiveCell);
+        Assert.Equal(new CellRange(5, 3, 5, 3), shell.Tune.Editor.Selection);
+    }
+
+    [AvaloniaFact]
+    public async Task RowsShrinkBeforeScrolling()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, _, grid) = await Open();
+        Assert.Equal(26, grid.CellBounds(0, 0).Height);
+
+        window.Width = 1024;
+        window.Height = 680;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.InRange(grid.CellBounds(0, 0).Height, 20, 25.9);
+    }
+
+    [AvaloniaFact]
+    public async Task NarrowGridScrollsWithItsRowHeaderInPlace()
+    {
+
+        // 16 columns of "-23.6" cannot be narrower than the number plus 8 px, so a 420 px viewport scrolls sideways.
+        var values = Enumerable.Repeat(-23.6, 16).ToArray();
+        var grid = new MapGrid { Editor = TableEditorViewModel.Snapshot(CompareGridTests.Row(values), new HashSet<(int, int)>()), VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top };
+        var scroller = new ScrollViewer { HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto, Content = grid };
+        var window = new Window { Width = 420, Height = 200, RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Dark, Content = scroller };
+        window.Show();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.True(scroller.Extent.Width > scroller.Viewport.Width + 1, "the grid should scroll sideways");
+        var header = grid.TranslatePoint(grid.RowHeaderBounds(0).TopLeft, window)!.Value;
+        var cell = grid.TranslatePoint(grid.CellBounds(0, 0).TopLeft, window)!.Value;
+
+        scroller.Offset = new Vector(120, 0);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(header.X, grid.TranslatePoint(grid.RowHeaderBounds(0).TopLeft, window)!.Value.X, 1);
+        Assert.Equal(cell.X - 120, grid.TranslatePoint(grid.CellBounds(0, 0).TopLeft, window)!.Value.X, 1);
+        await Task.CompletedTask;
+    }
+
+
+
+    [AvaloniaFact]
+    public async Task AxisRowsAreNumbered()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (_, shell) = await TuneScreen.OpenAsync("ldpm_n_14");
+
+        Assert.True(shell.Tune.Editor!.NumberRows);
+        Assert.Equal("1", shell.Tune.Editor.RowLabel(0));
+        Assert.Equal("20", shell.Tune.Editor.RowLabel(19));
+    }
+
+    [AvaloniaFact]
+    public void FlashStartsAtTextColourAndEndsAtFill()
+    {
+        var fill = Color.Parse("#368EB3");
+        var text = MapRamp.TextOn(fill);
+
+        Assert.Equal(text, MapGrid.FlashColour(text, fill, 0));
+        Assert.Equal(fill, MapGrid.FlashColour(text, fill, 1));
+
+        // Cubic ease-out: seven eighths of the way there at half time.
+        var half = MapGrid.FlashColour(text, fill, 0.5);
+        Assert.Equal(Math.Round(text.R + 0.875 * (fill.R - text.R)), half.R, 1);
     }
 
     [AvaloniaFact]

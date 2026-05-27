@@ -99,7 +99,7 @@ public sealed class CompareTests : IDisposable
 
         Assert.True(compare.Grid!.IsDelta);
         Assert.Contains("row axis differs", compare.AxisBanner);
-        Assert.EndsWith("B higher", compare.LegendMax);
+        Assert.Equal("B − A: -21.0 to +61.1 °CRK, 293 of 320 cells differ", compare.ScaleCaption);
         Assert.Contains(compare.Entries.OfType<CompareRow>(), row => row.IsCurrent && row.Difference.Item.Title == "ip_iga_ron98_pl__n__maf");
         Screens.Save(window, "compare-delta-night");
         shell.IsNight = false;

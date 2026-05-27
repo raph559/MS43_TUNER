@@ -11,6 +11,32 @@ public partial class CompareView : UserControl
     public CompareView()
     {
         InitializeComponent();
+        DataContextChanged += (_, _) =>
+        {
+            if (ViewModel is { } compare)
+            {
+                compare.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName is nameof(CompareViewModel.Selected) or nameof(CompareViewModel.ShowsBytes))
+                    {
+                        Avalonia.Threading.Dispatcher.UIThread.Post(ShowCurrentRow);
+                    }
+                };
+            }
+        };
+    }
+
+    // The current row in view, as the list scrolls on its own (the mockup's list shows the selected item).
+    private void ShowCurrentRow()
+    {
+        if (ViewModel is { } compare && this.FindControl<ListBox>("DiffList") is { } list)
+        {
+            var current = compare.Entries.FirstOrDefault(entry => entry is CompareRow { IsCurrent: true } or CompareBytesRow { IsCurrent: true });
+            if (current is not null)
+            {
+                list.ScrollIntoView(current);
+            }
+        }
     }
 
     private CompareViewModel? ViewModel => DataContext as CompareViewModel;
@@ -32,6 +58,15 @@ public partial class CompareView : UserControl
         if (files.FirstOrDefault()?.Path is { IsAbsoluteUri: true } path)
         {
             compare.OpenB(path.LocalPath);
+        }
+    }
+
+    // No A yet: the Tune tab's own open flow, which asks about unsaved edits first.
+    private async void OpenA_Click(object? sender, RoutedEventArgs e)
+    {
+        if (TopLevel.GetTopLevel(this) is MainWindow window)
+        {
+            await window.OpenBinAsync();
         }
     }
 
