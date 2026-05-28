@@ -56,7 +56,7 @@ public sealed class CompareTests : IDisposable
         Assert.IsType<CompareGroup>(compare.Entries[0]);
         Assert.Contains("c_inj_flow", Rows(compare));
         Assert.Contains("ip_iga_ron98_pl__n__maf", Rows(compare));
-        Assert.Equal($"All {compare.Result!.Items.Count}", compare.Chips[0].Label);
+        Assert.Equal(("All", compare.Result!.Items.Count), (compare.Chips[0].Name, compare.Chips[0].Count));
         Assert.Equal("CAR.bin", compare.FileA);
         Assert.Equal("MS43X001_release_E46_M54B25.bin", compare.FileB);
         Assert.Contains("18 ranges", compare.UnmappedSummary);

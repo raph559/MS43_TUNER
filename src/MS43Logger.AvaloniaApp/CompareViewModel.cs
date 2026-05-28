@@ -30,7 +30,12 @@ public sealed record CompareRow(ItemDifference Difference, bool IsCurrent) : Com
 /// <summary>The list entry that opens the bytes that differ outside every XDF item.</summary>
 public sealed record CompareBytesRow(string Summary, bool IsCurrent) : CompareEntry;
 
-public sealed record KindChip(string Key, string Label, bool IsOn);
+/// <summary>One segment of the kind filter (system 5.15): the kind's name over its count of differing items.</summary>
+public sealed record KindChip(string Key, string Name, int Count, bool IsOn)
+{
+    /// <summary>What a screen reader says for the segment: "Maps, 12".</summary>
+    public string Spoken => $"{Name}, {Count}";
+}
 
 /// <summary>The Compare screen: the open bin (A) against a second bin (B) through A's XDF.</summary>
 public sealed class CompareViewModel : ViewModelBase
@@ -238,10 +243,6 @@ public sealed class CompareViewModel : ViewModelBase
         ? $"largest change {BinComparer.FormatDelta(largest, 0, table.Z, raw: false)} {Units}".TrimEnd()
         : null;
 
-    public string? LegendMin { get; private set; }
-
-    public string? LegendMax { get; private set; }
-
     /// <summary>
     /// The line under the grid (system 2.5, 5.15): "B − A: -21.0 to +61.1 °CRK, 293 of 320 cells differ" on B − A, and
     /// "Colour: -23.6 to 72.0 °CRK." on A or B, whose cells take the map colours.
@@ -431,7 +432,7 @@ public sealed class CompareViewModel : ViewModelBase
     {
         Chips = Result is not { } result
             ? Array.Empty<KindChip>()
-            : KindFilters.Select(filter => new KindChip(filter.Key, $"{filter.Name} {result.Items.Count(item => filter.Kinds.Contains(item.Kind))}", filter.Key == Kind)).ToList();
+            : KindFilters.Select(filter => new KindChip(filter.Key, filter.Name, result.Items.Count(item => filter.Kinds.Contains(item.Kind)), filter.Key == Kind)).ToList();
 
         Entries.Clear();
         string? category = null;

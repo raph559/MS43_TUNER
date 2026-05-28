@@ -5,202 +5,410 @@
              xmlns:controls="using:MS43Logger.AvaloniaApp.Controls"
              x:Class="MS43Logger.AvaloniaApp.Views.CompareView"
              x:DataType="local:CompareViewModel">
-    <Panel>
-        <!-- No A yet -->
-        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="440" IsVisible="{Binding !HasA}">
-            <TextBlock Classes="display" FontSize="21" Text="Open a bin on the Tune tab first" HorizontalAlignment="Center" />
-            <TextBlock Name="NoAText" Classes="secondary" TextWrapping="Wrap" TextAlignment="Center"
+    <UserControl.Styles>
+        <!-- The list of differing items (system 5.15, 8): 280 px on Frame, 224 below 1280. -->
+        <Style Selector="Border#CompareList">
+            <Setter Property="Width" Value="280" />
+        </Style>
+        <Style Selector="Window.compact Border#CompareList">
+            <Setter Property="Width" Value="224" />
+        </Style>
+        <Style Selector="Border#ComparePane">
+            <Setter Property="Padding" Value="24" />
+        </Style>
+        <Style Selector="Window.compact Border#ComparePane">
+            <Setter Property="Padding" Value="16" />
+        </Style>
+
+        <!-- The files: "A" and "B" in SemiBold Ink1, the names in UI 13, trimmed in the middle. -->
+        <Style Selector="TextBlock.ab">
+            <Setter Property="Width" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.fname">
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="{x:Static TextTrimming.PrefixCharacterEllipsis}" />
+        </Style>
+
+        <!-- The kind filter: a segmented control (5.4) whose segments hold the kind over its count. -->
+        <Style Selector="Border#KindSeg ToggleButton.seg">
+            <Setter Property="MinHeight" Value="40" />
+            <Setter Property="Height" Value="40" />
+            <Setter Property="Padding" Value="6,0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="Window.compact Border#KindSeg ToggleButton.seg">
+            <Setter Property="Padding" Value="3,0" />
+        </Style>
+        <Style Selector="Border#KindSeg ToggleButton.seg TextBlock.kname">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border#KindSeg ToggleButton.seg TextBlock.kcount">
+            <Setter Property="FontFamily" Value="{DynamicResource DataFont}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+        </Style>
+
+        <!-- Rows (system 5.6, 5.15): two lines, 44 px; the current one Fill with the 2 px Ink1 bar and a SemiBold id. -->
+        <Style Selector="ListBox#DiffList ListBoxItem">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="ListBox#DiffList ListBoxItem:selected">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="FontWeight" Value="Normal" />
+        </Style>
+        <Style Selector="ListBox#DiffList ListBoxItem:selected /template/ Border#PART_Bar">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Border.crow">
+            <Setter Property="MinHeight" Value="44" />
+            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="CornerRadius" Value="8" />
+        </Style>
+        <Style Selector="Border.crow.current">
+            <Setter Property="Background" Value="{DynamicResource FillBrush}" />
+        </Style>
+        <Style Selector="Border.crow.current TextBlock.crow-id, Border.crow.current TextBlock.crow-bytes">
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="TextBlock.crow-id">
+            <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style Selector="TextBlock.crow-sum">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <!-- The unit is Ink3, raised to Ink2 on a pressed row, where Ink3 falls under 4.5:1. -->
+        <Style Selector="TextBlock.crow-unit">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+            <Setter Property="Margin" Value="8,0,0,0" />
+        </Style>
+        <Style Selector="ListBox#DiffList ListBoxItem:pressed TextBlock.crow-unit, ListBox#DiffList ListBoxItem:pointerover Border.crow.current TextBlock.crow-unit">
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+        </Style>
+        <Style Selector="TextBlock.crow-bytes">
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style Selector="TextBlock.gh">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+            <Setter Property="Margin" Value="8,12,8,4" />
+        </Style>
+
+        <!-- Pane parts -->
+        <Style Selector="TextBlock.pane-desc">
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.vlab">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+        </Style>
+        <Style Selector="TextBlock.vlab Run.ab">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+        </Style>
+        <Style Selector="TextBlock.reading">
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+        </Style>
+        <Style Selector="TextBlock.reading Run.unit">
+            <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
+        <Style Selector="TextBlock.key">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.bhead">
+            <Setter Property="Height" Value="28" />
+            <Setter Property="BorderBrush" Value="{DynamicResource HairlineBrush}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+        </Style>
+        <Style Selector="Border.bhead TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.brow">
+            <Setter Property="Height" Value="28" />
+            <Setter Property="BorderBrush" Value="{DynamicResource HairlineBrush}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+        </Style>
+        <Style Selector="Border.brow TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.brow TextBlock.area">
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Panel Background="{DynamicResource PaneBrush}">
+        <!-- No A (system 7.3) -->
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" MaxWidth="480" IsVisible="{Binding !HasA}">
+            <TextBlock Classes="empty-title" Text="Open a bin on the Tune tab first" TextAlignment="Center" TextWrapping="Wrap" />
+            <TextBlock Name="NoAText" Classes="body" TextWrapping="Wrap" TextAlignment="Center" Foreground="{DynamicResource Ink2Brush}"
                        Text="Compare uses the open bin as A and its XDF for both files. Then pick the bin to compare it with." />
+            <Button Classes="primary" Content="Open bin…" Click="OpenA_Click" HorizontalAlignment="Center" Margin="0,16,0,0" />
         </StackPanel>
 
         <!-- A open, no B -->
-        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14" MaxWidth="460" IsVisible="{Binding NeedsB}">
-            <TextBlock Classes="display" FontSize="21" Text="Open the bin to compare with" HorizontalAlignment="Center" />
-            <TextBlock Classes="secondary" TextWrapping="Wrap" TextAlignment="Center"
-                       Text="{Binding FileA, StringFormat='{}{0} is A. B opens read-only; you can copy items from it into A, with undo.'}" />
-            <Button Classes="primary" Content="Open B…" Click="OpenB_Click" HorizontalAlignment="Center" />
-            <TextBlock Text="{Binding ErrorMessage}" IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}"
-                       Foreground="{DynamicResource UpBrush}" TextWrapping="Wrap" TextAlignment="Center" />
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" MaxWidth="480" IsVisible="{Binding NeedsB}">
+            <TextBlock Classes="empty-title" Text="Open the bin to compare with" TextAlignment="Center" TextWrapping="Wrap" />
+            <TextBlock Name="NoBText" Classes="body" Text="{Binding NoBText}" TextWrapping="Wrap" TextAlignment="Center" Foreground="{DynamicResource Ink2Brush}" />
+            <Button Classes="primary" Content="Open B…" Click="OpenB_Click" HorizontalAlignment="Center" Margin="0,16,0,0" />
+            <Border Classes="banner warn" Margin="0,16,0,0" IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}">
+                <DockPanel>
+                    <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource WarnBrush}" Margin="0,1,8,0" VerticalAlignment="Top" />
+                    <controls:NumberText Classes="body" Value="{Binding ErrorMessage}" TextWrapping="Wrap" Foreground="{DynamicResource Ink1Brush}" />
+                </DockPanel>
+            </Border>
         </StackPanel>
 
-        <Grid ColumnDefinitions="380,*" IsVisible="{Binding HasB}">
-            <!-- Differences -->
-            <Border Background="{DynamicResource PaneBrush}" BorderBrush="{DynamicResource BezelBrush}" BorderThickness="0,0,1,0">
-                <Grid RowDefinitions="Auto,Auto,*">
-                    <Border BorderBrush="{DynamicResource BezelBrush}" BorderThickness="0,0,0,1" Padding="18,16,18,12">
-                        <StackPanel Spacing="7">
-                            <Grid ColumnDefinitions="22,8,*">
-                                <Border Background="{DynamicResource InkBrush}" CornerRadius="4" VerticalAlignment="Center">
-                                    <TextBlock Text="A" FontWeight="SemiBold" FontSize="11" Foreground="{DynamicResource DialBrush}" HorizontalAlignment="Center" />
-                                </Border>
-                                <TextBlock Grid.Column="2" Name="FileAText" Text="{Binding FileA}" FontWeight="Medium" TextTrimming="CharacterEllipsis" />
-                            </Grid>
-                            <Grid ColumnDefinitions="22,8,*,Auto">
-                                <Border BorderBrush="{DynamicResource Ink3Brush}" BorderThickness="1" CornerRadius="4" VerticalAlignment="Center">
-                                    <TextBlock Text="B" FontWeight="SemiBold" FontSize="11" Foreground="{DynamicResource Ink2Brush}" HorizontalAlignment="Center" />
-                                </Border>
-                                <TextBlock Grid.Column="2" Name="FileBText" Text="{Binding FileB}" FontWeight="Medium" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                <Button Grid.Column="3" Classes="ghost" Content="Change…" Click="OpenB_Click" ToolTip.Tip="Compare with another bin" />
-                            </Grid>
-                            <TextBlock Text="{Binding ErrorMessage}" IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}"
-                                       Foreground="{DynamicResource UpBrush}" TextWrapping="Wrap" />
-                            <Border Padding="10,7" CornerRadius="6" BorderThickness="3,1,1,1" BorderBrush="{DynamicResource UpBrush}"
-                                    IsVisible="{Binding FirmwareWarning, Converter={x:Static ObjectConverters.IsNotNull}}">
-                                <TextBlock Name="FirmwareWarningText" Text="{Binding FirmwareWarning}" TextWrapping="Wrap" />
-                            </Border>
-                        </StackPanel>
+        <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding HasB}">
+            <!-- The differing items -->
+            <Border Name="CompareList" Background="{DynamicResource FrameBrush}" BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="0,0,1,0"
+                    Padding="12,12,8,8">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Margin="0,0,4,0">
+                        <DockPanel Height="32">
+                            <TextBlock Classes="ab" Text="A" Margin="0,0,8,0" />
+                            <TextBlock Name="FileAText" Classes="fname" Text="{Binding FileA}" ToolTip.Tip="{Binding FileA}" />
+                        </DockPanel>
+                        <DockPanel Height="32">
+                            <TextBlock Classes="ab" Text="B" Margin="0,0,8,0" />
+                            <Button Name="ChangeBButton" DockPanel.Dock="Right" Classes="quiet" Content="Change…" Click="OpenB_Click" Margin="8,0,-6,0"
+                                    ToolTip.Tip="Compare with another bin" />
+                            <TextBlock Name="FileBText" Classes="fname" Text="{Binding FileB}" ToolTip.Tip="{Binding FileB}" />
+                        </DockPanel>
+                    </StackPanel>
+
+                    <!-- A B that could not be opened, and a B of other firmware (system 7.3) -->
+                    <Border DockPanel.Dock="Top" Classes="banner warn" Margin="0,12,4,0" IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <controls:NumberText Classes="body" Value="{Binding ErrorMessage}" TextWrapping="Wrap" Foreground="{DynamicResource Ink1Brush}" />
+                    </Border>
+                    <Border DockPanel.Dock="Top" Classes="banner warn" Margin="0,12,4,0" IsVisible="{Binding FirmwareWarning, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <controls:NumberText Name="FirmwareWarningText" Classes="body" Value="{Binding FirmwareWarning}" TextWrapping="Wrap" Foreground="{DynamicResource Ink1Brush}" />
                     </Border>
 
-                    <ItemsControl Grid.Row="1" ItemsSource="{Binding Chips}" Margin="18,10" IsVisible="{Binding HasDifferences}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel ItemSpacing="6" LineSpacing="6" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="local:KindChip">
-                                <ToggleButton Classes="pill" Content="{Binding Label}" IsChecked="{Binding IsOn, Mode=OneWay}" Tag="{Binding Key}" Click="Kind_Click" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                    <TextBox Name="CompareSearchBox" DockPanel.Dock="Top" Margin="0,12,4,0" Watermark="Search items" Text="{Binding SearchText}"
+                             AutomationProperties.Name="Search items" IsVisible="{Binding HasDifferences}">
+                        <TextBox.InnerLeftContent>
+                            <controls:StrokeIcon Data="{StaticResource Icon.Search}" Foreground="{DynamicResource Ink2Brush}" Margin="10,0,0,0" VerticalAlignment="Center" />
+                        </TextBox.InnerLeftContent>
+                        <TextBox.InnerRightContent>
+                            <Border Classes="kbd" Margin="8,0,6,0" VerticalAlignment="Center">
+                                <TextBlock Text="Ctrl K" />
+                            </Border>
+                        </TextBox.InnerRightContent>
+                    </TextBox>
 
-                    <ListBox Name="DiffList" Grid.Row="2" ItemsSource="{Binding Entries}" SelectionChanged="List_SelectionChanged" Padding="0,0,0,18"
-                             IsVisible="{Binding HasDifferences}">
+                    <Border Name="KindSeg" DockPanel.Dock="Top" Classes="seg" Margin="0,12,4,0" IsVisible="{Binding HasDifferences}" AutomationProperties.Name="Kind">
+                        <controls:FlexRow Spacing="2">
+                            <ToggleButton Name="KindAll" Classes="seg" Tag="all" Click="Kind_Click" IsChecked="{Binding Chips[0].IsOn, Mode=OneWay, FallbackValue=False}"
+                                          AutomationProperties.Name="{Binding Chips[0].Spoken, FallbackValue=''}">
+                                <StackPanel><TextBlock Classes="kname" Text="{Binding Chips[0].Name, FallbackValue=''}" /><TextBlock Classes="kcount" Text="{Binding Chips[0].Count, FallbackValue=''}" /></StackPanel>
+                            </ToggleButton>
+                            <ToggleButton Name="KindMap" Classes="seg" Tag="map" Click="Kind_Click" IsChecked="{Binding Chips[1].IsOn, Mode=OneWay, FallbackValue=False}"
+                                          AutomationProperties.Name="{Binding Chips[1].Spoken, FallbackValue=''}">
+                                <StackPanel><TextBlock Classes="kname" Text="{Binding Chips[1].Name, FallbackValue=''}" /><TextBlock Classes="kcount" Text="{Binding Chips[1].Count, FallbackValue=''}" /></StackPanel>
+                            </ToggleButton>
+                            <ToggleButton Name="KindCurve" Classes="seg" Tag="curve" Click="Kind_Click" IsChecked="{Binding Chips[2].IsOn, Mode=OneWay, FallbackValue=False}"
+                                          AutomationProperties.Name="{Binding Chips[2].Spoken, FallbackValue=''}">
+                                <StackPanel><TextBlock Classes="kname" Text="{Binding Chips[2].Name, FallbackValue=''}" /><TextBlock Classes="kcount" Text="{Binding Chips[2].Count, FallbackValue=''}" /></StackPanel>
+                            </ToggleButton>
+                            <ToggleButton Name="KindAxis" Classes="seg" Tag="axis" Click="Kind_Click" IsChecked="{Binding Chips[3].IsOn, Mode=OneWay, FallbackValue=False}"
+                                          AutomationProperties.Name="{Binding Chips[3].Spoken, FallbackValue=''}">
+                                <StackPanel><TextBlock Classes="kname" Text="{Binding Chips[3].Name, FallbackValue=''}" /><TextBlock Classes="kcount" Text="{Binding Chips[3].Count, FallbackValue=''}" /></StackPanel>
+                            </ToggleButton>
+                            <ToggleButton Name="KindValue" Classes="seg" Tag="value" Click="Kind_Click" IsChecked="{Binding Chips[4].IsOn, Mode=OneWay, FallbackValue=False}"
+                                          AutomationProperties.Name="{Binding Chips[4].Spoken, FallbackValue=''}">
+                                <StackPanel><TextBlock Classes="kname" Text="{Binding Chips[4].Name, FallbackValue=''}" /><TextBlock Classes="kcount" Text="{Binding Chips[4].Count, FallbackValue=''}" /></StackPanel>
+                            </ToggleButton>
+                        </controls:FlexRow>
+                    </Border>
+
+                    <!-- The two files are the same through the XDF (system 7.3) -->
+                    <StackPanel DockPanel.Dock="Top" Margin="8,24,4,0" Spacing="8" IsVisible="{Binding IsIdentical}">
+                        <TextBlock Name="IdenticalText" Classes="body" FontWeight="SemiBold" TextWrapping="Wrap" Text="The two files are identical through this XDF." />
+                        <TextBlock Classes="body" Text="{Binding UnmappedSummary}" TextWrapping="Wrap" Foreground="{DynamicResource Ink2Brush}" />
+                    </StackPanel>
+
+                    <ListBox Name="DiffList" Margin="0,8,0,0" ItemsSource="{Binding Entries}" SelectionChanged="List_SelectionChanged" IsVisible="{Binding HasDifferences}"
+                             AutomationProperties.Name="Differing items">
                         <ListBox.DataTemplates>
                             <DataTemplate DataType="local:CompareGroup">
-                                <TextBlock Text="{Binding Title}" Classes="muted" FontSize="12" Margin="0,10,0,2" />
+                                <TextBlock Classes="gh" Text="{Binding Title}" />
                             </DataTemplate>
                             <DataTemplate DataType="local:CompareRow">
-                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" Margin="0,3">
-                                    <TextBlock Classes="num" Text="{Binding Title}" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource InkBrush}"
-                                               FontWeight="{Binding IsCurrent, Converter={x:Static local:Converters.Bold}}" />
-                                    <TextBlock Grid.Column="1" Classes="num" Text="{Binding Summary}" Margin="12,0,0,0" MaxWidth="170" TextTrimming="CharacterEllipsis"
-                                               HorizontalAlignment="Right" />
-                                    <TextBlock Grid.Row="1" Classes="muted" FontSize="12" Text="{Binding Detail}" />
-                                    <TextBlock Grid.Row="1" Grid.Column="1" Classes="muted" FontSize="12" Text="{Binding Units}" HorizontalAlignment="Right" />
-                                </Grid>
+                                <Border Classes="crow" Classes.current="{Binding IsCurrent}">
+                                    <Panel>
+                                        <Border Width="2" HorizontalAlignment="Left" Margin="-8,0,0,0" Background="{DynamicResource Ink1Brush}" IsVisible="{Binding IsCurrent}" />
+                                        <Grid ColumnDefinitions="16,*,Auto" RowDefinitions="16,16" ColumnSpacing="6">
+                                            <controls:ItemGlyph Kind="{Binding Difference.Kind}" Foreground="{DynamicResource Ink2Brush}" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Grid.ColumnSpan="2" Classes="crow-id" Text="{Binding Title}" VerticalAlignment="Center" ToolTip.Tip="{Binding Title}" />
+                                            <controls:NumberText Grid.Row="1" Grid.Column="1" Classes="crow-sum" Value="{Binding Summary}" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Row="1" Grid.Column="2" Classes="crow-unit" Text="{Binding Units}" VerticalAlignment="Center" />
+                                        </Grid>
+                                    </Panel>
+                                </Border>
                             </DataTemplate>
                             <DataTemplate DataType="local:CompareBytesRow">
-                                <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" Margin="0,3"
-                                           FontWeight="{Binding IsCurrent, Converter={x:Static local:Converters.Bold}}" />
+                                <Border Classes="crow" Classes.current="{Binding IsCurrent}">
+                                    <Panel>
+                                        <Border Width="2" HorizontalAlignment="Left" Margin="-8,0,0,0" Background="{DynamicResource Ink1Brush}" IsVisible="{Binding IsCurrent}" />
+                                        <controls:NumberText Classes="crow-bytes" Value="{Binding Summary}" VerticalAlignment="Center" />
+                                    </Panel>
+                                </Border>
                             </DataTemplate>
                         </ListBox.DataTemplates>
                     </ListBox>
-
-                    <StackPanel Grid.Row="2" Margin="18,18" Spacing="8" IsVisible="{Binding IsIdentical}">
-                        <TextBlock Name="IdenticalText" Classes="display" FontSize="16" TextWrapping="Wrap" Text="The two files are identical through this XDF." />
-                        <TextBlock Classes="secondary" Text="{Binding UnmappedSummary}" TextWrapping="Wrap" />
-                    </StackPanel>
-                </Grid>
+                </DockPanel>
             </Border>
 
             <!-- The selected difference -->
-            <Grid Grid.Column="1" RowDefinitions="Auto,Auto,Auto,*,Auto">
-                <StackPanel Margin="26,18,26,10" Spacing="6" IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}">
-                    <TextBlock Name="CompareTitle" Classes="display" FontSize="21" Text="{Binding Selected.Item.Title, FallbackValue=''}" TextWrapping="Wrap" />
-                    <WrapPanel ItemSpacing="6" LineSpacing="6">
-                        <Border Classes="chip"><TextBlock Text="{Binding Selected.Category, FallbackValue=''}" /></Border>
-                        <Border Classes="chip" IsVisible="{Binding CellsText, Converter={x:Static ObjectConverters.IsNotNull}}"><TextBlock Text="{Binding CellsText}" /></Border>
-                        <Border Classes="chip" IsVisible="{Binding LargestText, Converter={x:Static ObjectConverters.IsNotNull}}"><TextBlock Text="{Binding LargestText}" /></Border>
-                    </WrapPanel>
-                    <TextBlock Classes="secondary" Text="{Binding Description}" TextWrapping="Wrap" MaxWidth="720" HorizontalAlignment="Left"
-                               IsVisible="{Binding Description, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                </StackPanel>
+            <Border Name="ComparePane" Grid.Column="1">
+                <DockPanel>
+                    <Grid DockPanel.Dock="Top" Height="32" ColumnDefinitions="Auto,Auto,*" IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <controls:ItemGlyph Kind="{Binding Selected.Kind, FallbackValue=Value}" Foreground="{DynamicResource Ink2Brush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                        <TextBlock Name="CompareTitle" Grid.Column="1" Classes="mono13" Text="{Binding Selected.Item.Title, FallbackValue=''}" Foreground="{DynamicResource Ink1Brush}"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="2" Classes="body pane-desc" Margin="12,0,0,0" Text="{Binding Description}" ToolTip.Tip="{Binding Description}" />
+                    </Grid>
 
-                <Border Name="AxisBanner" Grid.Row="1" Margin="26,0,26,10" Padding="14,10" CornerRadius="6" BorderThickness="3,1,1,1"
-                        BorderBrush="{DynamicResource Bezel2Brush}" Background="{DynamicResource PaneBrush}"
-                        IsVisible="{Binding AxisBanner, Converter={x:Static ObjectConverters.IsNotNull}}">
-                    <TextBlock Text="{Binding AxisBanner}" TextWrapping="Wrap" Foreground="{DynamicResource Ink2Brush}" />
-                </Border>
-
-                <!-- Actions -->
-                <WrapPanel Grid.Row="2" Margin="26,2,26,12" ItemSpacing="8" LineSpacing="8" IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}">
-                    <Border Classes="seg" VerticalAlignment="Center" IsVisible="{Binding ShowsTable}">
-                        <StackPanel Orientation="Horizontal">
-                            <ToggleButton Name="ViewDelta" Classes="seg" Content="B − A" IsChecked="{Binding IsDeltaView}" />
-                            <ToggleButton Name="ViewA" Classes="seg" Content="A" IsChecked="{Binding IsAView}" />
-                            <ToggleButton Name="ViewB" Classes="seg" Content="B" IsChecked="{Binding IsBView}" />
-                        </StackPanel>
+                    <!-- How the cells are compared when an axis differs: information, so it stays while the item shows. -->
+                    <Border Name="AxisBanner" DockPanel.Dock="Top" Classes="banner" Margin="0,16,0,0"
+                            IsVisible="{Binding AxisBanner, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <DockPanel>
+                            <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Info}" Foreground="{DynamicResource Ink2Brush}" Margin="0,1,12,0" VerticalAlignment="Top" />
+                            <controls:NumberText Classes="body" Value="{Binding AxisBanner}" TextWrapping="Wrap" Foreground="{DynamicResource Ink1Brush}" />
+                        </DockPanel>
                     </Border>
-                    <Button Name="CopyFromB" Content="Copy B into A" Click="Copy_Click" ToolTip.Tip="Write B's value of this item into A. Undo with Ctrl Z." />
-                    <Button Content="Edit in Tune" Click="EditInTune_Click" ToolTip.Tip="Open this item of A on the Tune tab" />
-                </WrapPanel>
 
-                <!-- Table: one grid at a time -->
-                <ScrollViewer Grid.Row="3" HorizontalScrollBarVisibility="Auto" Padding="26,4,26,0" IsVisible="{Binding ShowsTable}">
-                    <controls:MapGrid Name="CompareGrid" Editor="{Binding Grid}" HorizontalAlignment="Left" VerticalAlignment="Top" MaxWidth="1240" />
-                </ScrollViewer>
-
-                <!-- Value, switch or flag: A and B side by side -->
-                <WrapPanel Grid.Row="3" Margin="26,6,26,12" ItemSpacing="34" IsVisible="{Binding ShowsValue}">
-                    <StackPanel>
-                        <TextBlock Classes="muted" FontSize="12" Text="{Binding FileA, StringFormat='A, {0}'}" />
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Name="ValueAText" Classes="display" FontSize="34" FontWeight="Light" Text="{Binding Selected.ValueA, FallbackValue=''}" />
-                            <TextBlock Classes="muted" Text="{Binding Units}" VerticalAlignment="Bottom" Margin="0,0,0,7" />
-                        </StackPanel>
-                    </StackPanel>
-                    <StackPanel>
-                        <TextBlock Classes="muted" FontSize="12" Text="{Binding FileB, StringFormat='B, {0}'}" />
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Name="ValueBText" Classes="display" FontSize="34" FontWeight="Light" Text="{Binding Selected.ValueB, FallbackValue=''}" />
-                            <TextBlock Classes="muted" Text="{Binding Units}" VerticalAlignment="Bottom" Margin="0,0,0,7" />
-                        </StackPanel>
-                    </StackPanel>
-                </WrapPanel>
-
-                <!-- Bytes outside the XDF -->
-                <StackPanel Grid.Row="0" Grid.RowSpan="4" Margin="26,18" Spacing="10" IsVisible="{Binding ShowsBytes}">
-                    <TextBlock Classes="display" FontSize="21" Text="Bytes outside the XDF" />
-                    <TextBlock Classes="secondary" TextWrapping="Wrap" MaxWidth="720" HorizontalAlignment="Left"
-                               Text="These bytes differ but no XDF item covers them. They are listed so nothing hides; they cannot be copied. Runs up to 8 equal bytes apart are shown as one range." />
-                    <ScrollViewer MaxHeight="560">
-                        <ItemsControl ItemsSource="{Binding Unmapped}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="core:UnmappedRange">
-                                    <Grid ColumnDefinitions="200,110,150,*" Margin="0,0,0,5">
-                                        <TextBlock Classes="num">
-                                            <TextBlock.Text>
-                                                <MultiBinding StringFormat="0x{0:X5}–0x{1:X5}">
-                                                    <Binding Path="Offset" />
-                                                    <Binding Path="End" />
-                                                </MultiBinding>
-                                            </TextBlock.Text>
-                                        </TextBlock>
-                                        <TextBlock Grid.Column="1" Classes="num" Text="{Binding Length, StringFormat='{}{0:N0} bytes'}" HorizontalAlignment="Right" Margin="0,0,16,0" />
-                                        <TextBlock Grid.Column="2" Classes="num muted" Text="{Binding Differing, StringFormat='{}{0:N0} differ'}" />
-                                        <TextBlock Grid.Column="3" Text="{Binding Area}" Foreground="{DynamicResource Ink2Brush}" />
-                                    </Grid>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-                </StackPanel>
-
-                <!-- Legend and messages -->
-                <StackPanel Grid.Row="4" Margin="26,12,26,16" Spacing="8">
-                    <StackPanel Spacing="5" MaxWidth="420" HorizontalAlignment="Left" IsVisible="{Binding ShowsTable}">
-                        <Border Height="8" CornerRadius="4" IsVisible="{Binding IsDeltaView}">
-                            <Border.Background>
-                                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
-                                    <GradientStop Offset="0" Color="{DynamicResource DownColor}" />
-                                    <GradientStop Offset="0.5" Color="{DynamicResource PaneColor}" />
-                                    <GradientStop Offset="1" Color="{DynamicResource UpColor}" />
-                                </LinearGradientBrush>
-                            </Border.Background>
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="12" Margin="0,24,0,0"
+                                IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <Border Classes="seg" IsVisible="{Binding ShowsTable}" AutomationProperties.Name="Grid">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <ToggleButton Name="ViewDelta" Classes="seg" Content="B − A" IsChecked="{Binding IsDeltaView}" />
+                                <ToggleButton Name="ViewA" Classes="seg" Content="A" IsChecked="{Binding IsAView}" />
+                                <ToggleButton Name="ViewB" Classes="seg" Content="B" IsChecked="{Binding IsBView}" />
+                            </StackPanel>
                         </Border>
-                        <Border Height="8" CornerRadius="4" Background="{x:Static controls:HeatRamp.Brush}" IsVisible="{Binding !IsDeltaView}" />
-                        <Grid ColumnDefinitions="*,*" Width="420">
-                            <TextBlock Classes="num muted" FontSize="12" Text="{Binding LegendMin}" />
-                            <TextBlock Grid.Column="1" Classes="num muted" FontSize="12" Text="{Binding LegendMax}" HorizontalAlignment="Right" />
-                        </Grid>
+                        <Button Name="CopyFromB" Content="Copy B into A" Click="Copy_Click" ToolTip.Tip="Write B's value of this item into A. Undo with Ctrl Z." />
+                        <Button Name="EditInTuneButton" Classes="quiet" Content="Edit in Tune" Click="EditInTune_Click" ToolTip.Tip="Open this item of A on the Tune tab" />
                     </StackPanel>
-                    <TextBlock Name="CompareMessage" Text="{Binding Message}" TextWrapping="Wrap" Foreground="{DynamicResource Ink2Brush}"
-                               IsVisible="{Binding Message, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                    <TextBlock Text="{Binding Grid.Message, FallbackValue=''}" TextWrapping="Wrap" Foreground="{DynamicResource Ink2Brush}"
-                               IsVisible="{Binding Grid.Message, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False}" />
-                </StackPanel>
-            </Grid>
+
+                    <!-- Under the grid: the key and the range of this item, then the messages -->
+                    <StackPanel DockPanel.Dock="Bottom" Spacing="8" Margin="0,12,0,0">
+                        <WrapPanel Name="CompareScale" ItemSpacing="24" LineSpacing="8" IsVisible="{Binding ShowsTable}">
+                            <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsDeltaView}">
+                                <TextBlock Classes="key" Text="B lower" />
+                                <controls:DeltaScale Low="{Binding ScaleLow}" High="{Binding ScaleHigh}" VerticalAlignment="Center" />
+                                <TextBlock Classes="key" Text="B higher" />
+                            </StackPanel>
+                            <controls:ColourScale Width="200" MinLabel="{Binding ScaleMinLabel}" MidLabel="{Binding ScaleMidLabel}" MaxLabel="{Binding ScaleMaxLabel}"
+                                                  IsVisible="{Binding !IsDeltaView}" />
+                            <controls:NumberText Name="ScaleCaptionText" Classes="key" Value="{Binding ScaleCaption}" VerticalAlignment="Center" />
+                        </WrapPanel>
+                        <DockPanel IsVisible="{Binding Message, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Info}" Foreground="{DynamicResource Ink2Brush}" Margin="0,1,8,0" VerticalAlignment="Top" />
+                            <controls:NumberText Name="CompareMessage" Classes="body" Value="{Binding Message}" TextWrapping="Wrap" Foreground="{DynamicResource Ink1Brush}" />
+                        </DockPanel>
+                        <controls:NumberText Classes="body" Value="{Binding Grid.Message, FallbackValue=''}" TextWrapping="Wrap" Foreground="{DynamicResource Ink2Brush}"
+                                             IsVisible="{Binding Grid.Message, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False}" />
+                    </StackPanel>
+
+                    <Panel>
+                        <!-- A table: the grid takes the height left; rows give way from 26 to 20 px before it scrolls (system 8). -->
+                        <controls:TableLayout Name="CompareTable" Margin="0,24,0,0" IsVisible="{Binding ShowsTable}">
+                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="50,0,0,4" Height="16">
+                                <TextBlock Classes="label" Text="{Binding Grid.Values.X.Units, FallbackValue=''}" VerticalAlignment="Center" />
+                                <TextBlock Classes="mono" FontSize="12" Text="{Binding Grid.Values.X.Name, FallbackValue=''}" Foreground="{DynamicResource Ink3Brush}"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                            <ScrollViewer HorizontalScrollBarVisibility="Auto">
+                                <controls:MapGrid Name="CompareGrid" Editor="{Binding Grid}" HorizontalAlignment="Left" VerticalAlignment="Top" MaxWidth="1240" />
+                            </ScrollViewer>
+                        </controls:TableLayout>
+
+                        <!-- A value, switch or flag: A and B as readings side by side, the difference under them -->
+                        <StackPanel Margin="0,24,0,0" IsVisible="{Binding ShowsValue}">
+                            <WrapPanel ItemSpacing="64" LineSpacing="24">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Classes="vlab"><Run Classes="ab" Text="A" /><Run Text="{Binding FileA, StringFormat='&#x2002;{0}', Mode=OneWay}" /></TextBlock>
+                                    <controls:ReadingText Name="ValueAText" Classes="data56 reading" Value="{Binding Selected.ValueA, FallbackValue=''}" Unit="{Binding Units}" />
+                                </StackPanel>
+                                <StackPanel Spacing="4">
+                                    <TextBlock Classes="vlab"><Run Classes="ab" Text="B" /><Run Text="{Binding FileB, StringFormat='&#x2002;{0}', Mode=OneWay}" /></TextBlock>
+                                    <controls:ReadingText Name="ValueBText" Classes="data56 reading" Value="{Binding Selected.ValueB, FallbackValue=''}" Unit="{Binding Units}" />
+                                </StackPanel>
+                            </WrapPanel>
+                            <controls:NumberText Name="ValueDeltaText" Classes="body" Margin="0,16,0,0" Value="{Binding ValueDeltaText}" Foreground="{DynamicResource Ink2Brush}"
+                                                 IsVisible="{Binding ValueDeltaText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                        </StackPanel>
+
+                        <!-- The bytes outside the XDF: a table of the ranges -->
+                        <DockPanel IsVisible="{Binding ShowsBytes}">
+                            <TextBlock DockPanel.Dock="Top" Classes="title" Text="Bytes outside the XDF" />
+                            <TextBlock DockPanel.Dock="Top" Classes="body" Margin="0,8,0,0" MaxWidth="720" HorizontalAlignment="Left" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource Ink2Brush}"
+                                       Text="These bytes differ but no XDF item covers them. They are listed so nothing hides; they cannot be copied. Runs up to 8 equal bytes apart are shown as one range." />
+                            <Border DockPanel.Dock="Top" Classes="bhead" Margin="0,24,0,0" Width="600" HorizontalAlignment="Left">
+                                <Grid ColumnDefinitions="2*,*,*,1.6*" Margin="12,0">
+                                    <TextBlock Text="Range" />
+                                    <TextBlock Grid.Column="1" Text="Bytes" HorizontalAlignment="Right" />
+                                    <TextBlock Grid.Column="2" Text="Differ" HorizontalAlignment="Right" />
+                                    <TextBlock Grid.Column="3" Text="Area" Margin="24,0,0,0" />
+                                </Grid>
+                            </Border>
+                            <controls:NumberText DockPanel.Dock="Bottom" Classes="label" Margin="0,12,0,0" Value="{Binding UnmappedSummary}" />
+                            <ScrollViewer Width="600" HorizontalAlignment="Left" HorizontalScrollBarVisibility="Disabled">
+                                <ItemsControl Name="BytesTable" ItemsSource="{Binding Unmapped}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="core:UnmappedRange">
+                                            <Border Classes="brow">
+                                                <Grid ColumnDefinitions="2*,*,*,1.6*" Margin="12,0">
+                                                    <controls:NumberText Value="{Binding Converter={x:Static local:Converters.RangeText}}" />
+                                                    <controls:NumberText Grid.Column="1" Value="{Binding Length}" HorizontalAlignment="Right" />
+                                                    <controls:NumberText Grid.Column="2" Value="{Binding Differing}" HorizontalAlignment="Right" />
+                                                    <TextBlock Grid.Column="3" Classes="area" Text="{Binding Area}" Margin="24,0,0,0" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </DockPanel>
+                    </Panel>
+                </DockPanel>
+            </Border>
         </Grid>
     </Panel>
 </UserControl>
