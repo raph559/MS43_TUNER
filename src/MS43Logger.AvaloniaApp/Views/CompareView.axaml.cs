@@ -72,9 +72,12 @@ public partial class CompareView : UserControl
 
     private void Kind_Click(object? sender, RoutedEventArgs e)
     {
-        if (ViewModel is { } compare && sender is ToggleButton { Tag: string key })
+        if (ViewModel is { } compare && sender is ToggleButton { Tag: string key } button)
         {
             compare.Kind = key;
+
+            // A lit segment pressed again stays lit (the filter has no "none"); its binding saw no change to undo the toggle.
+            button.SetCurrentValue(ToggleButton.IsCheckedProperty, compare.Kind == key);
         }
     }
 

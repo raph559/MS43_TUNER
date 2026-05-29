@@ -380,6 +380,33 @@ public class MapGridTests
     }
 
     [AvaloniaFact]
+    public async Task NoFlashWithAnimationsOff()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var folder = Path.Combine(Path.GetTempPath(), "ms43-grid-" + Guid.NewGuid().ToString("N"));
+        var (_, shell, grid) = await Open(TuneScreen.CopyCar(folder));
+        try
+        {
+            MotionSettings.AnimationsEnabled = false;
+            shell.Tune.Editor!.Apply(new EditRequest(EditKind.Step, 1));
+            Assert.False(grid.IsFlashing);
+
+            MotionSettings.AnimationsEnabled = true;
+            shell.Tune.Editor.Apply(new EditRequest(EditKind.Step, 1));
+            Assert.True(grid.IsFlashing);
+        }
+        finally
+        {
+            MotionSettings.AnimationsEnabled = true;
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [AvaloniaFact]
     public void ReadOnlyTableShowsMessage()
     {
         const string xml = """
@@ -396,5 +423,41 @@ public class MapGridTests
         Assert.False(editor.Apply(new EditRequest(EditKind.Set, 1)));
         Assert.Contains("colmajor", editor.Message);
         Assert.False(document.IsModified);
+    }
+
+    // At 1024 x 680 the 20 rows scroll: the arrow keys must not move the cell being edited out of sight (final review).
+    [AvaloniaFact]
+    public async Task ArrowKeysKeepTheActiveCellInView()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, grid) = await Open();
+        window.Width = 1024;
+        window.Height = 680;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        var viewport = grid.FindAncestorOfType<ScrollViewer>()!;
+        Assert.True(viewport.Extent.Height > viewport.Viewport.Height + 1, "the grid scrolls at 1024 x 680");
+
+        shell.Tune.Editor!.Selection = new CellRange(0, 0, 0, 0);
+        grid.Focus(NavigationMethod.Tab);
+        for (var i = 0; i < 19; i++)
+        {
+            window.KeyPressQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
+        }
+
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        var cell = grid.CellBounds(19, 0);
+        Assert.InRange(cell.Bottom, viewport.Offset.Y, viewport.Offset.Y + viewport.Viewport.Height + 0.5);
+
+        for (var i = 0; i < 19; i++)
+        {
+            window.KeyPressQwerty(PhysicalKey.ArrowUp, RawInputModifiers.None);
+        }
+
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.True(viewport.Offset.Y <= 0.5, "back at the first row, the grid scrolls back to the top");
     }
 }
