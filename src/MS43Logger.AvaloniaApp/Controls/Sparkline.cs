@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -5,16 +6,23 @@ using Avalonia.Media;
 
 namespace MS43Logger.AvaloniaApp.Controls;
 
-/// <summary>The last seconds of a channel: a line with a faint area under it and a dot at the newest sample.</summary>
+/// <summary>
+/// A channel's trend in the Live list: the samples of the trend window placed by time, an Ink2 1.25 px line
+/// and an Ink1 dot at the newest sample, both Ink3 once the values are frozen. Never orange: a row is data, not now. A
+/// flat channel stays flat because the vertical span is never less than its unit's minimum (5 °C, 1 V, 2 %, 100 rpm,
+/// 10 mg/stk, 2 kPa).
+/// </summary>
 public sealed class Sparkline : Control
 {
     public static readonly StyledProperty<SampleHistory?> HistoryProperty = AvaloniaProperty.Register<Sparkline, SampleHistory?>(nameof(History));
     public static readonly StyledProperty<int> VersionProperty = AvaloniaProperty.Register<Sparkline, int>(nameof(Version));
     public static readonly StyledProperty<bool> IsLiveProperty = AvaloniaProperty.Register<Sparkline, bool>(nameof(IsLive));
+    public static readonly StyledProperty<string?> UnitsProperty = AvaloniaProperty.Register<Sparkline, string?>(nameof(Units));
+    public static readonly StyledProperty<bool> IsStaleProperty = AvaloniaProperty.Register<Sparkline, bool>(nameof(IsStale));
 
     static Sparkline()
     {
-        AffectsRender<Sparkline>(HistoryProperty, VersionProperty, IsLiveProperty);
+        AffectsRender<Sparkline>(HistoryProperty, VersionProperty, UnitsProperty, IsStaleProperty);
     }
 
     public Sparkline()
@@ -28,6 +36,23 @@ public sealed class Sparkline : Control
     public int Version { get => GetValue(VersionProperty); set => SetValue(VersionProperty, value); }
 
     public bool IsLive { get => GetValue(IsLiveProperty); set => SetValue(IsLiveProperty, value); }
+
+    /// <summary>The channel's unit, which sets the smallest vertical span.</summary>
+    public string? Units { get => GetValue(UnitsProperty); set => SetValue(UnitsProperty, value); }
+
+    public bool IsStale { get => GetValue(IsStaleProperty); set => SetValue(IsStaleProperty, value); }
+
+    /// <summary>The smallest span the line spreads over, by unit, so sensor noise does not fill the row.</summary>
+    public static double MinimumSpan(string? units) => units?.Trim() switch
+    {
+        "°C" => 5,
+        "V" => 1,
+        "%" => 2,
+        "rpm" => 100,
+        "mg/stk" => 10,
+        "kPa" => 2,
+        _ => 0,
+    };
 
     public override void Render(DrawingContext context)
     {
