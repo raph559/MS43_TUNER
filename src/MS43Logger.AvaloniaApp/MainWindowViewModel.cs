@@ -19,6 +19,8 @@ namespace MS43Logger.AvaloniaApp;
 
 public class MainWindowViewModel : INotifyPropertyChanged
 {
+    private readonly TimeProvider _time;
+    private readonly Func<string[]> _ports;
     private string _selectedPort;
     private ObservableCollection<string> _availablePorts;
     private ObservableCollection<DecodedValueViewModel> _liveValues;
@@ -33,6 +35,17 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private LiveLogger _logger;
     private string _rateText = "No samples yet";
     private StreamWriter _csvWriter;
+    private static readonly HashSet<string> StatusInputs = new(StringComparer.Ordinal)
+    {
+        nameof(IsConnected), nameof(IsConnecting), nameof(SelectedPort), nameof(SelectedVariant),
+        nameof(EnableCsvLogging), nameof(CsvPath), nameof(ElapsedTime), nameof(SampleCount),
+    };
+
+    private bool _isConnecting;
+    private bool _hasNoSamplesYet;
+    private string _rateValue;
+    private bool _isSlowLink;
+    private string _rateDetail;
     private string _searchText = string.Empty;
     private bool _enableCsvLogging;
     private string _csvPath;
@@ -45,20 +58,57 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private readonly Stopwatch _accelStopwatch = new();
     private string _time0To100 = "--";
     private string _time0To200 = "--";
+
+    private RunStage _run;
+    private DateTimeOffset _launchedAt;
+    private string _time100 = "n/a";
+    private string _time200 = "n/a";
     private bool _reached100;
     private bool _reached200;
     private bool _isPerformanceTestArmed;
     private bool _isWaitingForLaunch;
+    private bool _hasSpeedChannel;
+    private ReadoutsMode _readouts = ReadoutsMode.Tiles;
+    private int _trendSeconds = 10;
+    private string _logFolder = AppSettings.DefaultLogFolder;
+    private bool _startCsvOnConnect;
+    private ConnectionMessage _banner;
+    private string _bannerDetail;
+    private string _connectionLog;
+    private bool _isStale;
+    private string _retryText;
+    private DateTimeOffset _sessionStart;
+    private DateTimeOffset? _lastSampleAt;
+    private DispatcherTimer _staleTimer;
+    private static readonly ConnectionMessage NoPort = new("No COM port found. Plug in the K-line cable, then rescan ports.", LiveAction.RescanPorts);
 
+    // Performance tests: the speed channel's ids (MS43X001 says VS, the stock definitions VEHICLESPEED), whatever their case.
+    private static readonly HashSet<string> SpeedIds = new(StringComparer.OrdinalIgnoreCase) { "VEHICLESPEED", "VS" };
+
+    private const string NoSpeedChannel = "This definition has no vehicle speed channel";
+
+    // A run waits for the car to stop, then times from the first sample above 1 km/h.
+    private enum RunStage
+    {
+        Idle,
+        WaitingForStop,
+        Ready,
+        Timing,
+    }
+
+    /// <summary>Starts a run of the Performance tests; the times read n/a until the car moves off.</summary>
     public void ArmPerformanceTest()
     {
-        _isPerformanceTestArmed = true;
-        _isWaitingForLaunch = false;
-        _accelStopwatch.Reset();
+        if (!HasSpeedChannel)
+        {
+            return;
+        }
+
         _reached100 = false;
         _reached200 = false;
-        Time0To100 = "Wait 0kmh";
-        Time0To200 = "Wait 0kmh";
+        Time100 = "n/a";
+        Time200 = "n/a";
+        Run = RunStage.WaitingForStop;
     }
 
     private static readonly HashSet<string> DefaultPinnedChannels = new(StringComparer.OrdinalIgnoreCase)
@@ -78,8 +128,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
     };
 
     public string[] AdxVariants { get; } = { "b22", "b25", "b30", "ms43x" };
-
-    public string[] ThemeModes { get; } = { "Dark", "Light" };
 
     private string _selectedVariant = "b30";
     public string SelectedVariant
@@ -127,7 +175,43 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     public bool IsNotConnected => !IsConnected;
 
-    public string ConnectionButtonText => IsConnected ? "Disconnect" : "Connect";
+    public string ConnectionButtonText => IsConnecting ? "Connecting…" : IsConnected ? "Disconnect" : "Connect";
+
+    /// <summary>True from Connect until the ECU answers or the attempt fails.</summary>
+    public bool IsConnecting
+    {
+        get => _isConnecting;
+        internal set
+        {
+            if (SetField(ref _isConnecting, value))
+            {
+                OnPropertyChanged(nameof(ConnectionButtonText));
+            }
+        }
+    }
+
+    /// <summary>Connected, before the first sample arrived.</summary>
+    public bool HasNoSamplesYet { get => _hasNoSamplesYet; private set => SetField(ref _hasNoSamplesYet, value); }
+
+    /// <summary>The logging rate in whole samples per second, "38".</summary>
+    public string RateValue { get => _rateValue; private set => SetField(ref _rateValue, value); }
+
+    /// <summary>Under 10 samples/s, which the header marks as a slow link.</summary>
+    public bool IsSlowLink { get => _isSlowLink; private set => SetField(ref _isSlowLink, value); }
+
+    /// <summary>"Between samples: 24 to 31 ms", the rate's tooltip.</summary>
+    public string RateDetail { get => _rateDetail; private set => SetField(ref _rateDetail, value); }
+
+    internal void ShowRate(RateStats stats)
+    {
+        SamplesPerSecond = stats?.SamplesPerSecond ?? 0;
+        HasNoSamplesYet = stats is null;
+        RateValue = stats?.SamplesPerSecond.ToString("0", CultureInfo.InvariantCulture);
+        IsSlowLink = stats is not null && stats.SamplesPerSecond < 10;
+        RateDetail = stats is null
+            ? null
+            : string.Format(CultureInfo.InvariantCulture, "Between samples: {0:0} to {1:0} ms", stats.MinMs, stats.MaxMs);
+    }
 
     public string StatusText
     {
@@ -205,6 +289,74 @@ public class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    /// <summary>Seconds from the move-off to 100 km/h, "7.3", counting until it is reached; n/a before a run.</summary>
+    public string Time100
+    {
+        get => _time100;
+        private set
+        {
+            if (SetField(ref _time100, value))
+            {
+                OnPropertyChanged(nameof(HasTime100));
+            }
+        }
+    }
+
+    public bool HasTime100 => Time100 != "n/a";
+
+    public string Time200
+    {
+        get => _time200;
+        private set
+        {
+            if (SetField(ref _time200, value))
+            {
+                OnPropertyChanged(nameof(HasTime200));
+            }
+        }
+    }
+
+    public bool HasTime200 => Time200 != "n/a";
+
+    /// <summary>Whether the definition has a speed channel to time; without one "Start test" is off.</summary>
+    public bool HasSpeedChannel
+    {
+        get => _hasSpeedChannel;
+        private set
+        {
+            if (SetField(ref _hasSpeedChannel, value))
+            {
+                OnPropertyChanged(nameof(StartTestTip));
+                OnPropertyChanged(nameof(PerformanceStatus));
+            }
+        }
+    }
+
+    public string StartTestTip => HasSpeedChannel ? null : NoSpeedChannel;
+
+    /// <summary>What the run waits for: "Stop the car to start", "Ready: drive off", "Timing…"; null when no run is on.</summary>
+    public string PerformanceStatus => !HasSpeedChannel
+        ? NoSpeedChannel
+        : Run switch
+        {
+            RunStage.WaitingForStop => "Stop the car to start",
+            RunStage.Ready => "Ready: drive off",
+            RunStage.Timing => "Timing…",
+            _ => null,
+        };
+
+    private RunStage Run
+    {
+        get => _run;
+        set
+        {
+            _run = value;
+            OnPropertyChanged(nameof(PerformanceStatus));
+        }
+    }
+
+    private static string Seconds(TimeSpan span) => NumberFormat.Format(span.TotalSeconds, 1);
+
     public string SearchText
     {
         get => _searchText;
@@ -251,6 +403,86 @@ public class MainWindowViewModel : INotifyPropertyChanged
     }
 
     public IReadOnlyList<GaugeViewModel> Gauges { get; } = GaugeViewModel.CreateCluster();
+
+    /// <summary>The band's gear cell (system 8): GEAR, in both the MS43X001 and the stock definitions.</summary>
+    public ReadoutViewModel GearReadout { get; } = new("Gear", string.Empty, 0, "GEAR");
+
+    /// <summary>The band's speed: VS (MS43X001) or VEHICLESPEED (stock definitions), whole km/h.</summary>
+    public ReadoutViewModel SpeedReadout { get; } = new("Vehicle Speed", "km/h", 0, "VS", "VEHICLESPEED");
+
+    /// <summary>The engaged gear, 1 to 5; null in neutral, with the clutch in, or without a value (system 7.2: no slot lit).</summary>
+    public int? Gear => GearReadout.Value is double gear && double.IsFinite(gear) && Math.Round(gear) is >= 1 and <= 5 ? (int)Math.Round(gear) : null;
+
+    /// <summary>"4", or "n/a" when no gear is engaged or known.</summary>
+    public string GearText => Gear?.ToString(CultureInfo.InvariantCulture) ?? "n/a";
+
+    public double? VehicleSpeed => SpeedReadout.Value;
+
+    /// <summary>The rpm readout's caption (system 7.2): the open bin's limiter, or how to get one.</summary>
+    public string RevLimitCaption => Gauges[0].RedFrom is double limit
+        ? $"Rev limit {NumberFormat.Format(limit, 0)} rpm, read from the open bin"
+        : "Rev limit: open a bin to read it";
+
+    public bool HasRevLimit => Gauges[0].RedFrom is not null;
+
+    /// <summary>Tiles or dials in the band; everything else on the screen stays as it is (system 8).</summary>
+    public ReadoutsMode Readouts
+    {
+        get => _readouts;
+        set
+        {
+            if (SetField(ref _readouts, value))
+            {
+                OnPropertyChanged(nameof(ShowsTiles));
+                OnPropertyChanged(nameof(ShowsDials));
+            }
+        }
+    }
+
+    public bool ShowsTiles => Readouts == ReadoutsMode.Tiles;
+
+    public bool ShowsDials => Readouts == ReadoutsMode.Dials;
+
+    /// <summary>Where new, automatically named logs go (Settings). A change renames the next log while not logging.</summary>
+    public string LogFolder
+    {
+        get => _logFolder;
+        set
+        {
+            if (!string.IsNullOrWhiteSpace(value) && SetField(ref _logFolder, value) && !IsConnected)
+            {
+                CsvPath = NextCsvPath;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The next log's path, "{LogFolder}\ms43-20261019-2225xx.csv" from the clock; it never names a file that exists, so
+    /// a second log in the same second becomes "-2", "-3" and so on.
+    /// </summary>
+    public string NextCsvPath
+    {
+        get
+        {
+            var name = "ms43-" + _time.GetLocalNow().ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+            var path = Path.Combine(LogFolder, name + ".csv");
+            for (var n = 2; File.Exists(path); n++)
+            {
+                path = Path.Combine(LogFolder, $"{name}-{n.ToString(CultureInfo.InvariantCulture)}.csv");
+            }
+
+            return path;
+        }
+    }
+
+    /// <summary>Creates the log folder when it is missing and returns <see cref="NextCsvPath"/>.</summary>
+    /// <summary>The Live banner's sentence (system 7.2), or null when there is nothing to report.</summary>
+    public string Banner => _banner?.Text;
+
+    public bool HasBanner => _banner is not null;
+
+    /// <summary>The banner's second line: how old the frozen values are.</summary>
+    public string BannerDetail { get => _bannerDetail; private set => SetField(ref _bannerDetail, value); }
 
     /// <summary>Puts the rev counter's red zone at the open tune's limiter, or removes it.</summary>
     public void SetRedline(double? rpm) => Gauges[0].RedFrom = rpm;
@@ -622,12 +854,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     private void UpdateSampleRate()
     {
-        var stats = _logger?.Rate;
-
-        SamplesPerSecond = stats?.SamplesPerSecond ?? 0;
-        RateText = stats is null
-            ? "No samples yet"
-            : string.Format(CultureInfo.InvariantCulture, "{0:0} samples/s, {1:0}–{2:0} ms", stats.SamplesPerSecond, stats.MinMs, stats.MaxMs);
+        ShowRate(_logger?.Rate);
     }
 
     private void ResetRate()
@@ -694,6 +921,9 @@ public class DecodedValueViewModel : INotifyPropertyChanged
 
     public string Id { get; set; }
 
+    public string Title { get; set; }
+    public string Units { get; set; } = string.Empty;
+
     public SampleHistory History { get; } = new();
 
     /// <summary>Changes with every new sample so the sparkline redraws.</summary>
@@ -712,9 +942,6 @@ public class DecodedValueViewModel : INotifyPropertyChanged
         History.Add(value);
         HistoryVersion++;
     }
-
-    public string Title { get; set; }
-    public string Units { get; set; } = string.Empty;
     public IBrush AccentBrush { get; set; } = new SolidColorBrush(Color.Parse("#00e5ff"));
 
     public bool IsPinned
