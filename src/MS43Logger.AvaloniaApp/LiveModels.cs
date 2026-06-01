@@ -135,9 +135,6 @@ public sealed class GaugeViewModel : ReadoutViewModel
 
     public int Decimals { get; }
 
-    /// <summary>ADX channel IDs this dial can show, first match wins (MS43X001 names, then stock names).</summary>
-    public IReadOnlyList<string> Candidates { get; }
-
     public string? ChannelId
     {
         get => _channelId;
