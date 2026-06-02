@@ -97,11 +97,11 @@ public sealed class TuneViewModel : ViewModelBase
 
     public bool HasDocument => Document is not null;
 
-    public string PlateFile { get => _plateFile; private set => SetField(ref _plateFile, value); }
+    public string PlateFile { get => _plateFile; private set => SetPlate(ref _plateFile, value); }
 
-    public string? PlateFirmware { get => _plateFirmware; private set => SetField(ref _plateFirmware, value); }
+    public string? PlateFirmware { get => _plateFirmware; private set => SetPlate(ref _plateFirmware, value); }
 
-    public string? PlateXdf { get => _plateXdf; private set => SetField(ref _plateXdf, value); }
+    public string? PlateXdf { get => _plateXdf; private set => SetPlate(ref _plateXdf, value); }
 
     /// <summary>The file block's tooltip: the bin name, then the firmware and XDF line, which the header hides when it is short.</summary>
     public string? PlateTip => HasDocument ? $"{PlateFile}\nFirmware {PlateFirmware} · XDF {PlateXdf}" : null;
@@ -635,73 +635,130 @@ public sealed class TuneViewModel : ViewModelBase
 
     private void BuildFacts()
     {
-        var facts = new List<Fact>();
-        LegendMin = LegendMax = string.Empty;
+        var limits = new List<Fact>();
+        var details = new List<Fact>();
+        ScaleCaption = null;
+        SurfaceNote = null;
+        SetScaleLabels(null, null, null);
         string Hex(long? address) => address is long a ? "0x" + a.ToString("X5", System.Globalization.CultureInfo.InvariantCulture) : "none";
         string Bits(XdfData data) => $"{data.ElementBits} bit{(data.Signed ? ", signed" : string.Empty)}";
-        string Axis(AxisValues axis, int count) =>
-            string.Join(", ", new[] { axis.Name, axis.Units, $"{count} points" }.Where(part => !string.IsNullOrWhiteSpace(part)));
 
         switch (SelectedItem)
         {
-            case XdfTable table when Editor is { } editor && Catalog is { } catalog:
+            case XdfTable table when Editor is { } editor && Catalog is { } catalog && Document is { } document:
                 var values = editor.Values;
-                facts.Add(new Fact("Address", Hex(table.Z.Data.Address)));
-                facts.Add(new Fact("Size", $"{values.Rows} × {values.Cols}, {Bits(table.Z.Data)}"));
-                if (table.Z.Units.Length > 0)
+                var z = table.Z;
+                AddLimits(limits, EditLimits.For(document.Reader.Codec, z.Math, z.Data, z.Min, z.Max), editor.Units, z.DecimalPlaces);
+                if (editor.Selection is not null)
                 {
-                    facts.Add(new Fact("Units", table.Z.Units));
+                    var (row, col) = editor.ActiveCell;
+                    var position = editor.Position(row, col);
+                    limits.Add(position.Length == 0
+                        ? new Fact("Active cell", editor.CellText(row, col))
+                        : new Fact("Active cell", position, editor.CellText(row, col)));
                 }
 
-                facts.Add(new Fact("Scaling", table.Z.Math.Equation));
-                if (values.Rows > 1)
+                details.Add(new Fact("Address", Hex(z.Data.Address)));
+                details.Add(new Fact("Size", $"{values.Rows} × {values.Cols}, {Bits(z.Data)}"));
+                if (editor.Units.Length > 0)
                 {
-                    facts.Add(new Fact("Rows", Axis(values.Y, values.Rows)));
+                    details.Add(new Fact("Units", editor.Units));
+                }
+
+                details.Add(new Fact("Scaling", z.Math.Equation, TextIsId: true));
+                // An axis's rows are its numbered breakpoints, not an axis of their own (system 5.13).
+                if (values.Rows > 1 && !editor.NumberRows)
+                {
+                    details.Add(Axis("Rows", values.Y, values.Rows));
                 }
 
                 if (values.Cols > 1)
                 {
-                    facts.Add(new Fact("Columns", Axis(values.X, values.Cols)));
+                    details.Add(Axis("Columns", values.X, values.Cols));
                 }
 
-                if (catalog.Kind(table) == ItemKind.Axis)
-                {
-                    var users = catalog.AxisUsers(table);
-                    facts.Add(new Fact("Used by", users.Count == 0 ? "no table in this XDF" : string.Join(", ", users.Take(4).Select(user => user.Title)) + (users.Count > 4 ? $" and {users.Count - 4} more" : string.Empty)));
-                }
-
-                if (!table.Z.Data.IsSupported)
-                {
-                    facts.Add(new Fact("Read-only", table.Z.Data.UnsupportedReason ?? string.Empty));
-                }
-
-                var finite = values.Physical.Cast<double>().Where(double.IsFinite).ToList();
-                if (finite.Count > 0)
-                {
-                    var units = table.Z.Units.Length > 0 ? " " + table.Z.Units : string.Empty;
-                    LegendMin = ValueCodec.Format(finite.Min(), 0, table.Z.DecimalPlaces, null, 16).Replace('-', '−') + units;
-                    LegendMax = ValueCodec.Format(finite.Max(), 0, table.Z.DecimalPlaces, null, 16).Replace('-', '−') + units;
-                }
+                DescribeScale(editor);
 
                 break;
             case XdfConstant constant when Value is { } value:
-                facts.Add(new Fact("Address", Hex(constant.Data.Address)));
-                facts.Add(new Fact("Size", Bits(constant.Data)));
-                facts.Add(new Fact("Raw", $"{value.Current.Raw} (0x{value.Current.Raw:X})"));
-                facts.Add(new Fact("Scaling", constant.Math.Equation));
-                if (constant.RangeLow is not null || constant.RangeHigh is not null)
+                var raw = $"raw {value.Current.Raw} (0x{Masked(value.Current.Raw, constant.Data):X})";
+                if (value.Choices is { } choices)
                 {
-                    facts.Add(new Fact("Range", $"{constant.RangeLow?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "…"} to {constant.RangeHigh?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "…"}"));
+                    // A switch (system 5.13): its choices come from the XDF description, its range in words.
+                    limits.Add(new Fact("Choices", $"{choices.Count}, from the XDF description"));
+                    if (SwitchRange(value.Limits) is { } range)
+                    {
+                        limits.Add(new Fact("XDF range", range));
+                    }
+
+                    limits.Add(new Fact("Value", value.SelectedChoice?.Label ?? $"{value.Current.Display}, not one of the choices", raw));
+                }
+                else
+                {
+                    AddLimits(limits, value.Limits, value.Units, constant.DecimalPlaces);
+                    limits.Add(new Fact("Value", WithUnits(value.Current.Display, value.Units), raw));
                 }
 
+                details.Add(new Fact("Address", Hex(constant.Data.Address)));
+                details.Add(new Fact("Size", Bits(constant.Data)));
+                if (value.Units.Length > 0)
+                {
+                    details.Add(new Fact("Units", value.Units));
+                }
+
+                details.Add(new Fact("Scaling", constant.Math.Equation, TextIsId: true));
                 break;
             case XdfFlag flag:
-                facts.Add(new Fact("Address", Hex(flag.Data.Address)));
-                facts.Add(new Fact("Bit mask", "0x" + flag.Mask.ToString("X2", System.Globalization.CultureInfo.InvariantCulture)));
+                details.Add(new Fact("Address", Hex(flag.Data.Address)));
+                details.Add(new Fact("Size", Bits(flag.Data)));
+                details.Add(new Fact("Bit mask", "0x" + flag.Mask.ToString("X2", System.Globalization.CultureInfo.InvariantCulture)));
                 break;
         }
 
-        Facts = facts;
+        LimitFacts = limits;
+        DetailFacts = details;
+    }
+
+    /// <summary>The colour scale's labels and caption and the surface's note, from the editor's colour range (system 2.2).</summary>
+    private void DescribeScale(TableEditorViewModel editor)
+    {
+        var values = editor.Values;
+        var z = values.Table.Z;
+        var range = editor.ColourRange;
+        var hatched = range.Hatched;
+        string Number(double value) => ValueCodec.Format(value, 0, z.DecimalPlaces, null, 16);
+        string Cell(int row, int col) => ValueCodec.Format(values.Physical[row, col], values.Raw[row, col], z.DecimalPlaces, z.OutputType, z.Data.ElementBits);
+        var limits = string.Join(" and ", hatched.OrderBy(cell => cell).Select(cell => Cell(cell.Row, cell.Col)).Distinct());
+        var hatchNote = hatched.Count > 0 ? $" Hatched cells are at the storage limit ({limits})." : string.Empty;
+        var working = Enumerable.Range(0, values.Rows).SelectMany(r => Enumerable.Range(0, values.Cols).Select(c => (Row: r, Col: c)))
+            .Where(cell => !hatched.Contains(cell) && double.IsFinite(values.Physical[cell.Row, cell.Col])).ToList();
+        if (working.Count == 0)
+        {
+            return;
+        }
+
+        if (range.IsConstant)
+        {
+            var value = WithUnits(Cell(working[0].Row, working[0].Col), editor.Units);
+            ScaleCaption = hatched.Count == 0 ? $"All {working.Count} cells are {value}" : $"All {working.Count} working cells are {value}.{hatchNote}";
+            SetScaleLabels(Number(range.Min), null, Number(range.Max));
+        }
+        else
+        {
+            ScaleCaption = $"Colour: {WithUnits($"{Number(range.Min)} to {Number(range.Max)}", editor.Units)}.{hatchNote}";
+            SetScaleLabels(Number(range.Min), Number((range.Min + range.Max) / 2), Number(range.Max));
+        }
+
+        if (ShowsSurface && hatched.Count > 0)
+        {
+            var rows = Enumerable.Range(0, values.Rows).Where(r => Enumerable.Range(0, values.Cols).All(c => hatched.Contains((r, c)))).ToList();
+            var onlyRows = hatched.All(cell => rows.Contains(cell.Row));
+            var units = values.Y.Units.Length > 0 ? " " + values.Y.Units : string.Empty;
+            var labels = rows.Select(editor.RowLabel).ToList();
+            SurfaceNote = !onlyRows ? $"{hatched.Count} cells at the storage limit are not drawn."
+                : rows.Count == 1 ? $"The {labels[0]}{units} row (storage limit) is not drawn."
+                : $"The {string.Join(", ", labels.Take(labels.Count - 1))} and {labels[^1]}{units} rows (storage limit) are not drawn.";
+        }
     }
 
     private void SetScaleLabels(string? min, string? mid, string? max)
@@ -755,6 +812,12 @@ public sealed class TuneViewModel : ViewModelBase
     private static string WithUnits(string text, string units) => units.Length > 0 && units != "-" ? $"{text} {units}" : text;
 
     private void RebuildRail()
+    {
+        FillRail();
+        OnPropertyChanged(nameof(NoMatchText));
+    }
+
+    private void FillRail()
     {
         Rail.Clear();
         if (Catalog is not XdfCatalog catalog || Document is not CalibrationDocument document)
@@ -822,6 +885,14 @@ public sealed class TuneViewModel : ViewModelBase
                     Rail.Add(Entry(item, true));
                 }
             }
+        }
+    }
+
+    private void SetPlate<T>(ref T field, T value, [System.Runtime.CompilerServices.CallerMemberName] string? name = null)
+    {
+        if (SetField(ref field, value, name))
+        {
+            OnPropertyChanged(nameof(PlateTip));
         }
     }
 }
