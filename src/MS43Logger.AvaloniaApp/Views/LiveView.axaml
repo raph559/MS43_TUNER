@@ -2,84 +2,206 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="using:MS43Logger.AvaloniaApp"
              xmlns:controls="using:MS43Logger.AvaloniaApp.Controls"
+             xmlns:theme="using:MS43Logger.AvaloniaApp.Theme"
              x:Class="MS43Logger.AvaloniaApp.Views.LiveView"
-             x:DataType="local:MainWindowViewModel">
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-        <StackPanel MaxWidth="1180" Margin="24,26,24,28" Spacing="0">
+             x:DataType="local:MainWindowViewModel"
+             Background="{DynamicResource PaneBrush}">
+    <UserControl.Styles>
+        <!-- Body (system 8): the Pane, 24 px in; 16 below 1200 px, where the band stacks and the dials shrink. -->
+        <Style Selector="DockPanel#LiveBody">
+            <Setter Property="Margin" Value="24" />
+        </Style>
+        <Style Selector="Window.tight DockPanel#LiveBody">
+            <Setter Property="Margin" Value="16" />
+        </Style>
+        <Style Selector="Window.tight controls|ReadoutBand">
+            <Setter Property="Stacked" Value="True" />
+        </Style>
+        <Style Selector="Border.cell">
+            <Setter Property="Padding" Value="20" />
+        </Style>
+        <Style Selector="Window.tight Border.cell">
+            <Setter Property="Padding" Value="16,12" />
+        </Style>
 
-            <!-- The cluster -->
-            <ItemsControl ItemsSource="{Binding Gauges}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <UniformGrid Columns="3" />
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="local:GaugeViewModel">
-                        <controls:Gauge Height="300" Margin="9,0" IsVisible="{Binding IsAvailable}"
-                                        Title="{Binding Title}" Unit="{Binding Unit}"
-                                        Minimum="{Binding Min}" Maximum="{Binding Max}"
-                                        MajorStep="{Binding Major}" MinorStep="{Binding Minor}"
-                                        LabelDivisor="{Binding LabelDivisor}" Decimals="{Binding Decimals}"
-                                        Value="{Binding Value}" RedFrom="{Binding RedFrom}"
-                                        IsLive="{Binding $parent[UserControl].((local:MainWindowViewModel)DataContext).IsConnected}" />
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+        <!-- A cell's name: the channel's ADX title in Ink2, its id in Cascadia Ink3. -->
+        <Style Selector="TextBlock.cell-title">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="LineHeight" Value="18" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style Selector="Run.cell-id">
+            <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
 
-            <!-- Session -->
-            <WrapPanel HorizontalAlignment="Center" Margin="0,18,0,30" ItemSpacing="22" LineSpacing="10">
-                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                    <CheckBox Content="Write CSV log" IsChecked="{Binding EnableCsvLogging}" />
-                    <TextBox Text="{Binding CsvPath}" Width="380" IsEnabled="{Binding EnableCsvLogging}" Watermark="CSV output path" />
-                    <Button Content="Browse" Click="BrowseCsvButton_Click" IsEnabled="{Binding EnableCsvLogging}" />
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                    <TextBlock Classes="muted" Text="Elapsed" VerticalAlignment="Center" />
-                    <TextBlock Classes="num" Text="{Binding ElapsedTime}" VerticalAlignment="Center" />
-                </StackPanel>
-                <Button Content="Performance tests" Click="OpenPerformanceWindow_Click" VerticalAlignment="Center" />
-                <TextBlock Classes="muted" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="340"
-                           Text="If the ECU refuses the baud switch with the engine running, connect before you start it." />
-            </WrapPanel>
+        <!-- Readings (system 3.2): Data 88 rpm, Data 56 load and advance, Data 24 speed and tiles; the unit in UI Ink3. -->
+        <Style Selector="TextBlock.reading">
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+        </Style>
+        <Style Selector="TextBlock.reading Run.unit">
+            <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
+        <Style Selector="TextBlock#ReadoutRpm Run.unit">
+            <Setter Property="FontSize" Value="16" />
+        </Style>
+        <Style Selector="TextBlock.reading.tile Run.unit">
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+        <!-- A missing value (system 7.2): n/a in UI Ink3, never 0 and never a dash. -->
+        <Style Selector="TextBlock.reading.na">
+            <Setter Property="FontFamily" Value="{DynamicResource UiDisplayFont}" />
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="LineHeight" Value="26" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="ToolTip.Tip" Value="No value in the last sample." />
+        </Style>
+        <Style Selector="TextBlock.reading.small.na">
+            <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="LineHeight" Value="22" />
+        </Style>
 
-            <!-- Channels -->
-            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" Margin="0,0,0,10">
-                <TextBlock Classes="heading" Text="Channels" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="1" Classes="muted" Margin="14,0,0,0" VerticalAlignment="Center"
-                           Text="{Binding VisibleChannelCount, StringFormat='{}{0} shown'}" />
-                <TextBox Grid.Column="3" Width="300" Text="{Binding SearchText}" Watermark="Filter by name or ID" Margin="0,0,14,0" />
-                <CheckBox Grid.Column="4" Content="Pinned only" IsChecked="{Binding ShowPinnedOnly}" />
-            </Grid>
+        <!-- The rpm caption: UI 12 Ink2 with the limit in Data 12 SemiBold Ink1; Ink3 while no bin is open. -->
+        <Style Selector="TextBlock.cap">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style Selector="TextBlock.cap Run.num">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+        </Style>
+        <Style Selector="TextBlock.cap.nb">
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
 
-            <ItemsControl ItemsSource="{Binding LiveValues}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <UniformGrid Columns="2" />
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="local:DecodedValueViewModel">
-                        <Border BorderBrush="{DynamicResource BezelBrush}" BorderThickness="0,1,0,0" Padding="0,9" Margin="0,0,28,0">
-                            <Grid ColumnDefinitions="26,*,128,112" ColumnSpacing="12">
-                                <Button Classes="ghost" Content="{Binding PinGlyph}" Click="PinButton_Click" CommandParameter="{Binding}"
-                                        ToolTip.Tip="Pin to the top" VerticalAlignment="Center" Foreground="{DynamicResource Ink3Brush}" />
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Classes="num muted" Text="{Binding Id}" FontSize="11.5" />
-                                </StackPanel>
-                                <controls:Sparkline Grid.Column="2" Height="30" VerticalAlignment="Center"
-                                                    History="{Binding History}" Version="{Binding HistoryVersion}"
-                                                    IsLive="{Binding $parent[UserControl].((local:MainWindowViewModel)DataContext).IsConnected}" />
-                                <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="4">
-                                    <TextBlock Classes="num" Text="{Binding Value}" FontSize="21" VerticalAlignment="Bottom" />
-                                    <TextBlock Classes="muted" Text="{Binding Units}" VerticalAlignment="Bottom" Margin="0,0,0,3" />
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </StackPanel>
-    </ScrollViewer>
+        <!-- Dials: 220 / 184 px, 160 / 134 below 1200 px, where load and advance sit beside their names. -->
+        <Style Selector="controls|Gauge.large">
+            <Setter Property="Width" Value="220" />
+            <Setter Property="Height" Value="220" />
+        </Style>
+        <Style Selector="Window.tight controls|Gauge.large">
+            <Setter Property="Width" Value="160" />
+            <Setter Property="Height" Value="160" />
+        </Style>
+        <Style Selector="controls|Gauge.small">
+            <Setter Property="Width" Value="184" />
+            <Setter Property="Height" Value="184" />
+            <Setter Property="Margin" Value="0,8,0,-24" />
+        </Style>
+        <Style Selector="Window.tight controls|Gauge.small">
+            <Setter Property="Width" Value="134" />
+            <Setter Property="Height" Value="134" />
+            <Setter Property="Margin" Value="0,2,-15,-16" />
+        </Style>
+        <!-- The dial cells' name docks by style, so the tight step can move it beside the dial (a local value would win). -->
+        <Style Selector="DockPanel.dial > TextBlock.cell-title">
+            <Setter Property="DockPanel.Dock" Value="Top" />
+        </Style>
+        <Style Selector="Window.tight DockPanel.dial > TextBlock.cell-title">
+            <Setter Property="DockPanel.Dock" Value="Left" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="MaxWidth" Value="140" />
+        </Style>
+
+        <!-- Pinned tiles: shown at 1200 px wide and 760 px tall or more; below that the list holds the pins. -->
+        <Style Selector="Window.tight StackPanel#PinsSection, Window.short StackPanel#PinsSection">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="TextBlock.pins-head">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+        </Style>
+        <Style Selector="TextBlock.pins-head Run.num">
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
+        <Style Selector="TextBlock.tile-title">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style Selector="TextBlock.tile-id">
+            <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
+
+        <!-- Banner, note and CSV row (system 7.2, 8): the banner 16 px above what follows, 12 below 1200 px. -->
+        <Style Selector="Border#LiveBanner">
+            <Setter Property="Margin" Value="0,0,0,16" />
+        </Style>
+        <Style Selector="Window.tight Border#LiveBanner">
+            <Setter Property="Margin" Value="0,0,0,12" />
+        </Style>
+        <Style Selector="DockPanel#CsvRow">
+            <Setter Property="Margin" Value="0,0,0,20" />
+        </Style>
+        <Style Selector="Window.tight DockPanel#CsvRow">
+            <Setter Property="Margin" Value="0,0,0,16" />
+        </Style>
+        <!-- The path shows its end ("…\ms43-20261019-2225.csv") until the field is being edited. -->
+        <Style Selector="TextBox#CsvPathBox /template/ TextPresenter#PART_TextPresenter">
+            <Setter Property="Opacity" Value="0" />
+        </Style>
+        <Style Selector="TextBox#CsvPathBox:focus /template/ TextPresenter#PART_TextPresenter">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="TextBlock#CsvPathShown">
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+        </Style>
+        <Style Selector="TextBlock#CsvPathShown:disabled">
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
+
+        <!-- Channels (system 5.6): the section 24 px under the band, 12 below 1200 px; two columns, one below 1200. -->
+        <Style Selector="DockPanel#ChannelsSection">
+            <Setter Property="Margin" Value="0,24,0,0" />
+        </Style>
+        <Style Selector="Window.tight DockPanel#ChannelsSection">
+            <Setter Property="Margin" Value="0,12,0,0" />
+        </Style>
+        <Style Selector="ScrollViewer#ListScroller">
+            <Setter Property="VerticalScrollBarVisibility" Value="Disabled" />
+        </Style>
+        <Style Selector="Window.tight ScrollViewer#ListScroller">
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+        </Style>
+        <Style Selector="Window.tight controls|ListColumns">
+            <Setter Property="Stacked" Value="True" />
+        </Style>
+        <Style Selector="Window.tight Border.colhead.second">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <!-- Rows: 32 px and a hairline; the list's own selection look is off, a row is a reading, not a choice. -->
+        <!-- The value: Data 16 SemiBold; a missing one reads n/a in UI 13 Ink3 with why (system 7.2). -->
+    </UserControl.Styles>
+
+    <DockPanel Name="LiveBody" Classes.stale="{Binding IsStale}">
+
+        <!-- What went wrong and the way out (system 7.2); "Show details" opens the connection log. -->
+
+        <!-- The baud-rate advice still helps while not connected (system 7.2). -->
+
+        <!-- The CSV log, set before connecting; while logging its facts live in the status bar (system 8). -->
+
+        <!-- The readout band (system 8): Tiles or Dials for rpm, load and advance; gear and speed are the same in both. -->
+
+        <!-- Pinned tiles (system 8), the pins in title order -->
+        <!-- The pins decide whether there are tiles; the window's size whether they show (a style cannot beat a binding). -->
+
+        <!-- Channels (system 5.6): Pinned on the left and Not pinned on the right, each scrolling on its own. -->
+    </DockPanel>
 </UserControl>

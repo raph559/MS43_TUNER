@@ -1,5 +1,8 @@
+using System.ComponentModel;
 using System.Linq;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Documents;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
@@ -32,6 +35,20 @@ public partial class MainWindow : Window
 
         Closing += OnClosing;
         AddHandler(KeyDownEvent, OnShortcut, RoutingStrategies.Tunnel);
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == ClientSizeProperty)
+        {
+            // Layout steps of system 8: below 1280 px the header compacts, below 1200 px lists go to one column.
+            Classes.Set("compact", ClientSize.Width < 1280);
+            Classes.Set("tight", ClientSize.Width < 1200);
+
+            // Below 760 px of height Live's pinned tiles give their room to the list (system 8).
+            Classes.Set("short", ClientSize.Height < 760);
+        }
     }
 
     private ShellViewModel Shell => (ShellViewModel)DataContext!;
@@ -115,7 +132,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private async System.Threading.Tasks.Task SaveAsAsync()
+    public async System.Threading.Tasks.Task SaveAsAsync()
     {
         if (Shell.Tune.Document is not { } document)
         {
@@ -136,9 +153,17 @@ public partial class MainWindow : Window
         }
     }
 
-    private void RefreshButton_Click(object? sender, RoutedEventArgs e) => Shell.Live.RefreshPorts();
-
-    private async void ConnectButton_Click(object? sender, RoutedEventArgs e) => await Shell.Live.ToggleConnectionAsync();
+    private async System.Threading.Tasks.Task SaveAsync()
+    {
+        if (Shell.Tune.Document?.Path is null)
+        {
+            await SaveAsAsync();
+        }
+        else
+        {
+            Shell.Tune.Save();
+        }
+    }
 
     public async System.Threading.Tasks.Task OpenBinAsync()
     {
@@ -148,4 +173,14 @@ public partial class MainWindow : Window
             await view.OpenBinAsync();
         }
     }
+
+    private async void Save_Click(object? sender, RoutedEventArgs e) => await SaveAsync();
+
+    private async void SaveAs_Click(object? sender, RoutedEventArgs e) => await SaveAsAsync();
+
+    private async void OpenBin_Click(object? sender, RoutedEventArgs e) => await OpenBinAsync();
+
+    private void RefreshButton_Click(object? sender, RoutedEventArgs e) => Shell.Live.RefreshPorts();
+
+    private async void ConnectButton_Click(object? sender, RoutedEventArgs e) => await Shell.Live.ToggleConnectionAsync();
 }

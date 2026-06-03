@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using MS43Logger.AvaloniaApp.Shell;
 
 namespace MS43Logger.AvaloniaApp.Views;
 
