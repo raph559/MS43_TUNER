@@ -105,7 +105,6 @@ public sealed class GaugeViewModel : ReadoutViewModel
 {
     private double? _value;
     private double? _redFrom;
-    private string? _channelId;
 
     public GaugeViewModel(string title, string unit, double min, double max, double major, double minor, double labelDivisor, int decimals, params string[] candidates)
         : base(title, unit, decimals, candidates)
@@ -116,10 +115,6 @@ public sealed class GaugeViewModel : ReadoutViewModel
         Minor = minor;
         LabelDivisor = labelDivisor;
     }
-
-    public string Title { get; }
-
-    public string Unit { get; }
 
     public double Min { get; }
 
@@ -132,22 +127,6 @@ public sealed class GaugeViewModel : ReadoutViewModel
 
     /// <summary>Dial labels show value / divisor (the rev counter reads in thousands, "× 1000 rpm").</summary>
     public double LabelDivisor { get; }
-
-    public int Decimals { get; }
-
-    public string? ChannelId
-    {
-        get => _channelId;
-        set
-        {
-            if (SetField(ref _channelId, value))
-            {
-                OnPropertyChanged(nameof(IsAvailable));
-            }
-        }
-    }
-
-    public bool IsAvailable => ChannelId is not null;
 
     public double? Value
     {
@@ -188,28 +167,57 @@ public sealed class GaugeViewModel : ReadoutViewModel
     }
 }
 
-/// <summary>The last few seconds of one channel, for its sparkline.</summary>
+/// <summary>
+/// One channel's samples over the trend window (system 5.6), by the time each arrived, for its sparkline. It holds up to
+/// 64 samples a second of the window; older ones drop out first.
+/// </summary>
 public sealed class SampleHistory
 {
-    public const int Capacity = 380;   // about 10 s at 38 samples/s
+    public const int PerSecond = 64;
 
-    private readonly double[] _values = new double[Capacity];
+    private readonly (DateTimeOffset Time, double Value)[] _points;
     private int _start;
+
+    public SampleHistory(TimeSpan window)
+    {
+        Span = window;
+        _points = new (DateTimeOffset, double)[Math.Max(2, (int)Math.Ceiling(window.TotalSeconds * PerSecond))];
+    }
+
+    /// <summary>How far back the window reaches: the Trend length setting.</summary>
+    public TimeSpan Span { get; }
 
     public int Count { get; private set; }
 
-    public void Add(double value)
+    /// <summary>The newest sample's time, the right end of the sparkline.</summary>
+    public DateTimeOffset? Latest => Count == 0 ? null : _points[(_start + Count - 1) % _points.Length].Time;
+
+    public void Add(DateTimeOffset time, double value)
     {
-        if (Count < Capacity)
+        if (Count < _points.Length)
         {
-            _values[(_start + Count++) % Capacity] = value;
+            _points[(_start + Count++) % _points.Length] = (time, value);
         }
         else
         {
-            _values[_start] = value;
-            _start = (_start + 1) % Capacity;
+            _points[_start] = (time, value);
+            _start = (_start + 1) % _points.Length;
         }
     }
 
-    public IEnumerable<double> Values => Enumerable.Range(0, Count).Select(i => _values[(_start + i) % Capacity]);
+    public void Clear()
+    {
+        _start = 0;
+        Count = 0;
+    }
+
+    /// <summary>Every sample held, oldest first.</summary>
+    public IEnumerable<(DateTimeOffset Time, double Value)> Points => Enumerable.Range(0, Count).Select(i => _points[(_start + i) % _points.Length]);
+
+    /// <summary>The samples from <paramref name="now"/> less the window up to <paramref name="now"/>, oldest first.</summary>
+    public IReadOnlyList<(DateTimeOffset Time, double Value)> Window(DateTimeOffset now)
+    {
+        var from = now - Span;
+        return Points.Where(point => point.Time >= from && point.Time <= now).ToList();
+    }
 }

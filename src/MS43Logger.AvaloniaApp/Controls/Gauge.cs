@@ -18,7 +18,6 @@ namespace MS43Logger.AvaloniaApp.Controls;
 /// </summary>
 public sealed class Gauge : Control
 {
-    public static readonly StyledProperty<string> TitleProperty = AvaloniaProperty.Register<Gauge, string>(nameof(Title), string.Empty);
     public static readonly StyledProperty<string> UnitProperty = AvaloniaProperty.Register<Gauge, string>(nameof(Unit), string.Empty);
     public static readonly StyledProperty<string?> ScaleNoteProperty = AvaloniaProperty.Register<Gauge, string?>(nameof(ScaleNote));
     public static readonly StyledProperty<double> MinimumProperty = AvaloniaProperty.Register<Gauge, double>(nameof(Minimum));
@@ -46,8 +45,6 @@ public sealed class Gauge : Control
     {
         ActualThemeVariantChanged += (_, _) => InvalidateVisual();
     }
-
-    public string Title { get => GetValue(TitleProperty); set => SetValue(TitleProperty, value); }
 
     /// <summary>The reading's unit, under the numerals ("rpm").</summary>
     public string Unit { get => GetValue(UnitProperty); set => SetValue(UnitProperty, value); }
