@@ -1,7 +1,10 @@
 using System.IO;
+using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.Platform.Storage;
+using Avalonia.VisualTree;
 
 namespace MS43Logger.AvaloniaApp.Views;
 
@@ -41,6 +44,31 @@ public partial class LiveView : UserControl
         if (file?.Path is { IsAbsoluteUri: true } path)
         {
             ViewModel.CsvPath = path.LocalPath;
+        }
+    }
+
+    // The banner's way out: another file for a CSV that cannot be written, or the port list again.
+    private void BannerAction_Click(object? sender, RoutedEventArgs e)
+    {
+        switch (ViewModel?.BannerAction)
+        {
+            case LiveAction.Browse:
+                BrowseCsvButton_Click(sender, e);
+                break;
+            case LiveAction.RescanPorts:
+                ViewModel.RefreshPorts();
+                break;
+        }
+    }
+
+    private void ShowDetails_Click(object? sender, RoutedEventArgs e) => ViewModel?.ShowConnectionLog();
+
+    private void ClearFilter_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is { } live)
+        {
+            live.SearchText = string.Empty;
+            this.FindControl<TextBox>("ChannelFilter")?.Focus();
         }
     }
 
