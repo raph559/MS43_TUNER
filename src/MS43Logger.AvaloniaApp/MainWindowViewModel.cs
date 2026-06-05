@@ -883,12 +883,18 @@ public class MainWindowViewModel : INotifyPropertyChanged
             Dispatcher.UIThread.Post(() => ShowSample(sample));
         };
         logger.Status += (_, status) => Dispatcher.UIThread.Post(() =>
-            StatusText = status == "Resumed" ? BuildConnectedStatus(channels.Count) : status);
+        {
+            StatusText = status == "Resumed" ? BuildConnectedStatus(channels.Count) : status;
+            if (status == "Resumed")
+            {
+                ShowResumed();
+            }
+        });
+        logger.Retrying += (_, timeouts) => Dispatcher.UIThread.Post(() => ShowRetrying(timeouts));
         logger.Failed += (_, error) => Dispatcher.UIThread.Post(() =>
         {
             StatusText = $"Polling error: {error.Message}";
-            ConnectionFailed?.Invoke(this, "Polling error: " + error);
-            Disconnect();
+            ReportLoggingStopped(error);
         });
 
         return logger.RunAsync(_session, CurrentDefinition, channels, token);
@@ -965,42 +971,8 @@ public class MainWindowViewModel : INotifyPropertyChanged
         return $"Connected to {SelectedPort}. Logging {channelCount} channels from {SelectedVariant.ToUpperInvariant()}.";
     }
 
-    public void Disconnect()
-    {
-        _pollingCts?.Cancel();
-        _pollingCts = null;
-
-        _uiTimer?.Stop();
-        _uiTimer = null;
-
-        _sessionStopwatch.Stop();
-        foreach (var gauge in Gauges)
-        {
-            gauge.Value = null;
-        }
-
-        ElapsedTime = "00:00:00";
-        ResetRate();
-        IsConnected = false;
-
-        if (_session is not null)
-        {
-            try
-            {
-                _session.Disconnect();
-            }
-            catch
-            {
-            }
-
-            _session.Dispose();
-            _session = null;
-        }
-
-        _csvWriter?.Dispose();
-        _csvWriter = null;
-        StatusText = "Disconnected.";
-    }
+    /// <summary>Disconnects; every value goes back to n/a and the next log gets a new name.</summary>
+    public void Disconnect() => Disconnect(keepValues: false);
 
     // After a failure the values stay, frozen, under the banner that explains them.
     private void Disconnect(bool keepValues)

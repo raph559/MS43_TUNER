@@ -103,7 +103,6 @@ public class ReadoutViewModel : ViewModelBase
 /// <summary>One readout of the band with a scale: a bar in Tiles, a dial in Dials (system 8).</summary>
 public sealed class GaugeViewModel : ReadoutViewModel
 {
-    private double? _value;
     private double? _redFrom;
 
     public GaugeViewModel(string title, string unit, double min, double max, double major, double minor, double labelDivisor, int decimals, params string[] candidates)
@@ -127,12 +126,6 @@ public sealed class GaugeViewModel : ReadoutViewModel
 
     /// <summary>Dial labels show value / divisor (the rev counter reads in thousands, "× 1000 rpm").</summary>
     public double LabelDivisor { get; }
-
-    public double? Value
-    {
-        get => _value;
-        set => SetField(ref _value, value);
-    }
 
     /// <summary>The dial's note under its top label, "× 1000 rpm"; null when the labels are plain values.</summary>
     public string? ScaleNote { get; init; }
