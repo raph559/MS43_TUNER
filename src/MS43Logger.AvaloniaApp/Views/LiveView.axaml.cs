@@ -13,6 +13,21 @@ public partial class LiveView : UserControl
     public LiveView()
     {
         InitializeComponent();
+
+        // Avalonia skips layout inside a hidden subtree and keeps its ancestors' measures, so a tile reading that changed
+        // while the window was too small for the tiles would come back arranged at its old width. Showing the section
+        // again lays out everything in it afresh.
+        var pins = this.FindControl<StackPanel>("PinsSection")!;
+        pins.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == IsVisibleProperty && e.NewValue is true)
+            {
+                foreach (var part in pins.GetVisualDescendants().OfType<Layoutable>())
+                {
+                    part.InvalidateMeasure();
+                }
+            }
+        };
     }
 
     private MainWindowViewModel? ViewModel => DataContext as MainWindowViewModel;
