@@ -18,5 +18,4 @@ public static class Converters
         range is null ? string.Empty : CompareViewModel.RangeText(range));
 
     public static readonly IValueConverter Bold = new FuncValueConverter<bool, FontWeight>(bold => bold ? FontWeight.SemiBold : FontWeight.Normal);
-    public static readonly IValueConverter ShapeTitle = new FuncValueConverter<bool, string>(surface => surface ? "Surface" : "Curve");
 }

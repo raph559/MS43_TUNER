@@ -7,17 +7,181 @@
              x:DataType="local:TuneViewModel">
     <UserControl.Styles>
         <!-- Rail (system 5.6, 8): 256 px Frame, 224 px below 1280. -->
+        <Style Selector="Border#RailHost">
+            <Setter Property="Width" Value="256" />
+        </Style>
+        <Style Selector="Window.compact Border#RailHost">
+            <Setter Property="Width" Value="224" />
+        </Style>
         <!-- Rows draw their own state from the rail's data: the list's selection only lasts until the rail rebuilds. -->
+        <Style Selector="ListBox#RailList ListBoxItem">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="ListBox#RailList ListBoxItem:selected">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="FontWeight" Value="Normal" />
+        </Style>
+        <Style Selector="ListBox#RailList ListBoxItem:selected /template/ Border#PART_Bar">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Border.row">
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="CornerRadius" Value="8" />
+        </Style>
+        <Style Selector="Border.row.indented">
+            <Setter Property="Padding" Value="28,0,8,0" />
+        </Style>
+        <Style Selector="Border.row.current">
+            <Setter Property="Background" Value="{DynamicResource FillBrush}" />
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource Ink1Brush}" />
+        </Style>
+        <Style Selector="Border.row.current TextBlock.id">
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="Border.row.open">
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource Ink1Brush}" />
+        </Style>
+        <Style Selector="Border.currentbar">
+            <Setter Property="Margin" Value="-8,6,0,6" />
+        </Style>
+        <Style Selector="Border.currentbar.indented">
+            <Setter Property="Margin" Value="-28,6,0,6" />
+        </Style>
         <!-- A category's count is Ink3, which falls under 4.5:1 on the pressed overlay (3.79 Night, 4.20 Day): it rises to Ink2. -->
+        <Style Selector="TextBlock.count">
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
+        <Style Selector="ListBox#RailList ListBoxItem:pressed TextBlock.count">
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+        </Style>
+        <Style Selector="TextBlock.id">
+            <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+        <Style Selector="TextBlock.group">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+            <Setter Property="Margin" Value="8,8,8,4" />
+            <Setter Property="VerticalAlignment" Value="Bottom" />
+        </Style>
 
         <!-- Pane (system 8): padding 24, 16 below 1280; the toolbar and the grid 24 below what is above them, 16 below 1280. -->
+        <Style Selector="Border#PaneHost">
+            <Setter Property="Padding" Value="24" />
+        </Style>
+        <Style Selector="Window.compact Border#PaneHost">
+            <Setter Property="Padding" Value="16" />
+        </Style>
+        <Style Selector="WrapPanel#ToolBar, controls|TableLayout#TableArea">
+            <Setter Property="Margin" Value="0,24,0,0" />
+        </Style>
+        <Style Selector="Window.compact WrapPanel#ToolBar, Window.compact controls|TableLayout#TableArea">
+            <Setter Property="Margin" Value="0,16,0,0" />
+        </Style>
+        <Style Selector="Border.banner">
+            <Setter Property="Margin" Value="0,16,0,0" />
+        </Style>
         <!-- A one-column table sits centred with its key line (system 8, owner); a map keeps the cells' left edge. -->
+        <Style Selector="controls|MapGrid#MapGrid">
+            <Setter Property="HorizontalAlignment" Value="Left" />
+        </Style>
+        <Style Selector="controls|TableLayout#TableArea.centred controls|MapGrid#MapGrid">
+            <Setter Property="HorizontalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="StackPanel#KeyArea">
+            <Setter Property="Margin" Value="50,12,0,0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="controls|TableLayout#TableArea.centred StackPanel#KeyArea">
+            <Setter Property="Margin" Value="0,12,0,0" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+        </Style>
         <!-- A value's reading: the unit in UI 13 Ink3 on the Data 56 baseline (system 5.13). -->
+        <Style Selector="TextBlock#ValueReading Run.unit">
+            <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
+        <Style Selector="DockPanel#LimitsLegendLine TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+        </Style>
         <!-- A switch's choices (system 5.13): an Edge-bordered list; the chosen row has the selected-row look and a check. -->
+        <Style Selector="ListBox#ChoiceList">
+            <Setter Property="Background" Value="{DynamicResource PaneBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource EdgeBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="6" />
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+        </Style>
+        <Style Selector="ListBox#ChoiceList ListBoxItem">
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="12,0,10,0" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="ListBox#ChoiceList ListBoxItem:selected /template/ Border#PART_Bar">
+            <Setter Property="Margin" Value="0,6" />
+        </Style>
         <!-- The raw number is Ink2, Ink1 when chosen: Ink3 falls to 3.89:1 on a pressed chosen row (Day). -->
+        <Style Selector="TextBlock.choice-raw">
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="FontWeight" Value="Normal" />
+        </Style>
+        <Style Selector="ListBox#ChoiceList ListBoxItem:selected TextBlock.choice-raw">
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+        </Style>
+        <Style Selector="WrapPanel#KeyLine TextBlock, WrapPanel#ValueKeyLine TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
 
         <!-- Inspector (system 8): 312 px Frame; below 1280 an overlay from the right, opened by Details. -->
+        <Style Selector="Panel#InspectorSlot">
+            <Setter Property="Grid.Column" Value="2" />
+        </Style>
         <!-- The overlay starts under the title row (16 padding + 32 row + 8), so Details stays there to close it. -->
+        <Style Selector="Window.compact Panel#InspectorSlot">
+            <Setter Property="Grid.Column" Value="1" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="Margin" Value="0,56,0,0" />
+        </Style>
+        <Style Selector="Window.compact Border#InspectorHost">
+            <Setter Property="IsVisible" Value="{ReflectionBinding InspectorOpen}" />
+            <Setter Property="Background" Value="{DynamicResource PopupBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PopupEdgeBrush}" />
+            <Setter Property="BorderThickness" Value="1,0,0,0" />
+            <Setter Property="BoxShadow" Value="{DynamicResource PopupShadow}" />
+        </Style>
+        <Style Selector="Button#DetailsToggle">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="Window.compact Button#DetailsToggle">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+        <Style Selector="Border#InspectorHost TextBlock.h2">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="LineHeight" Value="18" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+        </Style>
+        <Style Selector="Border.rule">
+            <Setter Property="Height" Value="1" />
+            <Setter Property="Background" Value="{DynamicResource HairlineBrush}" />
+            <Setter Property="Margin" Value="-16,16" />
+        </Style>
     </UserControl.Styles>
 
     <Grid Name="TuneRoot" ColumnDefinitions="Auto,*,Auto" IsEnabled="{Binding !IsBusy}">
