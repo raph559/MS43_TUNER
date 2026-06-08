@@ -2,6 +2,7 @@ using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using MS43Logger.AvaloniaApp.Controls;
 
 namespace MS43Logger.AvaloniaApp.Views;
 
@@ -10,6 +11,25 @@ public partial class TuneView : UserControl
     public TuneView()
     {
         InitializeComponent();
+
+        // The slider asks; the value editor writes, one undo step per step, jump or released drag (system 5.14).
+        var slider = this.FindControl<ValueSlider>("ValueSlider")!;
+        slider.StepRequested += (_, steps) => ViewModel?.Value?.StepBy(steps);
+        slider.JumpRequested += (_, toHigh) => ViewModel?.Value?.JumpTo(toHigh);
+        slider.DragUpdated += (_, physical) =>
+        {
+            if (ViewModel?.Value is { } value)
+            {
+                if (!value.IsDragging)
+                {
+                    value.BeginDrag();
+                }
+
+                value.DragTo(physical);
+            }
+        };
+        slider.DragCommitted += (_, _) => ViewModel?.Value?.CommitDrag();
+        slider.DragCancelled += (_, _) => ViewModel?.Value?.CancelDrag();
     }
 
     private TuneViewModel? ViewModel => DataContext as TuneViewModel;
@@ -34,7 +54,10 @@ public partial class TuneView : UserControl
         }
     }
 
-    private async void OpenXdf_Click(object? sender, RoutedEventArgs e)
+    private async void OpenXdf_Click(object? sender, RoutedEventArgs e) => await OpenXdfAsync();
+
+    /// <summary>Asks about unsaved edits, then opens the current bin (or the last one, or one picked) with another XDF.</summary>
+    public async System.Threading.Tasks.Task OpenXdfAsync()
     {
         if (ViewModel is not { } tune || !await tune.ConfirmDiscardAsync() || await PickAsync("Open XDF", "TunerPro XDF", "*.xdf") is not { } xdf)
         {
@@ -79,32 +102,6 @@ public partial class TuneView : UserControl
 
     private void Redo_Click(object? sender, RoutedEventArgs e) => ViewModel?.Redo();
 
-    private void Save_Click(object? sender, RoutedEventArgs e) => ViewModel?.Save();
-
-    private async void SaveAs_Click(object? sender, RoutedEventArgs e) => await SaveAsAsync();
-
-    /// <summary>Asks where to save, then saves there (the edit log and .bak follow the new file).</summary>
-    public async System.Threading.Tasks.Task SaveAsAsync()
-    {
-        if (ViewModel is not { Document: { } document } tune || TopLevel.GetTopLevel(this) is not { } top)
-        {
-            return;
-        }
-
-        var file = await top.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
-        {
-            Title = "Save bin as",
-            SuggestedFileName = System.IO.Path.GetFileName(document.Path ?? "tune.bin"),
-            DefaultExtension = "bin",
-            FileTypeChoices = [new FilePickerFileType("MS43 bin") { Patterns = ["*.bin"] }],
-        });
-
-        if (file?.Path is { IsAbsoluteUri: true } path)
-        {
-            tune.Save(path.LocalPath);
-        }
-    }
-
     private void ToolValue_KeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
     {
         if (e.Key == Avalonia.Input.Key.Enter)
@@ -115,6 +112,10 @@ public partial class TuneView : UserControl
     }
 
     private void SetValue_Click(object? sender, RoutedEventArgs e) => ViewModel?.Value?.Apply();
+
+    private void StepDown_Click(object? sender, RoutedEventArgs e) => ViewModel?.Value?.StepBy(-1);
+
+    private void StepUp_Click(object? sender, RoutedEventArgs e) => ViewModel?.Value?.StepBy(1);
 
     private void ValueInput_KeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
     {
@@ -130,6 +131,43 @@ public partial class TuneView : UserControl
         if (ViewModel is { SelectedItem: { } item } tune)
         {
             tune.TogglePin(item);
+        }
+    }
+
+    private void Details_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is { } tune)
+        {
+            tune.InspectorOpen = !tune.InspectorOpen;
+        }
+    }
+
+    private void ClearSearch_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is { } tune)
+        {
+            tune.SearchText = string.Empty;
+            FocusSearch();
+        }
+    }
+
+    private async void UseAnotherXdf_Click(object? sender, RoutedEventArgs e) => await OpenXdfAsync();
+
+    // The banner's way out of what went wrong (system 7.1).
+    private async void ErrorAction_Click(object? sender, RoutedEventArgs e)
+    {
+        switch (ViewModel?.ErrorAction)
+        {
+            case TuneAction.OpenBin:
+                await OpenBinAsync();
+                break;
+            case TuneAction.OpenXdf:
+            case TuneAction.UseAnotherXdf:
+                await OpenXdfAsync();
+                break;
+            case TuneAction.SaveAs when TopLevel.GetTopLevel(this) is MainWindow window:
+                await window.SaveAsAsync();
+                break;
         }
     }
 
