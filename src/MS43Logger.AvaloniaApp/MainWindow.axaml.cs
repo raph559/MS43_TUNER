@@ -26,16 +26,38 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = shell;
 
-        shell.Live.ConnectionFailed += (_, errorLog) => new ErrorWindow(errorLog).ShowDialog(this);
+        // Show details on a Live banner opens the connection log; nothing waits for it to close.
+        shell.Live.ShowConnectionLogRequested += (_, _) =>
+            _ = Dialogs.ShowAsync(new ConnectionLogView(shell.Live.Banner, shell.Live.ConnectionLog ?? string.Empty));
+
+        // The save prompt reads the Saving settings as it opens; Esc, or another dialog taking its place, cancels.
         shell.Tune.AskToSave = async message =>
         {
-            var answer = await new ConfirmDialog(message).ShowDialog<SaveChoice?>(this);
-            return answer ?? SaveChoice.Cancel;
+            var settings = shell.Tune.Settings;
+            var answer = await Dialogs.ShowAsync(new ConfirmDialog(message, ConfirmDialog.SaveDetail(settings.KeepBackup, settings.AppendEditLog)));
+            return answer is SaveChoice choice ? choice : SaveChoice.Cancel;
         };
 
         Closing += OnClosing;
         AddHandler(KeyDownEvent, OnShortcut, RoutingStrategies.Tunnel);
+        shell.Live.PropertyChanged += OnLiveChanged;
+        ShowConnectionLine();
+        Opened += async (_, _) => await Shell.StartAsync();
     }
+
+    // Settings has no result to wait for: every choice applies as it is made. Not awaiting its lifetime also keeps
+    // the async key handler from staying open for as long as the dialog is.
+    private void OpenSettings(NavigationMethod focusWith)
+    {
+        if (!Dialogs.IsOpen)
+        {
+            _ = Dialogs.ShowAsync(new SettingsView { DataContext = new SettingsViewModel(Shell.Tune.Settings, Shell) }, focusWith);
+        }
+    }
+
+    // A gear pressed with Enter or Space has the keyboard's focus ring; one clicked with the pointer does not.
+    private void Settings_Click(object? sender, RoutedEventArgs e) =>
+        OpenSettings(sender is Control { IsFocused: true } gear && gear.Classes.Contains(":focus-visible") ? NavigationMethod.Tab : NavigationMethod.Pointer);
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
@@ -49,6 +71,37 @@ public partial class MainWindow : Window
             // Below 760 px of height Live's pinned tiles give their room to the list (system 8).
             Classes.Set("short", ClientSize.Height < 760);
         }
+    }
+
+    private void OnLiveChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainWindowViewModel.StatusParts))
+        {
+            ShowConnectionLine();
+        }
+    }
+
+    private void ShowConnectionLine()
+    {
+        if (this.FindControl<TextBlock>("ConnectionText") is not { } line)
+        {
+            return;
+        }
+
+        var inlines = new InlineCollection();
+        foreach (var part in Shell.Live.StatusParts)
+        {
+            var run = new Run(part.Text);
+            run.Classes.Set("num", part.IsNumber);
+            run.Classes.Set("id", part.IsId);
+            run.Classes.Set("now", part.IsNow);
+            inlines.Add(run);
+        }
+
+        line.Inlines = inlines;
+
+        // A long log name trims the line's end; the tooltip keeps all of it (system 8: nothing is clipped).
+        ToolTip.SetTip(line, string.Concat(Shell.Live.StatusParts.Select(part => part.Text)));
     }
 
     private ShellViewModel Shell => (ShellViewModel)DataContext!;
@@ -81,7 +134,16 @@ public partial class MainWindow : Window
 
     private async void OnShortcut(object? sender, KeyEventArgs e)
     {
-        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        // Esc closes the Tune inspector's overlay below 1280 px, as Details opened it.
+        if (e.Key == Key.Escape && e.KeyModifiers == KeyModifiers.None && !Dialogs.IsOpen && Classes.Contains("compact") && Shell.Tune.InspectorOpen)
+        {
+            Shell.Tune.InspectorOpen = false;
+            e.Handled = true;
+            return;
+        }
+
+        // Nothing acts behind an open dialog: the shortcuts belong to the screen it covers.
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control) || Dialogs.IsOpen)
         {
             return;
         }
@@ -96,30 +158,22 @@ public partial class MainWindow : Window
                 break;
             case Key.S:
                 e.Handled = true;
-                if (tune.Document?.Path is null)
-                {
-                    await SaveAsAsync();
-                }
-                else
-                {
-                    tune.Save();
-                }
-
+                await SaveAsync();
                 break;
             case Key.O:
                 e.Handled = true;
-                Shell.SelectedTab = ShellViewModel.TuneTab;
-                if (Tune is { } view)
-                {
-                    await view.OpenBinAsync();
-                }
-
+                await OpenBinAsync();
+                break;
+            case Key.OemComma:
+                e.Handled = true;
+                OpenSettings(NavigationMethod.Tab);
                 break;
             case Key.K:
+                // The search field of the tab in front (system 5.3): channels on Live, items on Tune and Compare.
                 e.Handled = true;
-                Shell.SelectedTab = ShellViewModel.TuneTab;
-                Dispatcher.UIThread.RunJobs();
-                Tune?.FocusSearch();
+                var field = Shell.IsLive ? "ChannelFilter" : Shell.IsTune ? "SearchBox" : "CompareSearchBox";
+                this.GetVisualDescendants().OfType<Avalonia.Controls.TextBox>()
+                    .FirstOrDefault(box => box.Name == field && box.IsEffectivelyVisible)?.Focus(NavigationMethod.Tab);
                 break;
             case Key.Z when !typing:
                 e.Handled = true;
@@ -179,6 +233,15 @@ public partial class MainWindow : Window
     private async void SaveAs_Click(object? sender, RoutedEventArgs e) => await SaveAsAsync();
 
     private async void OpenBin_Click(object? sender, RoutedEventArgs e) => await OpenBinAsync();
+
+    private async void UseXdf_Click(object? sender, RoutedEventArgs e)
+    {
+        Shell.SelectedTab = ShellViewModel.TuneTab;
+        if (Tune is { } view)
+        {
+            await view.OpenXdfAsync();
+        }
+    }
 
     private void RefreshButton_Click(object? sender, RoutedEventArgs e) => Shell.Live.RefreshPorts();
 
