@@ -499,5 +499,89 @@
         </Border>
 
         <!-- Inspector -->
+        <Panel Name="InspectorSlot" IsVisible="{Binding HasDocument}">
+            <Border Name="InspectorHost" Width="312" Background="{DynamicResource FrameBrush}" BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="1,0,0,0">
+                <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="16">
+                        <StackPanel IsVisible="{Binding HasLimits}">
+                            <TextBlock Classes="h2" Text="Edit limits" />
+                            <ItemsControl Name="LimitFacts" Margin="0,4,0,0" ItemsSource="{Binding LimitFacts}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="local:Fact">
+                                        <Grid Classes="fact" ColumnDefinitions="Auto,*" MinHeight="24">
+                                            <TextBlock Text="{Binding Label}" Foreground="{DynamicResource Ink2Brush}" VerticalAlignment="Center" Margin="0,0,12,0" />
+                                            <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,4">
+                                                <controls:NumberText Value="{Binding Text}" IsId="{Binding TextIsId}" Foreground="{DynamicResource Ink1Brush}" TextAlignment="Right"
+                                                                     HorizontalAlignment="Right" TextWrapping="Wrap" />
+                                                <controls:NumberText Value="{Binding Detail}" Foreground="{DynamicResource Ink2Brush}" TextAlignment="Right" HorizontalAlignment="Right"
+                                                                     TextWrapping="Wrap" IsVisible="{Binding Detail, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Border Classes="rule" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="8" IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <TextBlock Classes="h2" Text="{Binding ShapeTitle}" />
+                            <controls:Surface3D Name="Surface" Height="176" Editor="{Binding Editor}" IsVisible="{Binding ShowsSurface}"
+                                                AutomationProperties.Name="Surface; the arrow keys turn it" />
+                            <TextBlock Classes="label" Text="{Binding SurfaceHint}" TextWrapping="Wrap" IsVisible="{Binding ShowsSurface}" />
+                            <controls:CurveChart Name="Curve" Height="176" Editor="{Binding Editor}" IsVisible="{Binding ShowsCurve}" />
+                            <TextBlock Classes="label" Text="Points take the colour of their cells; the selected one is framed." TextWrapping="Wrap"
+                                       IsVisible="{Binding ShowsCurve}" />
+                            <Border Classes="rule" Margin="-16,8,-16,16" />
+                        </StackPanel>
+
+                        <!-- An axis's users (system 5.13), from the XDF's axis links. -->
+                        <StackPanel IsVisible="{Binding IsAxis}">
+                            <TextBlock Classes="h2" Text="Used by" />
+                            <ItemsControl Name="UsedByList" Margin="0,4,0,0" ItemsSource="{Binding UsedBy}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="core:XdfItem">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" MinHeight="24">
+                                            <controls:ItemGlyph Kind="{Binding Converter={x:Static local:Converters.TableKind}}" Foreground="{DynamicResource Ink2Brush}"
+                                                                VerticalAlignment="Center" />
+                                            <TextBlock Classes="id" Text="{Binding Title}" Foreground="{DynamicResource Ink1Brush}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Classes="body" Margin="0,4,0,0" Text="No table in this XDF uses this axis." TextWrapping="Wrap"
+                                       Foreground="{DynamicResource Ink2Brush}" IsVisible="{Binding HasNoUsers}" />
+                            <Border Classes="rule" />
+                        </StackPanel>
+
+                        <StackPanel IsVisible="{Binding SelectedItem, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <TextBlock Classes="h2" Text="Details" />
+                            <ItemsControl Name="DetailFacts" Margin="0,4,0,0" ItemsSource="{Binding DetailFacts}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="local:Fact">
+                                        <Grid Classes="fact" ColumnDefinitions="Auto,*" MinHeight="24">
+                                            <TextBlock Text="{Binding Label}" Foreground="{DynamicResource Ink2Brush}" VerticalAlignment="Center" Margin="0,0,12,0" />
+                                            <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,4">
+                                                <controls:NumberText Value="{Binding Text}" IsId="{Binding TextIsId}" Foreground="{DynamicResource Ink1Brush}" TextAlignment="Right"
+                                                                     HorizontalAlignment="Right" TextWrapping="Wrap" />
+                                                <controls:NumberText Value="{Binding Detail}" Foreground="{DynamicResource Ink2Brush}" TextAlignment="Right" HorizontalAlignment="Right"
+                                                                     TextWrapping="Wrap" IsVisible="{Binding Detail, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <!-- Colour scale (system 2.1, 2.2) -->
+                        <StackPanel Spacing="8" IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <Border Classes="rule" />
+                            <TextBlock Classes="h2" Text="Colour scale" />
+                            <controls:ColourScale Name="ScaleBar" MinLabel="{Binding ScaleMinLabel}" MidLabel="{Binding ScaleMidLabel}" MaxLabel="{Binding ScaleMaxLabel}" />
+                            <controls:NumberText Classes="label" Value="{Binding ScaleCaption}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Panel>
     </Grid>
 </UserControl>

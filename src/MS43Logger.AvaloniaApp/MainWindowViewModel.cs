@@ -33,7 +33,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private DispatcherTimer _uiTimer;
     private readonly Stopwatch _sessionStopwatch = new();
     private LiveLogger _logger;
-    private string _rateText = "No samples yet";
     private StreamWriter _csvWriter;
     private static readonly HashSet<string> StatusInputs = new(StringComparer.Ordinal)
     {
@@ -680,12 +679,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
-    public string RateText
-    {
-        get => _rateText;
-        set => SetField(ref _rateText, value);
-    }
-
     public bool ShowPinnedOnly
     {
         get => _showPinnedOnly;
@@ -703,8 +696,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
         get => _pinnedCount;
         set => SetField(ref _pinnedCount, value);
     }
-
-    public event EventHandler<string> ConnectionFailed;
 
     public MainWindowViewModel(TimeProvider time = null, Func<string[]> ports = null)
     {
