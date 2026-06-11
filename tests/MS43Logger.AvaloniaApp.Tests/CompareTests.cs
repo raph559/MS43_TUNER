@@ -271,9 +271,8 @@ public sealed class CompareTests : IDisposable
     [AvaloniaFact]
     public void CompareWithoutABinAsksForOne()
     {
-        var window = new MainWindow();
+        var (window, shell) = TestShell.Create();
         window.Show();
-        var shell = (ShellViewModel)window.DataContext!;
 
         shell.SelectedTab = ShellViewModel.CompareTab;
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();

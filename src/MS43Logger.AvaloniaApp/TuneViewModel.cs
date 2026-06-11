@@ -49,9 +49,6 @@ public sealed class TuneViewModel : ViewModelBase
     private XdfItem? _selectedItem;
     private TableEditorViewModel? _editor;
     private ValueEditorViewModel? _value;
-    private IReadOnlyList<Fact> _facts = Array.Empty<Fact>();
-    private string _legendMin = string.Empty;
-    private string _legendMax = string.Empty;
     private IReadOnlyList<Fact> _limitFacts = Array.Empty<Fact>();
     private IReadOnlyList<Fact> _detailFacts = Array.Empty<Fact>();
     private string? _scaleCaption;
@@ -141,16 +138,6 @@ public sealed class TuneViewModel : ViewModelBase
         }
     }
 
-    /// <summary>"Saved", or how many items changed since the last save.</summary>
-    public string DirtyText
-    {
-        get
-        {
-            var count = Document?.ModifiedItems().Count ?? 0;
-            return Document is null ? string.Empty : count == 0 ? "Saved" : $"{count} unsaved {(count == 1 ? "change" : "changes")}";
-        }
-    }
-
     /// <summary>"Reading CAR_current_43X001_SP95_STAGE1.bin…", then "Reading Siemens_MS43_MS43X001_512K.xdf…"; null when idle.</summary>
     public string? BusyText { get => _busyText; private set => SetField(ref _busyText, value); }
 
@@ -193,8 +180,6 @@ public sealed class TuneViewModel : ViewModelBase
 
     /// <summary>The editor for the selected value, switch or flag; null for tables.</summary>
     public ValueEditorViewModel? Value { get => _value; private set => SetField(ref _value, value); }
-
-    public IReadOnlyList<Fact> Facts { get => _facts; private set => SetField(ref _facts, value); }
 
     /// <summary>The inspector's "Edit limits": Storable, Step, the XDF range when it narrows, and the active cell or value.</summary>
     public IReadOnlyList<Fact> LimitFacts
@@ -243,10 +228,6 @@ public sealed class TuneViewModel : ViewModelBase
 
 
     public bool ShowsCurve => Editor is not null && !ShowsSurface;
-
-    public string LegendMin { get => _legendMin; private set => SetField(ref _legendMin, value); }
-
-    public string LegendMax { get => _legendMax; private set => SetField(ref _legendMax, value); }
 
     /// <summary>The inspector's chart title: "Surface" for a map, "Breakpoints" for an axis, "Curve" for a curve.</summary>
     public string ShapeTitle => ShowsSurface ? "Surface" : IsAxis ? "Breakpoints" : "Curve";

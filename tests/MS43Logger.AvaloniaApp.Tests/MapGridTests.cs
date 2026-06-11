@@ -76,7 +76,7 @@ public class MapGridTests
         window.KeyTextInput("+");
 
         Assert.Equal(81, Raw(shell, 0, 0));
-        Assert.Equal("1 unsaved change", shell.Tune.DirtyText);
+        Assert.Equal("1 item not saved", shell.Tune.SaveStateText);
         shell.Tune.History!.Undo();
         Assert.Equal(80, Raw(shell, 0, 0));
     }
@@ -348,7 +348,30 @@ public class MapGridTests
         await Task.CompletedTask;
     }
 
+    [AvaloniaFact]
+    public async Task OneColumnTableIsCentred()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
 
+        var (window, shell) = await TuneScreen.OpenAsync("ip_iga_tco_st__tco");
+        var grid = Find.Named<MapGrid>(window, "MapGrid");
+
+        Assert.True(shell.Tune.CentreGrid);
+        var pane = Find.Named<Control>(window, "TableArea");
+        var paneCentre = pane.TranslatePoint(new Point(pane.Bounds.Width / 2, 0), window)!.Value.X;
+        var gridCentre = grid.TranslatePoint(new Point(grid.Bounds.Width / 2, 0), window)!.Value.X;
+        Assert.Equal(paneCentre, gridCentre, 1);
+
+        // The key line follows the grid right under it, and the value keeps the units the column header shows.
+        var gridBottom = grid.TranslatePoint(new Point(0, grid.Bounds.Height), window)!.Value.Y;
+        var keyTop = Find.Named<Control>(window, "KeyArea").TranslatePoint(default, window)!.Value.Y;
+        Assert.InRange(keyTop - gridBottom, 0, 16);
+        Assert.Equal("7.50 °CRK, raw 148 (0x94)", shell.Tune.LimitFacts.Single(fact => fact.Label == "Active cell").Detail);
+        Screens.Save(window, "restyle-tune-night-1440-curve");
+    }
 
     [AvaloniaFact]
     public async Task AxisRowsAreNumbered()
