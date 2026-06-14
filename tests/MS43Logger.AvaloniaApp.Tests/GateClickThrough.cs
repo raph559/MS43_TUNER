@@ -23,6 +23,12 @@ internal static class GateClickThrough
         "NightButton", "DayButton", "ReadoutsTiles", "ReadoutsDials", "RescanButton",
     ];
 
+    public static readonly (string Screen, Func<bool, Task<GateClicks?>> Run)[] Screens =
+    [
+        ("shell", ShellAsync), ("live", LiveAsync), ("tune", TuneAsync), ("compare", CompareAsync), ("settings", SettingsAsync),
+        ("dialogs", DialogsAsync), ("performance", PerformanceAsync),
+    ];
+
     private static readonly string? Release = TuneRailTests.Local("MS43X001_release_E46_M54B25.bin");
 
     private static bool IsShell(Control control) => ShellControls.Contains(control.Name);
@@ -165,6 +171,48 @@ internal static class GateClickThrough
         return Task.FromResult<GateClicks?>(c);
     }
 
+    private static async Task<GateClicks?> TuneAsync(bool night)
+    {
+        var c = await TuneMapAsync(night);
+        if (c is null)
+        {
+            return null;
+        }
+
+        var shell = c.Shell;
+        var tune = shell.Tune;
+
+        // The other item kinds, in the same window.
+        tune.SelectedItem = tune.Document!.Xdf.FindByTitle("c_lc_n_max");
+        Dispatcher.UIThread.RunJobs();
+        var raw = tune.Value!.Current.Raw;
+        c.Press("SetValueButton", "stores the typed value, snapped to one the ECU can hold", () => tune.Value!.Current.Raw != raw, () => tune.Value!.Input = "6000");
+        raw = tune.Value!.Current.Raw;
+        c.Press("StepUpButton", "one step up", () => tune.Value!.Current.Raw > raw);
+        raw = tune.Value!.Current.Raw;
+        c.Press("StepDownButton", "one step down", () => tune.Value!.Current.Raw < raw);
+        c.Audit(c.Window, NotShell);
+
+        tune.SelectedItem = tune.Document.Xdf.FindByTitle("c_conf_load");
+        Dispatcher.UIThread.RunJobs();
+        var choice = c.Window.GetVisualDescendants().OfType<ListBoxItem>().First(row => row.DataContext is ChoiceItem item && item.Value != tune.Value!.Current.Raw);
+        var chosen = ((ChoiceItem)choice.DataContext!).Value;
+        choice.IsSelected = true;
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(chosen, tune.Value!.Current.Raw);
+        c.Note("Switch choices (list rows): choosing one writes it");
+        c.Audit(c.Window, NotShell);
+
+        tune.SelectedItem = tune.Document.Xdf.FindByTitle("lv_mil_ind_knk_lv_1");
+        Dispatcher.UIThread.RunJobs();
+        var on = tune.Value!.IsOn;
+        c.Press("FlagSwitch", "flips the flag's bit", () => tune.Value!.IsOn != on);
+        c.Audit(c.Window, NotShell);
+
+        c.Merge(await TuneEmptyAsync(night));
+        return c;
+    }
+
     private static async Task<GateClicks?> TuneMapAsync(bool night)
     {
         if (!TuneScreen.Available)
@@ -244,5 +292,159 @@ internal static class GateClickThrough
         c.PressLast(c.Named<Button>("ErrorActionButton"), window, "Open bin… (wrong size) " + Picker, () => shell.Tune.Document is null, NotShell);
         window.Close();
         return c;
+    }
+
+    private static async Task<GateClicks?> CompareAsync(bool night)
+    {
+        if (!TuneScreen.Available || Release is null)
+        {
+            return null;
+        }
+
+        var (window, shell) = await TuneScreen.OpenAsync(select: null, binPath: TuneScreen.CopyCar(TestShell.NewFolder()));
+        window.Width = 1024;
+        window.Height = 680;
+        Theme(shell, night);
+        shell.SelectedTab = ShellViewModel.CompareTab;
+        Dispatcher.UIThread.RunJobs();
+        var compare = shell.Compare;
+        var c = new GateClicks(window, shell);
+
+        var openB = GateClicks.Pressable(window).Single(control => control is Button { Content: "Open B…" });
+        c.PressLast(openB, window, "Open B… (no B yet) " + Picker, () => compare.FileB is null, NotShell);
+        Assert.True(compare.OpenB(Release));
+        Dispatcher.UIThread.RunJobs();
+        var map = compare.Result!.Items.Single(item => item.Item.Title == "ip_iga_ron98_pl__n__maf");
+        compare.Selected = map;
+        Dispatcher.UIThread.RunJobs();
+
+        var fileB = compare.FileB;
+        c.Press("ChangeBButton", "Change… " + Picker, () => compare.FileB == fileB);
+        foreach (var (name, key) in new[] { ("KindMap", "map"), ("KindCurve", "curve"), ("KindAxis", "axis"), ("KindValue", "value"), ("KindAll", "all") })
+        {
+            c.Press(name, $"lists the {key} differences", () => compare.Kind == key);
+        }
+
+        var all = c.Named<ToggleButton>("KindAll");
+        GateClicks.Activate(all);
+        Assert.True(all.IsChecked == true && compare.Kind == "all");
+        c.Note("KindAll pressed again: stays lit, since the filter has no \"none\"");
+
+        compare.Selected = map;
+        Dispatcher.UIThread.RunJobs();
+        c.Press("ViewA", "shows A's values in the map colours", () => compare.View == "a");
+        c.Press("ViewB", "shows B's values", () => compare.View == "b");
+        c.Press("ViewDelta", "shows B − A", () => compare.View == "delta");
+        c.Press("EditInTuneButton", "opens this item of A on Tune", () => shell.SelectedTab == ShellViewModel.TuneTab && shell.Tune.SelectedItem?.Title == map.Item.Title);
+        shell.SelectedTab = ShellViewModel.CompareTab;
+        compare.Selected = compare.Result!.Items.Single(item => item.Item.Title == map.Item.Title);
+        Dispatcher.UIThread.RunJobs();
+        c.PressLast(c.Named<Button>("CopyFromB"), window, "writes B's value of this item into A", () => shell.Tune.Document!.IsModified
+            && compare.Result!.Items.All(item => item.Item.Title != map.Item.Title), NotShell);
+
+        // Without a bin, Compare asks for one.
+        var (empty, emptyShell) = Open(night, () => ["COM1"]);
+        emptyShell.SelectedTab = ShellViewModel.CompareTab;
+        Dispatcher.UIThread.RunJobs();
+        var other = new GateClicks(empty, emptyShell);
+        var openA = GateClicks.Pressable(empty).Single(control => control is Button { Content: "Open bin…" });
+        other.PressLast(openA, empty, "Open bin… (Compare without a bin) " + Picker, () => emptyShell.Tune.Document is null, NotShell);
+        c.Merge(other);
+        empty.Close();
+        return c;
+    }
+
+    private static Task<GateClicks?> SettingsAsync(bool night)
+    {
+        var (window, shell) = Open(night, () => ["COM1"]);
+        var settings = shell.Tune.Settings;
+        var c = new GateClicks(window, shell);
+        GateClicks.Activate(c.Named<Button>("SettingsButton"));
+
+        c.Press("ThemeDay", "Day, saved", () => settings.Theme == ThemeMode.Day && shell.IsDay);
+        c.Press("ThemeFollow", "follows Windows, saved", () => settings.Theme == ThemeMode.FollowWindows);
+        c.Press("ThemeNight", "Night, saved", () => settings.Theme == ThemeMode.Night && shell.IsNight);
+        Theme(shell, night);
+        c.Press("SettingsDials", "dials, saved", () => settings.Readouts == ReadoutsMode.Dials && shell.IsDials);
+        c.Press("SettingsTiles", "tiles, saved", () => settings.Readouts == ReadoutsMode.Tiles && shell.IsTiles);
+        c.Press("Trend30", "30 s trends, saved", () => settings.TrendSeconds == 30);
+        c.Press("Trend60", "60 s trends, saved", () => settings.TrendSeconds == 60);
+        c.Press("Trend10", "10 s trends, saved", () => settings.TrendSeconds == 10);
+        var folder = settings.LogFolder;
+        c.Press("LogFolderBrowse", "Browse… " + Picker, () => settings.LogFolder == folder);
+        var start = settings.StartCsvOnConnect;
+        c.Press("StartCsvSwitch", "starts the CSV log on connect, saved", () => settings.StartCsvOnConnect != start);
+        c.Press("MapsRaw", "opens maps in raw values, saved", () => settings.OpenMapsRaw);
+        c.Press("MapsPhysical", "opens maps in physical values, saved", () => !settings.OpenMapsRaw);
+        c.Press("TrailOff", "no cursor trail, saved", () => settings.CursorTrail == TrailMode.Off);
+        c.Press("TrailLong", "long cursor trail, saved", () => settings.CursorTrail == TrailMode.Long);
+        c.Press("TrailShort", "short cursor trail, saved", () => settings.CursorTrail == TrailMode.Short);
+        var reopen = settings.ReopenLastBin;
+        c.Press("ReopenSwitch", "reopens the last bin at start, saved", () => settings.ReopenLastBin != reopen);
+        var bak = settings.KeepBackup;
+        c.Press("BakSwitch", "keeps a .bak before the first save, saved", () => settings.KeepBackup != bak);
+        var log = settings.AppendEditLog;
+        c.Press("EditLogSwitch", "adds changes to the edit log, saved", () => settings.AppendEditLog != log);
+        c.PressLast(c.Named<Button>("CloseButton"), c.Dialogs, "closes Settings", () => !c.Dialogs.IsOpen);
+
+        // A settings file that cannot be written: the banner's Try again.
+        var parent = TestShell.NewFolder();
+        Directory.CreateDirectory(parent);
+        var blocker = Path.Combine(parent, "blocker");
+        File.WriteAllText(blocker, string.Empty);
+        var (blocked, blockedShell) = TestShell.Create(AppSettings.Load(Path.Combine(blocker, "settings")), new MainWindowViewModel(new ManualTime(), () => ["COM1"]));
+        blocked.Show();
+        Theme(blockedShell, night);
+        var other = new GateClicks(blocked, blockedShell);
+        GateClicks.Activate(other.Named<Button>("SettingsButton"));
+        GateClicks.Activate(other.Named<ToggleButton>("Trend30"));
+        Assert.True(other.Named<Border>("SaveErrorBanner").IsEffectivelyVisible);
+        File.Delete(blocker);
+        other.CoverRows(control => control.FindAncestorOfType<SettingsView>() is not null && control.Name != "TryAgainButton");
+        other.PressLast(other.Named<Button>("TryAgainButton"), other.Dialogs, "writes the settings again and hides the banner (save failure)",
+            () => !other.Named<Border>("SaveErrorBanner").IsEffectivelyVisible);
+        c.Merge(other);
+        blocked.Close();
+        return Task.FromResult<GateClicks?>(c);
+    }
+
+    private static Task<GateClicks?> DialogsAsync(bool night)
+    {
+        var (window, shell) = Open(night, () => ["COM1"]);
+        var c = new GateClicks(window, shell);
+        foreach (var (name, choice) in new[] { ("CancelButton", SaveChoice.Cancel), ("DontSaveButton", SaveChoice.DontSave), ("SaveButton", SaveChoice.Save) })
+        {
+            var asked = shell.Tune.AskToSave!("Save the changes to CAR.bin?");
+            Dispatcher.UIThread.RunJobs();
+            var dialog = window.GetVisualDescendants().OfType<ConfirmDialog>().Single();
+            var button = Find.Named<Button>(dialog, name);
+            if (choice == SaveChoice.Save)
+            {
+                c.PressLast(button, dialog, $"save prompt: answers {choice} and closes", () => asked.IsCompleted && asked.Result == choice && !c.Dialogs.IsOpen);
+            }
+            else
+            {
+                c.Press(button, $"save prompt: answers {choice} and closes", () => asked.IsCompleted && asked.Result == choice && !c.Dialogs.IsOpen);
+            }
+        }
+
+        shell.Live.ReportConnectFailure(new UnauthorizedAccessException("Access to the port 'COM1' is denied."));
+        shell.Live.ShowConnectionLog();
+        Dispatcher.UIThread.RunJobs();
+        var view = window.GetVisualDescendants().OfType<ConnectionLogView>().Single();
+        c.PressLast(Find.Named<Button>(view, "CloseButton"), view, "connection log: closes", () => !c.Dialogs.IsOpen);
+        return Task.FromResult<GateClicks?>(c);
+    }
+
+    private static Task<GateClicks?> PerformanceAsync(bool night)
+    {
+        var live = new MainWindowViewModel(new ManualTime(), () => ["COM1"]) { SelectedVariant = "ms43x" };
+        Avalonia.Application.Current!.RequestedThemeVariant = night ? Avalonia.Styling.ThemeVariant.Dark : Avalonia.Styling.ThemeVariant.Light;
+        var window = new PerformanceWindow { DataContext = live };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        var c = new GateClicks(window, null);
+        c.PressLast(c.Named<Button>("StartTestButton"), window, "starts a run: \"Stop the car to start\"", () => live.PerformanceStatus == "Stop the car to start");
+        return Task.FromResult<GateClicks?>(c);
     }
 }
