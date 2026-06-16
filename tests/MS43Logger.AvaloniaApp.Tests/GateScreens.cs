@@ -31,6 +31,47 @@ internal static class GateScreens
     private static readonly IReadOnlyList<AdxValueDefinition> Ms43x = BundledDefinitions.Load("ms43x").MatchChannels(Array.Empty<string>());
     private static readonly string? Release = TuneRailTests.Local("MS43X001_release_E46_M54B25.bin");
 
+    public static IEnumerable<GateState> All()
+    {
+        foreach (var (state, item) in new[]
+                 {
+                     ("map", "ip_iga_ron98_pl__n__maf"), ("value", "c_lc_n_max"), ("switch", "c_conf_load"),
+                     ("flag", "lv_mil_ind_knk_lv_1"), ("curve", "ip_iga_tco_st__tco"), ("axis", "ldpm_n_14"),
+                 })
+        {
+            yield return new GateState("tune", state, () => Tune(item));
+        }
+
+        yield return new GateState("tune", "nobin", () => Shell(shell => shell.SelectedTab = ShellViewModel.TuneTab));
+
+        yield return new GateState("live", "idle", () => Shell(_ => { }));
+        yield return new GateState("live", "tiles", () => Shell((shell, time) => Logging(shell, time, dials: false)));
+        yield return new GateState("live", "dials", () => Shell((shell, time) => Logging(shell, time, dials: true)));
+        yield return new GateState("live", "failed", () => Shell(shell =>
+            shell.Live.ReportConnectFailure(new UnauthorizedAccessException("Access to the port 'COM1' is denied."))));
+        yield return new GateState("live", "lost", () => Shell((shell, time) =>
+        {
+            Logging(shell, time, dials: false);
+            time.Advance(TimeSpan.FromSeconds(8));
+            shell.Live.ReportLoggingStopped(new TimeoutException("No reply."));
+        }));
+
+        yield return new GateState("compare", "map", () => Compare(compare => compare.Selected = Item(compare, "ip_iga_ron98_pl__n__maf")));
+        yield return new GateState("compare", "value", () => Compare(compare => compare.Selected = Item(compare, "c_lc_n_max")));
+        yield return new GateState("compare", "bytes", () => Compare(compare => compare.ShowBytes()));
+
+        yield return new GateState("settings", "saved", () => Shell(_ => { }, settings: true));
+        yield return new GateState("settings", "notsaved", NotSaved);
+
+        yield return new GateState("dialog", "save", () => Shell(shell => _ = shell.Tune.AskToSave!("Save the changes to CAR_current_43X001_SP95_STAGE1.bin?")));
+        yield return new GateState("dialog", "log", () => Shell(shell =>
+        {
+            shell.Live.ReportConnectFailure(new UnauthorizedAccessException("Access to the port 'COM1' is denied."));
+            shell.Live.ShowConnectionLog();
+        }));
+        yield return new GateState("performance", "timing", Performance);
+    }
+
     public static void Theme(GateWindow opened, bool night)
     {
         if (opened.Shell is { } shell)

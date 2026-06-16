@@ -10,11 +10,11 @@ namespace MS43Logger.AvaloniaApp.Tests;
 
 public class ShellTests
 {
-    private static (MainWindow Window, ShellViewModel Shell) Show()
+    private static (MainWindow Window, ShellViewModel Shell) Show(AppSettings? settings = null)
     {
-        var window = new MainWindow();
+        var (window, shell) = TestShell.Create(settings);
         window.Show();
-        return (window, (ShellViewModel)window.DataContext!);
+        return (window, shell);
     }
 
     [AvaloniaFact]
@@ -42,12 +42,38 @@ public class ShellTests
         var (window, shell) = Show();
         Color Pane() => window.TryFindResource("PaneBrush", window.ActualThemeVariant, out var brush) ? ((ISolidColorBrush)brush!).Color : default;
 
-        Assert.Equal(Color.Parse("#141920"), Pane());
+        Assert.Equal(Color.Parse("#0A0B0D"), Pane());
         shell.IsDay = true;
-        Assert.Equal(Color.Parse("#F5F6F8"), Pane());
+        Assert.Equal(Color.Parse("#FFFFFF"), Pane());
         Screens.Save(window, "shell-day");
         shell.IsNight = true;
-        Assert.Equal(Color.Parse("#141920"), Pane());
+        Assert.Equal(Color.Parse("#0A0B0D"), Pane());
+    }
+
+    [AvaloniaFact]
+    public void NightDaySwitchIsSaved()
+    {
+        var folder = TestShell.NewFolder();
+        var (_, shell) = Show(AppSettings.Load(folder));
+
+        shell.IsDay = true;
+
+        Assert.Equal(ThemeMode.Day, AppSettings.Load(folder).Theme);
+        shell.IsNight = true;
+        Assert.Equal(ThemeMode.Night, AppSettings.Load(folder).Theme);
+    }
+
+    [AvaloniaFact]
+    public void ThemeIsRestoredFromSettings()
+    {
+        var settings = AppSettings.Load(TestShell.NewFolder());
+        settings.Theme = ThemeMode.Day;
+
+        var (_, shell) = Show(settings);
+
+        Assert.True(shell.IsDay);
+        Assert.Equal(Avalonia.Styling.ThemeVariant.Light, Application.Current!.ActualThemeVariant);
+        shell.IsNight = true;
     }
 
     [AvaloniaFact]
@@ -65,12 +91,14 @@ public class ShellTests
     public void FontsResolve()
     {
         var (window, _) = Show();
-        var display = (FontFamily)window.FindResource("DisplayFont")!;
+        string Family(string key) =>
+            FontManager.Current.TryGetGlyphTypeface(new Typeface((FontFamily)window.FindResource(key)!), out var glyph) ? glyph.FamilyName : "(none)";
 
-        Assert.True(FontManager.Current.TryGetGlyphTypeface(new Typeface(display), out var glyph));
         if (OperatingSystem.IsWindows())
         {
-            Assert.Equal("Bahnschrift", glyph!.FamilyName);
+            Assert.Equal("Bahnschrift", Family("DataFont"));
+            Assert.Equal("Cascadia Mono", Family("MonoFont"));
+            Assert.Equal("Segoe UI", Family("UiFont"));
         }
     }
 }
