@@ -290,4 +290,23 @@ public class StyleTests
         // DesiredSize, not Bounds: the StackPanel stretches both blocks to its own width.
         Assert.Equal(zeros.DesiredSize.Width, ones.DesiredSize.Width, 1);
     }
+
+    [AvaloniaFact]
+    public void NumberRunsUseTabularFigures()
+    {
+        // In UI text that sets no figures of its own, as in the Settings segments ("10 s").
+        var run = new Avalonia.Controls.Documents.Run("1111") { Classes = { "num" } };
+        var ones = new TextBlock { Inlines = { run } };
+        var zeros = new TextBlock { Inlines = { new Avalonia.Controls.Documents.Run("0000") { Classes = { "num" } } } };
+        Show(new StackPanel { Children = { ones, zeros } });
+
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.True(FontManager.Current.TryGetGlyphTypeface(new Typeface(run.FontFamily), out var face));
+            Assert.Equal("Bahnschrift", face.FamilyName);
+        }
+
+        // DesiredSize, not Bounds: the StackPanel stretches both blocks to its own width.
+        Assert.Equal(zeros.DesiredSize.Width, ones.DesiredSize.Width, 1);
+    }
 }
