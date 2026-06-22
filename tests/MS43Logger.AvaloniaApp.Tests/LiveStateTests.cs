@@ -189,4 +189,91 @@ public sealed class LiveStateTests : IDisposable
         live.ShowResumed();
         Assert.StartsWith("Connected to COM1", string.Concat(live.StatusParts.Select(part => part.Text)));
     }
+
+    [AvaloniaFact]
+    public void LiveScreensForReview()
+    {
+        var time = new ManualTime();
+        var (window, shell) = TestShell.Create(AppSettings.Load(_folder), new MainWindowViewModel(time, () => ["COM1"]));
+        var live = shell.Live;
+        live.SelectedVariant = "ms43x";
+        live.SetRedline(7104);
+        window.Show();
+
+        void Save(string state)
+        {
+            foreach (var (theme, night) in new[] { ("night", true), ("day", false) })
+            {
+                shell.IsNight = night;
+                shell.IsDay = !night;
+                foreach (var (width, height) in new[] { (1440, 900), (1024, 680) })
+                {
+                    window.Width = width;
+                    window.Height = height;
+                    Dispatcher.UIThread.RunJobs();
+                    Screens.Save(window, $"restyle-live-{state}-{theme}-{width}");
+                }
+            }
+        }
+
+        Save("idle");
+
+        // Logging, with the mockups' sample values (system 11.1) moving a little.
+        live.EnableCsvLogging = true;
+        live.CsvPath = Log;
+        live.BeginSession();
+        for (var i = 0; i < 380; i++)
+        {
+            Sample(live, ("N", 2480 + 12 * Math.Sin(i / 9.0)), ("MAFIGA", 112.4 + Math.Sin(i / 7.0)), ("IGAAVG", 31.1), ("GEAR", 4), ("VS", 77),
+                ("AMP", 101.2), ("TCO", 88.5), ("MAFTI", 118.0), ("TIA", 31.0), ("MAP", 31.5 + Math.Sin(i / 5.0)), ("TOIL", 96.0), ("TPS", 12.4), ("VB", 14.12));
+            time.Advance(TimeSpan.FromSeconds(1.0 / 38));
+        }
+
+        live.SampleCount = 9576;
+        Save("logging");
+
+        time.Advance(TimeSpan.FromSeconds(8));
+        live.ReportLoggingStopped(new TimeoutException("No reply."));
+        Save("stopped");
+    }
+
+    [AvaloniaFact]
+    public void CsvControlsLockWhileConnecting()
+    {
+        var (window, shell) = TestShell.Create(AppSettings.Load(_folder));
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(Find.Named<DockPanel>(window, "CsvRow").IsEffectivelyEnabled);
+
+        // Connecting: the CSV switch, path and Browse cannot change under the session being opened (system 7.2).
+        shell.Live.IsConnecting = true;
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.False(Find.Named<DockPanel>(window, "CsvRow").IsEffectivelyEnabled);
+    }
+
+    [AvaloniaFact]
+    public void SettingsFlowIntoLive()
+    {
+        var (window, shell) = TestShell.Create(AppSettings.Load(_folder));
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        window.KeyPressQwerty(PhysicalKey.Comma, RawInputModifiers.Control);
+        Dispatcher.UIThread.RunJobs();
+        var view = window.GetVisualDescendants().OfType<SettingsView>().Single();
+
+        Find.Named<ToggleButton>(view, "Trend60").IsChecked = true;
+        var box = Find.Named<TextBox>(view, "LogFolderBox");
+        box.Focus();
+        box.Text = _folder;
+        Find.Named<Button>(view, "LogFolderBrowse").Focus();
+        Find.Named<ToggleSwitch>(view, "StartCsvSwitch").IsChecked = true;
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(60, shell.Live.TrendSeconds);
+        Assert.Equal("Last 60 s", shell.Live.TrendLabel);
+        Assert.Equal(_folder, shell.Live.LogFolder);
+        Assert.Equal(_folder, Path.GetDirectoryName(shell.Live.CsvPath));
+        Assert.True(shell.Live.StartCsvOnConnect);
+    }
 }
