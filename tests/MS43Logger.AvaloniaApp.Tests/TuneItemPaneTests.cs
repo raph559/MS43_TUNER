@@ -392,4 +392,261 @@ public sealed class TuneItemPaneTests : IDisposable
         Assert.Contains(shell.Tune.LimitFacts, fact => fact is { Label: "Value", Text: "Maf sensor", Detail: "raw 1 (0x1)" });
         Assert.Contains(shell.Tune.DetailFacts, fact => fact is { Label: "Scaling", Text: "1.0*X", TextIsId: true });
     }
+
+    [AvaloniaFact]
+    public async Task SwitchValueFactFollowsUndo()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        // The facts rebuild when the value changes, so the chosen label must already match the new raw value then.
+        var (_, shell, value) = await Open("c_conf_load");
+        value.SelectedChoice = value.Choices!.Single(choice => choice.Label == "Alpha-N");
+        Assert.Contains(shell.Tune.LimitFacts, fact => fact is { Label: "Value", Text: "Alpha-N", Detail: "raw 2 (0x2)" });
+
+        shell.Tune.Undo();
+
+        Assert.Contains(shell.Tune.LimitFacts, fact => fact is { Label: "Value", Text: "Maf sensor", Detail: "raw 1 (0x1)" });
+    }
+
+    [AvaloniaFact]
+    public async Task FlagDetailsShowSizeAndMask()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (_, shell, _) = await Open("lv_mil_ind_knk_lv_1");
+
+        Assert.Equal(new[] { "Address", "Size", "Bit mask" }, shell.Tune.DetailFacts.Select(fact => fact.Label));
+        Assert.Contains(shell.Tune.DetailFacts, fact => fact is { Label: "Size", Text: "16 bit" });
+        Assert.Contains(shell.Tune.DetailFacts, fact => fact is { Label: "Bit mask", Text: "0x01" });
+    }
+
+    [AvaloniaFact]
+    public async Task AxisCountsItsBreakpoints()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell) = await TuneScreen.OpenAsync("ldpm_n_14");
+        Dispatcher.UIThread.RunJobs();
+        var tune = shell.Tune;
+
+        Assert.Equal("Breakpoints", tune.ShapeTitle);
+        Assert.Contains(tune.LimitFacts, fact => fact is { Label: "Active cell", Text: "Breakpoint 1", Detail: "800 rpm, raw 800 (0x320)" });
+        Assert.Equal("Breakpoint 1: 800 rpm, raw 800 (0x320)", tune.Editor!.SelectionText);
+        Assert.Equal(new[] { "Address", "Size", "Units", "Scaling" }, tune.DetailFacts.Select(fact => fact.Label));
+        Assert.Contains(tune.DetailFacts, fact => fact is { Label: "Scaling", Text: "1.0*X", TextIsId: true });
+        var chart = Find.Named<CurveChart>(window, "Curve");
+        Assert.Equal(new[] { "1", "5", "10", "15", "20" }, chart.XTickLabels);
+        Assert.Equal("breakpoint", chart.XAxisUnits);
+    }
+
+    [AvaloniaFact]
+    public async Task ItemPanesFitBothThemesAndWidths()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, _) = await Open("c_lc_n_max");
+        foreach (var item in new[] { "c_lc_n_max", "c_n_max_er", "c_conf_load", "lv_mil_ind_knk_lv_1", "ip_iga_tco_st__tco", "ldpm_n_14" })
+        {
+            shell.Tune.SelectedItem = shell.Tune.Document!.Xdf.FindByTitle(item);
+            foreach (var (theme, night) in new[] { ("night", true), ("day", false) })
+            {
+                shell.IsNight = night;
+                shell.IsDay = !night;
+                foreach (var (width, height) in new[] { (1440, 900), (1024, 680) })
+                {
+                    window.Width = width;
+                    window.Height = height;
+                    Dispatcher.UIThread.RunJobs();
+                    var pane = Find.Named<Border>(window, "PaneHost");
+                    var area = Find.Named<StackPanel>(window, "ValueArea");
+                    if (area.IsEffectivelyVisible)
+                    {
+                        var right = area.TranslatePoint(new Point(area.Bounds.Width, 0), pane)!.Value.X;
+                        Assert.True(right <= pane.Bounds.Width - pane.Padding.Right + 0.5, $"{item} at {width}: the item ends at {right}, past the pane");
+                    }
+
+                    Screens.Save(window, $"restyle-tune-items-{item}-{theme}-{width}");
+                }
+            }
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task SwitchListSelectsAndUndoes()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, value) = await Open("c_conf_load");
+        var list = Find.Named<ListBox>(window, "ChoiceList");
+        Assert.Equal("Maf sensor", ((ChoiceItem)list.SelectedItem!).Label);
+
+        list.SelectedItem = value.Choices!.Single(choice => choice.Label == "Alpha-N");
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(2, value.RawValue);
+        Assert.Equal("1 item not saved", shell.Tune.SaveStateText);
+        shell.Tune.Undo();
+        Assert.Equal(1, value.RawValue);
+        Screens.Save(window, "restyle-tune-night-1440-switch");
+    }
+
+    [AvaloniaFact]
+    public async Task FlagSwitchSaysOnOrOff()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, value) = await Open("lv_mil_ind_knk_lv_1");
+        var flag = Find.Named<ToggleSwitch>(window, "FlagSwitch");
+        Assert.Equal(("On", "Off"), (flag.OnContent as string, flag.OffContent as string));
+        Assert.False(flag.IsChecked);
+
+        flag.IsChecked = true;
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(value.IsOn);
+        Assert.True(shell.Tune.Document!.Reader.ReadFlag((XdfFlag)shell.Tune.SelectedItem!));
+        Screens.Save(window, "restyle-tune-night-1440-flag");
+    }
+
+    [AvaloniaFact]
+    public async Task AxisPaneShowsRuleAndUsers()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, _) = await TuneScreen.OpenAsync("ldpm_n_14");
+        Dispatcher.UIThread.RunJobs();
+
+        var rule = Find.Named<TextBlock>(window, "AxisRuleText");
+        Assert.True(rule.IsEffectivelyVisible);
+        Assert.Equal("Breakpoints must not go down: an edit that makes one fall below its neighbour is refused.", rule.Text);
+        var users = Find.Named<ItemsControl>(window, "UsedByList").Items.OfType<XdfItem>().Select(item => item.Title).ToList();
+        Assert.Contains("ip_iga_ron91_pl__n__maf", users);
+        Assert.Contains("ip_iga_ron98_pl__n__maf", users);
+        Assert.Contains("ip_iga_e85_pl__n__maf", users);
+        Screens.Save(window, "restyle-tune-night-1440-axis");
+    }
+
+    // System 5.3: number fields set typed digits in Bahnschrift 13; the placeholder and the unit stay UI text.
+    [AvaloniaFact]
+    public async Task ValueFieldsTypeInBahnschrift()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell) = await TuneScreen.OpenAsync();
+        void Check(TextBox field)
+        {
+            var typed = field.GetVisualDescendants().OfType<Avalonia.Controls.Presenters.TextPresenter>().Single(part => part.Name == "PART_TextPresenter");
+            var placeholder = field.GetVisualDescendants().OfType<TextBlock>().Single(part => part.Name == "PART_Watermark");
+            Assert.Equal(window.FindResource("DataFont"), typed.FontFamily);
+            Assert.Equal(13, typed.FontSize);
+            Assert.Equal(window.FindResource("UiFont"), placeholder.FontFamily);
+            if (field.InnerRightContent is Control suffix)
+            {
+                Assert.All(suffix.GetSelfAndVisualDescendants().OfType<TextBlock>(), unit => Assert.Equal(window.FindResource("UiFont"), unit.FontFamily));
+            }
+        }
+
+        Check(Find.Named<TextBox>(window, "ToolValue"));
+        shell.Tune.SelectedItem = shell.Tune.Document!.Xdf.FindByTitle("c_lc_n_max");
+        Dispatcher.UIThread.RunJobs();
+        Check(Find.Named<TextBox>(window, "ValueInput"));
+    }
+
+    // A press on the thumb only takes hold of it: off its centre it must not move the value.
+    [AvaloniaFact]
+    public async Task PressingTheThumbWritesNothing()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, value) = await Open("c_lc_n_max");
+        var slider = Find.Named<ValueSlider>(window, "ValueSlider");
+        var undo = shell.Tune.History!.UndoCount;
+        var edge = slider.TranslatePoint(slider.ThumbCentre + new Point(8, 0), window)!.Value;
+
+        window.MouseDown(edge, MouseButton.Left);
+        window.MouseUp(edge, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(141, value.RawValue);
+        Assert.Null(value.PendingValue);
+        Assert.Equal(undo, shell.Tune.History.UndoCount);
+        Assert.True(slider.IsFocused);
+    }
+
+    [AvaloniaFact]
+    public async Task DraggingMovesTheValueByWhatThePointerMoved()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, value) = await Open("c_lc_n_max");
+        var slider = Find.Named<ValueSlider>(window, "ValueSlider");
+        var grab = new Point(8, 0);
+
+        window.MouseDown(slider.TranslatePoint(slider.ThumbCentre + grab, window)!.Value, MouseButton.Left);
+        window.MouseMove(SliderPoint(window, slider, 4000) + grab);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(4000, value.PendingValue);
+
+        window.MouseUp(SliderPoint(window, slider, 4000) + grab, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(125, value.RawValue);
+    }
+
+    // A press on the track beside the thumb moves 10 steps toward the press, as Page Up and Page Down do.
+    [AvaloniaFact]
+    public async Task PressingTheTrackPagesTowardThePress()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, value) = await Open("c_lc_n_max");
+        var slider = Find.Named<ValueSlider>(window, "ValueSlider");
+        var undo = shell.Tune.History!.UndoCount;
+
+        var right = SliderPoint(window, slider, 7000);
+        window.MouseDown(right, MouseButton.Left);
+        window.MouseUp(right, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(151, value.RawValue);
+        Assert.Equal(undo + 1, shell.Tune.History.UndoCount);
+
+        var left = SliderPoint(window, slider, 1000);
+        window.MouseDown(left, MouseButton.Left);
+        window.MouseUp(left, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(141, value.RawValue);
+        Assert.Equal(undo + 2, shell.Tune.History.UndoCount);
+    }
 }
