@@ -180,4 +180,19 @@ public sealed class DialogHostTests : IDisposable
         Assert.True(ran);
         Assert.IsType<TextBox>(window.FocusManager!.GetFocusedElement());
     }
+
+    [AvaloniaFact]
+    public void TabStaysInsideTheDialog()
+    {
+        var (window, _) = TestShell.Create();
+        window.Show();
+        Press(window, PhysicalKey.Comma, RawInputModifiers.Control);
+        var dialog = window.GetVisualDescendants().OfType<SettingsView>().Single();
+
+        for (var i = 0; i < 40; i++)
+        {
+            Press(window, PhysicalKey.Tab);
+            Assert.True(FocusIsInside(window, dialog), $"focus left the dialog after {i + 1} Tab presses");
+        }
+    }
 }
