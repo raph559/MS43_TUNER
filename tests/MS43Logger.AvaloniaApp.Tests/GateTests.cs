@@ -112,6 +112,40 @@ public sealed class GateTests
         Assert.True(found.Count == 0, string.Join(Environment.NewLine, found));
     }
 
+    [AvaloniaFact]
+    public async Task IconButtonsHaveNames()
+    {
+        var found = new List<string>();
+
+        // In the sources, so the buttons inside closed flyouts count too.
+        foreach (var path in SourceText.Files(App, ".axaml"))
+        {
+            foreach (var button in XDocument.Load(path).Descendants().Where(element => element.Name.LocalName is "Button" or "ToggleButton"))
+            {
+                var content = button.Elements().Where(child => !child.Name.LocalName.Contains('.')).ToList();
+                var icons = content.Count == 1 && (IsIcon(content[0]) || (content[0].Elements().Any() && content[0].Elements().All(IsIcon)));
+                if (icons && (Empty(button, "AutomationProperties.Name") || Empty(button, "ToolTip.Tip")))
+                {
+                    found.Add($"{SourceText.Relative(path)}: {button.Attribute("Name")?.Value ?? "an icon button"} needs AutomationProperties.Name and ToolTip.Tip");
+                }
+            }
+        }
+
+        // On screen, where bound names and tips have their values.
+        await ForEachScreen(opened =>
+        {
+            foreach (var button in opened.Window.GetVisualDescendants().OfType<Button>().Where(button => button.IsEffectivelyVisible && IsIconButton(button)))
+            {
+                if (string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)) || ToolTip.GetTip(button) is null or "")
+                {
+                    found.Add($"{opened.Window.Tag}: {GateClicks.Label(button)} shows no name or tooltip");
+                }
+            }
+        }, bothThemes: false);
+
+        Assert.True(found.Count == 0, string.Join(Environment.NewLine, found));
+    }
+
     // What a screen reader says for each control a person can press: never nothing, never a type name.
     [AvaloniaFact]
     public async Task PressableControlsHaveNames()
@@ -138,6 +172,31 @@ public sealed class GateTests
 
     private static bool IsIconButton(Button button) =>
         button.Content is StrokeIcon || (button.Content is Panel { Children.Count: > 0 } panel && panel.Children.All(child => child is StrokeIcon));
+
+    [AvaloniaFact]
+    public async Task NothingClippedAt1024()
+    {
+        var found = new List<string>();
+        await ForEachScreen(opened =>
+        {
+            var window = opened.Window;
+            var size = window.ClientSize;
+            foreach (var (control, area) in Outermost(window))
+            {
+                if (area.X < -0.5 || area.Y < -0.5 || area.Right > size.Width + 0.5 || area.Bottom > size.Height + 0.5)
+                {
+                    found.Add($"{window.Tag}: {Describe(control)} at {area} runs past the {size.Width} x {size.Height} window");
+                }
+
+                if (control is ScrollViewer scroller && scroller.Extent.Width > scroller.Viewport.Width + 0.5)
+                {
+                    found.Add($"{window.Tag}: {Describe(control)} scrolls sideways ({scroller.Extent.Width} in {scroller.Viewport.Width})");
+                }
+            }
+        }, bothThemes: true);
+
+        Assert.True(found.Count == 0, string.Join(Environment.NewLine, found));
+    }
 
     // Every visible control with its area in window coordinates; what a scroll viewer holds scrolls, so it is left out.
     private static IEnumerable<(Control Control, Rect Area)> Outermost(Visual root)
@@ -169,6 +228,47 @@ public sealed class GateTests
 
     private static string Describe(Control control) =>
         $"{control.GetType().Name}{(string.IsNullOrEmpty(control.Name) ? string.Empty : " " + control.Name)} in {control.GetVisualAncestors().OfType<Control>().FirstOrDefault(parent => !string.IsNullOrEmpty(parent.Name))?.Name}";
+
+    [AvaloniaFact]
+    public async Task EveryScreenIsKeyboardReachable()
+    {
+        var found = new List<string>();
+        await ForEachScreen(opened =>
+        {
+            var window = opened.Window;
+            var host = window.GetVisualDescendants().OfType<Shell.DialogHost>().FirstOrDefault(dialogs => dialogs.IsOpen);
+            Visual scope = host is null ? window : host.GetVisualChildren().OfType<Border>().Last();
+            var stops = TabStops(scope).Select(Stop).Distinct().ToList();
+            var reached = new HashSet<Visual>();
+            Visual? first = null;
+            for (var press = 0; press < stops.Count * 2 + 8; press++)
+            {
+                window.KeyPressQwerty(PhysicalKey.Tab, RawInputModifiers.None);
+                Dispatcher.UIThread.RunJobs();
+                if (window.FocusManager?.GetFocusedElement() is not Control focused)
+                {
+                    continue;
+                }
+
+                if (!ShowsRing(focused))
+                {
+                    found.Add($"{window.Tag}: {GateClicks.Label(focused)} has focus but shows no ring");
+                }
+
+                if (focused == first)
+                {
+                    break;
+                }
+
+                first ??= focused;
+                reached.Add(Stop(focused));
+            }
+
+            found.AddRange(stops.Where(stop => !reached.Contains(stop)).Select(stop => $"{window.Tag}: Tab never reaches {GateClicks.Label((Control)stop)}"));
+        }, bothThemes: true);
+
+        Assert.True(found.Count == 0, string.Join(Environment.NewLine, found));
+    }
 
     private static IEnumerable<Control> TabStops(Visual scope) => scope.GetVisualDescendants().OfType<Control>()
         .Where(control => control.TemplatedParent is null && control.Focusable && control.IsTabStop && control.IsEffectivelyVisible && control.IsEffectivelyEnabled);
