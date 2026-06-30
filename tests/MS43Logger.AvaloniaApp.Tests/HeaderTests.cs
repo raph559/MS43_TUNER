@@ -285,4 +285,189 @@ public sealed class HeaderTests : IDisposable
             "CAR_current_43X001_SP95_STAGE1.bin\nFirmware MS43X001 · XDF Siemens_MS43_MS43X001_512K.xdf",
             ToolTip.GetTip(Find.Named<Button>(window, "FileMenuButton")));
     }
+
+    [AvaloniaFact]
+    public void StatusLineTooltipHoldsTheWholeLine()
+    {
+        var (window, shell) = Show(1024, 680);
+
+        Log(shell.Live, logging: true);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(
+            "Connected to COM1 · ms43x · Logging 00:04:12 to " + LongLog + " · 9576 rows",
+            ToolTip.GetTip(Find.Named<TextBlock>(window, "ConnectionText")));
+    }
+
+    [AvaloniaFact]
+    public void AppMarkIsOrangeOnlyWhileLogging()
+    {
+        var mark = new AppMark();
+        var window = new Window { Width = 40, Height = 40, RequestedThemeVariant = ThemeVariant.Dark, Content = mark };
+        window.Show();
+        var now = Color.Parse("#FF7A1A");
+
+        Assert.False(HasColour(window, now));
+
+        mark.IsLive = true;
+        mark.Level = 0.31;
+
+        Assert.True(HasColour(window, now));
+    }
+
+    [AvaloniaFact]
+    public void StatusBarSaysNotConnected()
+    {
+        var (window, _) = Show();
+
+        Assert.Equal("Not connected", Find.Named<TextBlock>(window, "ConnectionText").Inlines!.OfType<Avalonia.Controls.Documents.Run>().Aggregate(string.Empty, (text, run) => text + run.Text));
+    }
+
+    [AvaloniaFact]
+    public void StatusLineDescribesTheSession()
+    {
+        var (_, shell) = Show();
+        var live = shell.Live;
+        live.SelectedPort = "COM1";
+        live.SelectedVariant = "ms43x";
+        live.IsConnected = true;
+        live.EnableCsvLogging = true;
+        live.CsvPath = @"C:\logs\ms43-20261019-2225.csv";
+        live.ElapsedTime = "00:04:12";
+        live.SampleCount = 9576;
+
+        Assert.Equal(" to COM1 · ms43x · Logging 00:04:12 to ms43-20261019-2225.csv · 9576 rows", live.ConnectionDetail);
+        Assert.Contains(live.StatusParts, part => part is { Text: "Connected", IsNow: true });
+        Assert.Contains(live.StatusParts, part => part is { Text: "9576", IsNumber: true });
+
+        live.EnableCsvLogging = false;
+
+        Assert.Equal(" to COM1 · ms43x · Not writing a log", live.ConnectionDetail);
+    }
+
+    [AvaloniaFact]
+    public void ReadoutsSegShowsOnLiveOnly()
+    {
+        var (window, shell) = Show();
+
+        Assert.True(Find.Named<Control>(window, "ReadoutsSeg").IsEffectivelyVisible);
+
+        shell.SelectedTab = ShellViewModel.TuneTab;
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.False(Find.Named<Control>(window, "ReadoutsSeg").IsEffectivelyVisible);
+    }
+
+    [AvaloniaFact]
+    public void ConnectIsPrimaryOnlyOnLive()
+    {
+        var (window, shell) = Show();
+        var connect = Find.Named<Button>(window, "ConnectButton");
+
+        Assert.Contains("primary", connect.Classes);
+
+        shell.SelectedTab = ShellViewModel.TuneTab;
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.DoesNotContain("primary", connect.Classes);
+    }
+
+    [AvaloniaFact]
+    public void RateSaysNoSamplesYetThenTheRate()
+    {
+        var (window, shell) = Show();
+        var rate = Find.Named<Control>(window, "RateText");
+        Assert.False(rate.IsEffectivelyVisible);
+
+        shell.Live.IsConnected = true;
+        shell.Live.ShowRate(null);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(rate.IsEffectivelyVisible);
+        Assert.True(shell.Live.HasNoSamplesYet);
+
+        shell.Live.ShowRate(new RateStats(38.2, 26.2, 24, 31, 100));
+
+        Assert.False(shell.Live.HasNoSamplesYet);
+        Assert.Equal("38", shell.Live.RateValue);
+        Assert.False(shell.Live.IsSlowLink);
+        Assert.Equal("Between samples: 24 to 31 ms", shell.Live.RateDetail);
+
+        shell.Live.ShowRate(new RateStats(8, 125, 110, 140, 100));
+
+        Assert.True(shell.Live.IsSlowLink);
+    }
+
+    [AvaloniaFact]
+    public void NoBinShowsNoBinOpen()
+    {
+        var (window, _) = Show();
+
+        Assert.Equal("No bin open", Find.Named<TextBlock>(window, "PlateFile").Text);
+        Assert.False(Find.Named<Control>(window, "SaveStateChip").IsEffectivelyVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task ShellScreensForReview()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell) = await TuneScreen.OpenAsync(binPath: TuneScreen.CopyCar(_folder));
+        shell.Tune.Editor!.Selection = new CellRange(0, 0, 0, 0);
+        shell.Tune.Editor.Apply(new EditRequest(EditKind.Step, 1));
+        foreach (var (theme, night) in new[] { ("night", true), ("day", false) })
+        {
+            if (night)
+            {
+                shell.IsNight = true;
+            }
+            else
+            {
+                shell.IsDay = true;
+            }
+
+            foreach (var (width, height) in new[] { (1440, 900), (1024, 680) })
+            {
+                window.Width = width;
+                window.Height = height;
+                Dispatcher.UIThread.RunJobs();
+                Screens.Save(window, $"restyle-shell-{theme}-{width}");
+            }
+        }
+
+        // The crowded case: logging on a slow link with unsaved edits at 1280 px, where the XDF line steps aside.
+        shell.IsNight = true;
+        Log(shell.Live, logging: true);
+        window.Width = 1280;
+        window.Height = 800;
+        Dispatcher.UIThread.RunJobs();
+        Screens.Save(window, "restyle-shell-night-1280-logging");
+        Log(shell.Live, logging: false);
+    }
+
+    private static bool HasColour(TopLevel window, Color colour)
+    {
+        Dispatcher.UIThread.RunJobs();
+        using var frame = window.CaptureRenderedFrame()!;
+        using var buffer = frame.Lock();
+        for (var y = 0; y < buffer.Size.Height; y++)
+        {
+            for (var x = 0; x < buffer.Size.Width; x++)
+            {
+                var pixel = Marshal.ReadInt32(buffer.Address, y * buffer.RowBytes + x * 4);
+                var (r, g, b) = buffer.Format == PixelFormat.Rgba8888
+                    ? ((byte)pixel, (byte)(pixel >> 8), (byte)(pixel >> 16))
+                    : ((byte)(pixel >> 16), (byte)(pixel >> 8), (byte)pixel);
+                if (Math.Abs(r - colour.R) <= 30 && Math.Abs(g - colour.G) <= 30 && Math.Abs(b - colour.B) <= 30)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
 }
