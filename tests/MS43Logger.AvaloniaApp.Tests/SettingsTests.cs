@@ -167,4 +167,256 @@ public sealed class SettingsTests : IDisposable
         var focused = Assert.IsAssignableFrom<Control>(window.FocusManager!.GetFocusedElement());
         Assert.Contains(":focus-visible", focused.Classes);
     }
+
+    [AvaloniaFact]
+    public void TabGoesFromTheLogFolderFieldToBrowse()
+    {
+        var (window, _) = Show();
+        var view = OpenSettings(window);
+        Control<TextBox>(view, "LogFolderBox").Focus(NavigationMethod.Tab);
+
+        window.KeyPressQwerty(PhysicalKey.Tab, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Same(Control<Button>(view, "LogFolderBrowse"), window.FocusManager!.GetFocusedElement());
+    }
+
+    [AvaloniaFact]
+    public void GearOpensSettings()
+    {
+        var (window, _) = Show();
+
+        Find.Named<Button>(window, "SettingsButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(Host(window).IsOpen);
+        Assert.Single(window.GetVisualDescendants().OfType<SettingsView>());
+    }
+
+    [AvaloniaFact]
+    public void ThemeChoicesApplyAtOnce()
+    {
+        var (window, _) = Show();
+        var view = OpenSettings(window);
+        Color Pane() => ((ISolidColorBrush)window.FindResource(window.ActualThemeVariant, "PaneBrush")!).Color;
+
+        Control<ToggleButton>(view, "ThemeDay").IsChecked = true;
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(Color.Parse("#FFFFFF"), Pane());
+        Assert.Equal(ThemeMode.Day, AppSettings.Load(_folder).Theme);
+
+        Control<ToggleButton>(view, "ThemeFollow").IsChecked = true;
+
+        Assert.Equal(ThemeVariant.Default, Application.Current!.RequestedThemeVariant);
+        Assert.Equal(ThemeMode.FollowWindows, AppSettings.Load(_folder).Theme);
+    }
+
+    [AvaloniaFact]
+    public void StatusBarAndDialogStayInSync()
+    {
+        var (window, shell) = Show();
+        var view = OpenSettings(window);
+        Control<ToggleButton>(view, "ThemeFollow").IsChecked = true;
+
+        shell.IsDay = true;
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(ThemeMode.Day, AppSettings.Load(_folder).Theme);
+        Assert.True(Control<ToggleButton>(view, "ThemeDay").IsChecked);
+        Assert.False(Control<ToggleButton>(view, "ThemeFollow").IsChecked);
+
+        Control<ToggleButton>(view, "SettingsDials").IsChecked = true;
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(shell.IsDials);
+        Assert.True(Find.Named<ToggleButton>(window, "ReadoutsDials").IsChecked);
+    }
+
+    [AvaloniaFact]
+    public void EverySettingIsSaved()
+    {
+        var (window, _) = Show();
+        var view = OpenSettings(window);
+
+        Control<ToggleButton>(view, "SettingsDials").IsChecked = true;
+        Control<ToggleButton>(view, "Trend60").IsChecked = true;
+        Control<TextBox>(view, "LogFolderBox").Focus();
+        Control<TextBox>(view, "LogFolderBox").Text = @"D:\logs";
+        Control<Button>(view, "LogFolderBrowse").Focus();
+        Control<ToggleSwitch>(view, "StartCsvSwitch").IsChecked = true;
+        Control<ToggleButton>(view, "MapsRaw").IsChecked = true;
+        Control<ToggleButton>(view, "TrailLong").IsChecked = true;
+        Control<ToggleSwitch>(view, "ReopenSwitch").IsChecked = false;
+        Control<ToggleSwitch>(view, "BakSwitch").IsChecked = false;
+        Control<ToggleSwitch>(view, "EditLogSwitch").IsChecked = false;
+        Dispatcher.UIThread.RunJobs();
+
+        var saved = AppSettings.Load(_folder);
+        Assert.Equal(ReadoutsMode.Dials, saved.Readouts);
+        Assert.Equal(60, saved.TrendSeconds);
+        Assert.Equal(@"D:\logs", saved.LogFolder);
+        Assert.True(saved.StartCsvOnConnect);
+        Assert.True(saved.OpenMapsRaw);
+        Assert.Equal(TrailMode.Long, saved.CursorTrail);
+        Assert.False(saved.ReopenLastBin);
+        Assert.False(saved.KeepBackup);
+        Assert.False(saved.AppendEditLog);
+    }
+
+    [AvaloniaFact]
+    public void LogFolderIsSavedWhenTheFieldIsLeft()
+    {
+        var (window, _) = Show();
+        var view = OpenSettings(window);
+        var box = Control<TextBox>(view, "LogFolderBox");
+        box.Focus();
+
+        // A path half typed is not a setting yet (checkpoint: partial paths were saved per keystroke).
+        box.Text = @"D:\l";
+        Dispatcher.UIThread.RunJobs();
+        Assert.NotEqual(@"D:\l", AppSettings.Load(_folder).LogFolder);
+
+        box.Text = @"D:\logs";
+        Control<Button>(view, "LogFolderBrowse").Focus();
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(@"D:\logs", AppSettings.Load(_folder).LogFolder);
+    }
+
+    [AvaloniaFact]
+    public void EmptiedLogFolderShowsTheSavedFolderAgain()
+    {
+        var (window, _) = Show();
+        var view = OpenSettings(window);
+        var box = Control<TextBox>(view, "LogFolderBox");
+        var saved = box.Text;
+        box.Focus();
+
+        // Checkpoint M9: an emptied box must not pretend the folder is gone; the saved folder stays and shows again.
+        box.Text = string.Empty;
+        Control<Button>(view, "LogFolderBrowse").Focus();
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(saved, box.Text);
+        Assert.Equal(saved, AppSettings.Load(_folder).LogFolder);
+    }
+
+    [AvaloniaFact]
+    public void SaveFailureShowsBannerAndTryAgain()
+    {
+        var blocker = Path.Combine(_folder, "blocker");
+        File.WriteAllText(blocker, string.Empty);
+        var (window, _) = Show(AppSettings.Load(Path.Combine(blocker, "settings")));
+        var view = OpenSettings(window);
+
+        Control<ToggleButton>(view, "Trend30").IsChecked = true;
+        Dispatcher.UIThread.RunJobs();
+
+        var banner = Control<Border>(view, "SaveErrorBanner");
+        Assert.True(banner.IsEffectivelyVisible);
+        Assert.StartsWith("Not saved:", Control<TextBlock>(view, "SaveErrorText").Text);
+        Assert.EndsWith("Your choices apply until you close the app.", Control<TextBlock>(view, "SaveErrorText").Text);
+
+        File.Delete(blocker);
+        Control<Button>(view, "TryAgainButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.False(banner.IsEffectivelyVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task ReopensLastBinAtStart()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var settings = AppSettings.Load(_folder);
+        settings.LastBin = TuneScreen.CopyCar(_folder);
+        settings.XdfByFirmware["43X001"] = TuneScreen.Xdf!;
+        var (_, shell) = Show(settings);
+
+        await shell.StartAsync();
+
+        Assert.NotNull(shell.Tune.Document);
+    }
+
+    [AvaloniaFact]
+    public async Task MissingLastBinShowsBanner()
+    {
+        var settings = AppSettings.Load(_folder);
+        settings.LastBin = Path.Combine(_folder, "gone", "CAR.bin");
+        var (_, shell) = Show(settings);
+
+        await shell.StartAsync();
+
+        Assert.Null(shell.Tune.Document);
+        Assert.Equal("Could not reopen CAR.bin: the file was not found.", shell.Tune.ErrorMessage);
+        Assert.Equal(TuneAction.OpenBin, shell.Tune.ErrorAction);
+    }
+
+    [AvaloniaFact]
+    public async Task MissingXdfShowsBannerAndNoPicker()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var settings = AppSettings.Load(_folder);
+        settings.LastBin = TuneScreen.CopyCar(_folder);
+        settings.XdfByFirmware["43X001"] = Path.Combine(_folder, "moved", "Siemens_MS43_MS43X001_512K.xdf");
+        var (_, shell) = Show(settings);
+
+        await shell.StartAsync();
+
+        Assert.Null(shell.Tune.Document);
+        Assert.Equal("Could not reopen CAR.bin: its XDF Siemens_MS43_MS43X001_512K.xdf was not found.", shell.Tune.ErrorMessage);
+        Assert.Equal(TuneAction.OpenXdf, shell.Tune.ErrorAction);
+    }
+
+    [AvaloniaFact]
+    public async Task ReopenOffStartsEmpty()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var settings = AppSettings.Load(_folder);
+        settings.LastBin = TuneScreen.CopyCar(_folder);
+        settings.XdfByFirmware["43X001"] = TuneScreen.Xdf!;
+        settings.ReopenLastBin = false;
+        var (_, shell) = Show(settings);
+
+        await shell.StartAsync();
+
+        Assert.Null(shell.Tune.Document);
+        Assert.Null(shell.Tune.ErrorMessage);
+    }
+
+    [AvaloniaFact]
+    public async Task SaveWithoutBakOrLogWhenSwitchedOff()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var settings = AppSettings.Load(_folder);
+        settings.KeepBackup = false;
+        settings.AppendEditLog = false;
+        var (_, shell) = Show(settings);
+        var bin = TuneScreen.CopyCar(Path.Combine(_folder, "bins"));
+        await shell.Tune.OpenAsync(bin, TuneScreen.Xdf);
+        shell.Tune.SelectedItem = shell.Tune.Document!.Xdf.FindByTitle("ip_iga_ron98_pl__n__maf");
+        shell.Tune.Editor!.Selection = new CellRange(0, 0, 0, 0);
+        shell.Tune.Editor.Apply(new EditRequest(EditKind.Step, 1));
+
+        Assert.True(shell.Tune.Save());
+
+        Assert.False(File.Exists(bin + ".bak"));
+        Assert.False(File.Exists(Path.ChangeExtension(bin, ".log")));
+    }
 }
