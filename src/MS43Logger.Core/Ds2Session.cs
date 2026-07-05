@@ -20,6 +20,12 @@ public sealed class Ds2Session : IDisposable, IPayloadSource
 
     public bool IsConnected => _connected;
 
+    /// <inheritdoc />
+    public long? LastRequestTimestamp { get; private set; }
+
+    /// <inheritdoc />
+    public int LastAttempts { get; private set; }
+
     public static Ds2Session Create(AdxDefinition definition, string portName)
     {
         return new Ds2Session(definition, new SerialPortAdapter(portName));
@@ -53,8 +59,13 @@ public sealed class Ds2Session : IDisposable, IPayloadSource
         {
             try
             {
+                // Each attempt sends the request again: the reply's values are latched after this one went out.
+                var sentAt = System.Diagnostics.Stopwatch.GetTimestamp();
                 var responseFrame = ExecuteExchange(exchange);
-                return ExtractPayload(responseFrame, exchange.Response);
+                var payload = ExtractPayload(responseFrame, exchange.Response);
+                LastRequestTimestamp = sentAt;
+                LastAttempts = attempt;
+                return payload;
             }
             catch (TimeoutException ex) when (attempt < PollRetryCount)
             {

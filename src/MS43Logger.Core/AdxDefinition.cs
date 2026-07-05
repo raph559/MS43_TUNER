@@ -15,11 +15,13 @@ public sealed class AdxDefinition
     private readonly IReadOnlyDictionary<string, AdxSendCommand> _sendCommandsById;
     private readonly IReadOnlyDictionary<string, AdxListenPacket> _listenPacketsById;
     private readonly IReadOnlyDictionary<string, AdxMacro> _macrosById;
+    private readonly IReadOnlyDictionary<string, AdxBitmaskDefinition> _bitmasksById;
 
     private AdxDefinition(
         string sourceName,
         AdxHeader header,
         List<AdxValueDefinition> values,
+        List<AdxBitmaskDefinition> bitmasks,
         Dictionary<string, AdxLookupTable> lookupTablesByIdHash,
         Dictionary<string, AdxSendCommand> sendCommandsById,
         Dictionary<string, AdxListenPacket> listenPacketsById,
@@ -28,6 +30,14 @@ public sealed class AdxDefinition
         SourceName = sourceName;
         Header = header;
         Values = values.AsReadOnly();
+        Bitmasks = bitmasks.AsReadOnly();
+        var bitmasksById = new Dictionary<string, AdxBitmaskDefinition>(StringComparer.OrdinalIgnoreCase);
+        foreach (var bitmask in bitmasks)
+        {
+            bitmasksById.TryAdd(bitmask.Id, bitmask);
+        }
+
+        _bitmasksById = new ReadOnlyDictionary<string, AdxBitmaskDefinition>(bitmasksById);
         _valuesByIdHash = new ReadOnlyDictionary<string, AdxValueDefinition>(
             values.ToDictionary(value => value.IdHash, StringComparer.OrdinalIgnoreCase));
         _lookupTablesByIdHash = new ReadOnlyDictionary<string, AdxLookupTable>(lookupTablesByIdHash);
@@ -41,6 +51,9 @@ public sealed class AdxDefinition
     public AdxHeader Header { get; }
 
     public IReadOnlyList<AdxValueDefinition> Values { get; }
+
+    /// <summary>The on/off channels (ADXBITMASK) that sit in the payload; decoded on demand by <see cref="DecodeBitmask"/>.</summary>
+    public IReadOnlyList<AdxBitmaskDefinition> Bitmasks { get; }
 
     public static AdxDefinition Load(Stream stream, string sourceName = "definition.adx")
     {
@@ -79,6 +92,16 @@ public sealed class AdxDefinition
             .ThenBy(value => value.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        var bitmasks = root.Elements("ADXBITMASK")
+            .Where(element => element.Element("packetoffset") is not null)
+            .Select(element => new AdxBitmaskDefinition(
+                (string?)element.Attribute("id") ?? throw new InvalidOperationException("ADX bitmask is missing an id."),
+                (string?)element.Attribute("title") ?? string.Empty,
+                ParseInt(element.Element("packetoffset")?.Value, 0),
+                ParseInt(element.Element("operand")?.Value, 0),
+                ParseInt(element.Element("result")?.Value, 0)))
+            .ToList();
+
         var lookupTables = root.Elements("ADXLOOKUPTABLE")
             .Select(ParseLookupTable)
             .ToDictionary(table => table.IdHash, StringComparer.OrdinalIgnoreCase);
@@ -95,7 +118,7 @@ public sealed class AdxDefinition
             .Select(ParseMacro)
             .ToDictionary(macro => macro.Id, StringComparer.OrdinalIgnoreCase);
 
-        return new AdxDefinition(sourceName, header, values, lookupTables, sendCommands, listenPackets, macros);
+        return new AdxDefinition(sourceName, header, values, bitmasks, lookupTables, sendCommands, listenPackets, macros);
     }
 
     public static AdxDefinition LoadFromFile(string path)
@@ -161,6 +184,25 @@ public sealed class AdxDefinition
         }
 
         return matches;
+    }
+
+    /// <summary>The bitmask with this id, ignoring case; the first one wins when a definition repeats an id.</summary>
+    public AdxBitmaskDefinition? FindBitmask(string id) =>
+        _bitmasksById.TryGetValue(id, out var bitmask) ? bitmask : null;
+
+    /// <summary>
+    /// The bit's state in a payload, or null when this definition lacks it or the payload is too short:
+    /// a missing bit is unknown, never off.
+    /// </summary>
+    public bool? DecodeBitmask(string id, ReadOnlySpan<byte> payload)
+    {
+        var bitmask = FindBitmask(id);
+        if (bitmask is null || bitmask.PacketOffset < 0 || bitmask.PacketOffset >= payload.Length)
+        {
+            return null;
+        }
+
+        return bitmask.IsSet(payload);
     }
 
     public IReadOnlyList<DecodedValue> DecodePayload(ReadOnlySpan<byte> payload, IEnumerable<AdxValueDefinition>? selectedValues = null)
@@ -562,6 +604,20 @@ public sealed record AdxDefaults(
     bool Signed,
     bool LsbFirst,
     bool FloatingPoint);
+
+public sealed record AdxBitmaskDefinition(string Id, string Title, int PacketOffset, long Operand, long Result)
+{
+    /// <summary>True when the byte at <see cref="PacketOffset"/>, masked by <see cref="Operand"/>, equals <see cref="Result"/> (the ADX's AND bit operation).</summary>
+    public bool IsSet(ReadOnlySpan<byte> payload)
+    {
+        if (PacketOffset < 0 || PacketOffset >= payload.Length)
+        {
+            throw new InvalidOperationException($"Payload length {payload.Length} is too short for bitmask '{Id}' at offset {PacketOffset}.");
+        }
+
+        return (payload[PacketOffset] & Operand) == Result;
+    }
+}
 
 public sealed record AdxValueDefinition(
     string Id,
