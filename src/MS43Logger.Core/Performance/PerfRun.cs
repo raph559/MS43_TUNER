@@ -1,0 +1,283 @@
+using System.Globalization;
+
+namespace MS43Logger.Core.Performance;
+
+/// <summary>
+/// A sample kept with a run: its time on the run clock and its raw payload, so any channel or bit can be decoded again,
+/// and the retries its poll needed when the source said.
+/// </summary>
+public sealed record RecordedSample(TimeSpan At, byte[] Payload, int? Retries = null);
+
+/// <summary>
+/// A finished run, complete or incomplete. <see cref="Samples"/> run from 2 s before the window (when the run had them) to its
+/// end; <see cref="WindowStart"/> is the first sample in the band, the start crossing lying between it and the sample before,
+/// and <see cref="WindowEnd"/> is the last sample. <see cref="Figures"/> is <see cref="RunAnalysis.Analyse"/> of these samples
+/// with the flags only the run could see: why it ended, the warm-up state while it ran, a late full throttle. <see cref="Armed"/>
+/// are the conditions when the ready checks were met (at arm, start and end).
+/// </summary>
+public sealed record RunOutcome(PerfTestSpec Spec, bool Complete, RunFigures Figures, Conditions Start, Conditions End,
+    IReadOnlyList<RecordedSample> Samples, int WindowStart, int WindowEnd, Conditions? Armed = null);
+
+/// <summary>
+/// One test from arming to its result, fed the frames Live already receives: it never asks for a sample
+/// of its own. A pull, knock check or roll-on waits for its ready checks, starts on full throttle, times its window from the
+/// interpolated start crossing and ends complete at the end crossing, or incomplete when the pedal lifts, the clutch or brake
+/// is pressed, the gear changes, the revs drop or the link is lost. Ending before the band was reached is a false start:
+/// nothing was timed, so the run waits again.
+/// </summary>
+public sealed class PerfRun
+{
+    // Pedal shares are of the calibrated full-pedal value.
+    private const double FullThrottle = 90;
+    private const double Released = 30;
+    private const double LightPedal = 60;
+    private const double RpmDrop = 100;
+    private const double SpeedDrop = 5;
+    private const double LateThrottleKmh = 3;
+    private const double CalibrationKmh = 50;
+    private const double SteadyKmh = 1;
+    private const double SteadyRpm = 50;
+    // A roll-on starts from a steady speed: within 2 km/h for 1 s.
+    private const double RollOnSteadyKmh = 2;
+    private const double OilWarmC = 80;
+    private const double LinkSeconds = 30;
+    private const double FitAboveKmh = 20;
+    // Settings keep a full pedal of 10 to 130; a lower peak is a pedal that was not pressed.
+    private const double MinFullPedal = 10;
+    private const double PedalBand = 0.01;
+    private const string WaitingText = "Waiting for the ready checks…";
+    private static readonly TimeSpan PreRoll = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan StoppedFor = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan ReleasedFor = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan SteadyFor = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan RollOnSteadyFor = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan PedalHold = TimeSpan.FromSeconds(2);
+    private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
+
+    private readonly AnalysisInputs _inputs;
+    private readonly bool _pedalCalibrated;
+    private readonly Func<PerfFrame, double?> _rollOnSpeed;
+    private readonly double _speedFactor;
+    // The frames kept: the last 2 s while waiting, then the run; payloads beside them.
+    private readonly List<PerfFrame> _frames = [];
+    private readonly List<byte[]> _payloads = [];
+    private readonly Dictionary<int, double> _captured = [];
+    private IReadOnlyList<ReadyCheck> _checks;
+    private PerfFrame? _latest;
+    private IReadOnlyList<(double T, double Rpm)>? _live;
+
+    // Pull-type tests and the standing start; indices are into _frames.
+    private bool _armed;
+    private int _windowStart = -1;
+    private double _t0;
+    private double? _tEnd;
+    private bool _t0Fitted;
+    private int _lowFrom = -1;
+    private int _releasedFrom = -1;
+    private double? _peak;
+    private int _peakAt = -1;
+    private double? _triggerMeasure;
+    private TimeSpan? _stoppedSince;
+    private (double Kmh, TimeSpan Since)? _rollOnSteady;
+    private bool _tooLate;
+    private Conditions? _startConditions;
+    private Conditions? _armedConditions;
+    private bool _sawCold;
+    private bool _sawOilCold;
+    private bool _sawOilUnreported;
+    private double? _lowestOil;
+
+    // Speed calibration: the steady stretch and the ratios of its last 3 s.
+    private (int Gear, double Kmh, double Rpm, TimeSpan Since)? _steady;
+    private readonly Queue<(TimeSpan At, double Ratio)> _ratios = new();
+
+    // Pedal step.
+    private TimeSpan? _holdSince;
+    private double _holdPeak;
+
+    public PerfTestSpec Spec { get; }
+
+    public RunStage Stage { get; private set; }
+
+    /// <summary>Each condition of the test with its live reading; empty for the link test.</summary>
+    public IReadOnlyList<ReadyCheck> Checks => _checks;
+
+    /// <summary>"Waiting for full throttle…", "Running", "Done", "Incomplete: pedal lifted at 5210 rpm" and the like.</summary>
+    public string Status { get; private set; }
+
+    /// <summary>0 to 1 of the band, the speed range, the link test's 30 s or the hold a calibration or pedal step needs.</summary>
+    public double Progress { get; private set; }
+
+    /// <summary>Seconds since the start crossing (since time zero of a standing start, since the first sample of a link test).</summary>
+    public double Elapsed { get; private set; }
+
+    public double? Rpm => _latest?.Rpm;
+
+    /// <summary>The latest knock retard per cylinder, positive degrees; empty when the definition logs none.</summary>
+    public IReadOnlyList<double?> Knock => _latest?.KnockRetard ?? [];
+
+    /// <summary>Rpm against seconds since the start crossing, for the running chart; empty before the window.</summary>
+    public IReadOnlyList<(double T, double Rpm)> Live => _live ??= BuildLive();
+
+    /// <summary>Speed calibration: km/h per rpm by gear captured so far; a later capture of a gear replaces it.</summary>
+    public IReadOnlyDictionary<int, double> Captured => _captured;
+
+    /// <summary>Pedal step: the highest pedal reading seen, in the definition's unit.</summary>
+    public double? PedalReading { get; private set; }
+
+    /// <summary>Set when a pull, knock check, roll-on, standing start or link test finishes; calibration and the pedal step have none.</summary>
+    public RunOutcome? Outcome { get; private set; }
+
+    public event EventHandler? Changed;
+
+    /// <summary>Stops a waiting or running test without an outcome; a finished run keeps its outcome.</summary>
+    public void Cancel()
+    {
+        if (Stage is RunStage.Finished or RunStage.Cancelled)
+        {
+            return;
+        }
+
+        Stage = RunStage.Cancelled;
+        Status = "Cancelled";
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    private bool RollOn => Spec.Kind == PerfTestKind.RollOn;
+
+    private double StartLevel => (RollOn || Spec.Kind == PerfTestKind.StandingStart ? Spec.StartKmh : Spec.StartRpm) ?? double.NaN;
+
+    private double EndLevel => (RollOn || Spec.Kind == PerfTestKind.StandingStart ? Spec.EndKmh : Spec.EndRpm) ?? double.NaN;
+
+    private string Unit => RollOn || Spec.Kind == PerfTestKind.StandingStart ? "km/h" : "rpm";
+
+    // Pulls wait 200 to 700 rpm below the start, roll-ons 5 to 15 km/h below it.
+    private (double Far, double Near) Window => RollOn ? (15d, 5d) : (700d, 200d);
+
+    // A roll-on's speed held within 2 km/h for 1 s (steady below the start speed); a pull needs no steadiness.
+    private bool Steady(PerfFrame frame, double? measure)
+    {
+        if (!RollOn)
+        {
+            return true;
+        }
+
+        if (measure is not { } kmh)
+        {
+            _rollOnSteady = null;
+            return false;
+        }
+
+        if (_rollOnSteady is not { } stretch || Math.Abs(kmh - stretch.Kmh) > RollOnSteadyKmh)
+        {
+            _rollOnSteady = (kmh, frame.At);
+            return false;
+        }
+
+        return frame.At - stretch.Since >= RollOnSteadyFor;
+    }
+
+    private bool ReachedHundred(int endIndex) => _frames.Take(endIndex + 1).Skip(_windowStart).Any(f => Measure(f) >= 100);
+
+    // A lift seen on one sample, then another reason to end: the window still ends before the lift.
+    private int LastGood(int endIndex) => _lowFrom >= 0 ? Math.Min(endIndex, _lowFrom - 1) : endIndex;
+
+    private void Rearm()
+    {
+        Stage = RunStage.Waiting;
+        Status = WaitingText;
+        _armed = false;
+        _windowStart = -1;
+        _lowFrom = -1;
+        _releasedFrom = -1;
+        _peak = null;
+        _peakAt = -1;
+        _tEnd = null;
+        _t0Fitted = false;
+        _stoppedSince = null;
+        _rollOnSteady = null;
+        _tooLate = false;
+        _startConditions = null;
+        Progress = 0;
+        Elapsed = 0;
+    }
+
+    private void Record(PerfFrame frame, ReadOnlyMemory<byte> payload, bool prune)
+    {
+        _frames.Add(frame);
+        _payloads.Add(payload.ToArray());
+        if (!prune)
+        {
+            return;
+        }
+
+        // Waiting keeps 2 s and the frame just before them: the pre-roll a result stores.
+        var cut = 0;
+        while (cut + 1 < _frames.Count && _frames[cut + 1].At <= frame.At - PreRoll)
+        {
+            cut++;
+        }
+
+        Drop(cut);
+    }
+
+    private void Drop(int count)
+    {
+        if (count <= 0)
+        {
+            return;
+        }
+
+        _frames.RemoveRange(0, count);
+        _payloads.RemoveRange(0, count);
+        int Shift(int index) => index < 0 ? index : Math.Max(index - count, 0);
+        _windowStart = Shift(_windowStart);
+        _lowFrom = Shift(_lowFrom);
+        _releasedFrom = Shift(_releasedFrom);
+        _peakAt = Shift(_peakAt);
+    }
+
+    private IReadOnlyList<(double T, double Rpm)> BuildLive()
+    {
+        if (_windowStart < 0 || Spec.Kind is PerfTestKind.LinkTest or PerfTestKind.SpeedCalibration or PerfTestKind.Pedal)
+        {
+            return [];
+        }
+
+        var points = new List<(double T, double Rpm)>();
+        if (Spec.Kind is PerfTestKind.Pull or PerfTestKind.KnockCheck)
+        {
+            points.Add((0, StartLevel));
+        }
+        else if (RollOn && _windowStart > 0 && _frames[_windowStart - 1].Rpm is { } a && _frames[_windowStart].Rpm is { } b)
+        {
+            // The rpm at the start crossing, between the two frames around it.
+            var (ta, tb) = (_frames[_windowStart - 1].At.TotalSeconds, _frames[_windowStart].At.TotalSeconds);
+            var fraction = tb > ta ? Math.Clamp((_t0 - ta) / (tb - ta), 0, 1) : 1;
+            points.Add((0, a + fraction * (b - a)));
+        }
+
+        for (var i = _windowStart; i < _frames.Count; i++)
+        {
+            if (_frames[i].Rpm is { } rpm)
+            {
+                points.Add((_frames[i].At.TotalSeconds - _t0, rpm));
+            }
+        }
+
+        return points;
+    }
+
+    // What a pull-type test times: rpm, or for a roll-on the speed from rpm when calibrated, else VS; a standing start times
+    // VS. VS carries any GPS correction of the speed calibration.
+    private double? Measure(PerfFrame frame) => Spec.Kind switch
+    {
+        PerfTestKind.RollOn => _rollOnSpeed(frame),
+        PerfTestKind.StandingStart => frame.SpeedKmh * _speedFactor,
+        _ => frame.Rpm,
+    };
+
+    private double? PedalShare(PerfFrame? frame) => _pedalCalibrated && frame?.Pedal is { } pedal ? 100 * pedal / _inputs.FullPedal : null;
+
+    private static double Share(double part, double whole) => whole > 0 && double.IsFinite(part / whole) ? Math.Clamp(part / whole, 0, 1) : 0;
+}
