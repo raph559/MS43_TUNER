@@ -177,6 +177,84 @@ public sealed class PerfRun
         return frame.At - stretch.Since >= RollOnSteadyFor;
     }
 
+    private void PushCalibration(PerfFrame frame)
+    {
+        var fast = frame.SpeedKmh >= CalibrationKmh;
+        var inGear = frame.Gear > 0;
+        // Without a pedal calibration its share is unknown, so the light-pedal condition waits for one.
+        var light = !_pedalCalibrated || PedalShare(frame) < LightPedal;
+        if (fast && inGear && light && frame.Rpm > 0)
+        {
+            var (gear, kmh, rpm) = (frame.Gear!.Value, frame.SpeedKmh!.Value, frame.Rpm!.Value);
+            // Steady: within 1 km/h and 50 rpm of where the stretch began, in one gear.
+            if (_steady is not { } stretch || stretch.Gear != gear || Math.Abs(kmh - stretch.Kmh) > SteadyKmh || Math.Abs(rpm - stretch.Rpm) > SteadyRpm)
+            {
+                _steady = (gear, kmh, rpm, frame.At);
+                _ratios.Clear();
+            }
+
+            _ratios.Enqueue((frame.At, kmh / rpm));
+            while (_ratios.Peek().At < frame.At - SteadyFor)
+            {
+                _ratios.Dequeue();
+            }
+        }
+        else
+        {
+            _steady = null;
+            _ratios.Clear();
+        }
+
+        var held = _steady is { } steady ? frame.At - steady.Since : TimeSpan.Zero;
+        if (_steady is { } captured && held >= SteadyFor)
+        {
+            _captured[captured.Gear] = RunMath.Median(_ratios.Select(r => r.Ratio));
+            Status = $"Captured {RunAnalysis.Ordinal(captured.Gear)} gear";
+        }
+        else
+        {
+            Status = _steady is null ? "Hold a steady speed above 50 km/h…" : "Hold it steady…";
+        }
+
+        _checks = CalibrationChecks(frame, fast, inGear, light, held);
+        Progress = Share(held.TotalSeconds, SteadyFor.TotalSeconds);
+    }
+
+    private void PushPedal(PerfFrame frame)
+    {
+        if (frame.Pedal is { } reading)
+        {
+            PedalReading = Math.Max(PedalReading ?? reading, reading);
+        }
+
+        // Read with the ignition on and the engine off: held within 1 % of the highest reading for 2 s.
+        var off = frame.Rpm is not { } rpm || rpm <= 0;
+        var peak = PedalReading ?? 0;
+        var near = off && frame.Pedal is { } pedal && peak >= MinFullPedal && pedal >= peak * (1 - PedalBand);
+        if (!near)
+        {
+            _holdSince = null;
+        }
+        else if (_holdSince is null || peak > _holdPeak * (1 + PedalBand))
+        {
+            _holdSince = frame.At;
+            _holdPeak = peak;
+        }
+
+        var held = _holdSince is { } since ? frame.At - since : TimeSpan.Zero;
+        _checks = PedalChecks(frame, off, near, held);
+        Progress = Share(held.TotalSeconds, PedalHold.TotalSeconds);
+        if (held >= PedalHold)
+        {
+            Stage = RunStage.Finished;
+            Status = "Done";
+            Progress = 1;
+            return;
+        }
+
+        Status = near ? "Hold it…" : "Press the pedal fully and hold it…";
+    }
+
     private bool ReachedHundred(int endIndex) => _frames.Take(endIndex + 1).Skip(_windowStart).Any(f => Measure(f) >= 100);
 
     // A lift seen on one sample, then another reason to end: the window still ends before the lift.
@@ -200,6 +278,38 @@ public sealed class PerfRun
         _startConditions = null;
         Progress = 0;
         Elapsed = 0;
+    }
+
+    private IEnumerable<RunFlag> RunFlags()
+    {
+        // A run made anyway with the coolant red is kept but not comparable; cold or unreported oil makes it doubtful.
+        if (_sawCold)
+        {
+            yield return new RunFlag("cold", FlagSeverity.Cold, "Engine cold: not comparable.");
+        }
+
+        // The oil banner is amber below 80 °C and through its 10 s hold at 80 °C or more; the flag words the lowest reading
+        // the run saw while it was amber, so a reading above 80 °C is never called below it.
+        if (_sawOilCold)
+        {
+            yield return new RunFlag("oil-cold", FlagSeverity.Suspect, _lowestOil switch
+            {
+                double oil when oil < OilWarmC => $"Oil {RunAnalysis.Whole(oil)} °C: below working temperature (80 °C).",
+                double held => $"Oil {RunAnalysis.Whole(held)} °C: had not held 80 °C for 10 s yet.",
+                null => "Oil below working temperature (80 °C).",
+            });
+        }
+
+        if (_sawOilUnreported)
+        {
+            yield return new RunFlag("oil-unreported", FlagSeverity.Suspect, "Oil temperature not reported by this ECU.");
+        }
+
+        if (RollOn && _triggerMeasure is { } at && Spec.StartKmh is { } start && at > start - LateThrottleKmh)
+        {
+            yield return new RunFlag("late-throttle", FlagSeverity.Suspect,
+                $"Full throttle came only {RunAnalysis.Whole(start - at)} km/h before {RunAnalysis.Whole(start)} km/h.");
+        }
     }
 
     private void Record(PerfFrame frame, ReadOnlyMemory<byte> payload, bool prune)
@@ -277,7 +387,67 @@ public sealed class PerfRun
         _ => frame.Rpm,
     };
 
+    private string MeasureText(PerfFrame frame) => Measure(frame) is { } value ? $"{RunAnalysis.Whole(value)} {Unit}" : "n/a";
+
     private double? PedalShare(PerfFrame? frame) => _pedalCalibrated && frame?.Pedal is { } pedal ? 100 * pedal / _inputs.FullPedal : null;
 
     private static double Share(double part, double whole) => whole > 0 && double.IsFinite(part / whole) ? Math.Clamp(part / whole, 0, 1) : 0;
+
+    // Full throttle is no check: it cannot be met together with "Pedal released", and the status asks for it once the checks
+    // are met.
+    private IReadOnlyList<ReadyCheck> PullChecks(PerfFrame? frame, double? measure, bool warm, bool inGear, bool ready, bool released)
+    {
+        var pedal = PedalText(frame);
+        var gear = Spec.Gear is { } g ? RunAnalysis.Ordinal(g) : "n/a";
+        // The window the run waits in, as the check tests it: "Between 1300 and 1800 rpm", "Steady between 45 and 55 km/h".
+        var (far, near) = Window;
+        var range = $"{RunAnalysis.Whole(StartLevel - far)} and {RunAnalysis.Whole(StartLevel - near)} {Unit}";
+        return
+        [
+            new ReadyCheck("Engine warm", warm, CoolantText(frame)),
+            new ReadyCheck("Pedal calibrated", _pedalCalibrated,
+                _pedalCalibrated ? $"Full pedal {_inputs.FullPedal.ToString("0.#", Invariant)}" : "Calibrate the pedal first"),
+            new ReadyCheck($"{gear} gear", inGear, GearText(frame)),
+            new ReadyCheck(RollOn ? $"Steady between {range}" : $"Between {range}", ready,
+                measure is { } m ? $"{RunAnalysis.Whole(m)} {Unit}" : "n/a"),
+            new ReadyCheck("Pedal released", released, pedal),
+        ];
+    }
+
+    private IReadOnlyList<ReadyCheck> StandingChecks(PerfFrame? frame, bool warm, bool stopped)
+    {
+        var detail = frame?.SpeedKmh switch
+        {
+            null => "n/a",
+            <= 0 when _stoppedSince is { } since => $"0 km/h for {(frame.At - since).TotalSeconds.ToString("0.0", Invariant)} s",
+            { } v => $"{RunAnalysis.Whole(v)} km/h",
+        };
+        return [new ReadyCheck("Engine warm", warm, CoolantText(frame)), new ReadyCheck("Stopped", stopped, detail)];
+    }
+
+    private IReadOnlyList<ReadyCheck> CalibrationChecks(PerfFrame? frame, bool fast, bool inGear, bool light, TimeSpan held) =>
+    [
+        new ReadyCheck("Above 50 km/h", fast, frame?.SpeedKmh is { } v ? $"{RunAnalysis.Whole(v)} km/h" : "n/a"),
+        new ReadyCheck("In gear", inGear, GearText(frame)),
+        new ReadyCheck("Light pedal", light, _pedalCalibrated ? PedalText(frame) : "Pedal not calibrated"),
+        new ReadyCheck("Steady for 3 s", held >= SteadyFor, $"{held.TotalSeconds.ToString("0.0", Invariant)} s"),
+    ];
+
+    private static IReadOnlyList<ReadyCheck> PedalChecks(PerfFrame? frame, bool off, bool near, TimeSpan held) =>
+    [
+        new ReadyCheck("Engine off", off, frame?.Rpm is { } rpm ? $"{RunAnalysis.Whole(rpm)} rpm" : "n/a"),
+        new ReadyCheck("Pedal pressed fully", near, frame?.Pedal is { } pedal ? pedal.ToString("0.0", Invariant) : "n/a"),
+        new ReadyCheck("Held for 2 s", held >= PedalHold, $"{held.TotalSeconds.ToString("0.0", Invariant)} s"),
+    ];
+
+    private static string CoolantText(PerfFrame? frame) => frame?.CoolantC is { } c ? $"Coolant {RunAnalysis.Whole(c)} °C" : "Coolant n/a";
+
+    private static string GearText(PerfFrame? frame) => frame?.Gear switch
+    {
+        null => "Gear n/a",
+        0 => "In neutral",
+        { } gear => $"In {RunAnalysis.Ordinal(gear)}",
+    };
+
+    private string PedalText(PerfFrame? frame) => PedalShare(frame) is { } share ? $"Pedal {RunAnalysis.Whole(share)} %" : "Pedal n/a";
 }

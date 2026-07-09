@@ -49,6 +49,98 @@ public static class RunAnalysis
 
     internal static string Whole(double value) => value.ToString("0", Invariant);
 
+    /// <summary>
+    /// True speed per km/h the speedometer reads: the GPS correction of the speed calibration (spec 6.5), the median over the
+    /// gears whose corrected ratio differs from the speedometer's own; 1 when no gear was GPS-checked.
+    /// </summary>
+    internal static double SpeedFactor(AnalysisInputs inputs)
+    {
+        ArgumentNullException.ThrowIfNull(inputs);
+        if (inputs.SpeedometerKmhPerRpm is not { Count: > 0 } speedometer)
+        {
+            return 1;
+        }
+
+        var factor = RunMath.Median(speedometer
+            .Where(pair => pair.Value > 0 && double.IsFinite(pair.Value) && Calibrated(pair.Key, inputs) is not null)
+            .Select(pair => Calibrated(pair.Key, inputs)!.Value / pair.Value)
+            .Where(ratio => Math.Abs(ratio - 1) > Tolerance));
+        return factor > 0 && double.IsFinite(factor) ? factor : 1;
+    }
+
+    /// <summary>What a roll-on times (spec 4.5, 6.3): speed from rpm with the gear's calibration, else VS with any GPS correction.</summary>
+    internal static Func<PerfFrame, double?> RollOnSpeed(int? gear, AnalysisInputs inputs)
+    {
+        ArgumentNullException.ThrowIfNull(inputs);
+        var factor = SpeedFactor(inputs);
+        return Calibrated(gear, inputs) is { } k ? frame => k * frame.Rpm : frame => frame.SpeedKmh * factor;
+    }
+
+    private static RunFigures Link(IReadOnlyList<PerfFrame> frames, bool complete)
+    {
+        var t = Times(frames).Where(double.IsFinite).ToArray();
+        // A stamp that steps back is no interval; samples at one instant are intervals of zero.
+        var intervals = Enumerable.Range(1, Math.Max(t.Length - 1, 0)).Select(i => t[i] - t[i - 1]).Where(d => d >= 0).Order().ToArray();
+        double? median = null, shortest = null, p95 = null, longest = null, rate = null;
+        if (intervals.Length > 0)
+        {
+            median = RunMath.Median(intervals);
+            shortest = intervals[0];
+            p95 = intervals[Math.Clamp((int)Math.Ceiling(0.95 * intervals.Length) - 1, 0, intervals.Length - 1)];
+            longest = intervals[^1];
+            var span = t[^1] - t[0];
+            // Samples per second from the median interval (spec 6.6); the mean when bursts make the median zero.
+            rate = median > 0 ? 1 / median : span > 0 ? (t.Length - 1) / span : null;
+        }
+
+        var figures = new List<Figure>
+        {
+            Fig("rate", "Samples per second", rate, "samples/s", 1),
+            Fig("interval-median", "Median interval", median * 1000, "ms", 0),
+            Fig("interval-min", "Shortest interval", shortest * 1000, "ms", 0),
+            Fig("interval-p95", "95th percentile interval", p95 * 1000, "ms", 0),
+            Fig("interval-max", "Longest interval", longest * 1000, "ms", 0),
+            Fig("gaps", "Gaps over 300 ms", intervals.Length > 0 ? intervals.Count(d => d > GapSeconds) : null, "", 0),
+            // Requests sent again after a timeout (spec 6.6); unknown when the source does not count them.
+            Fig("retries", "Retries", frames.Any(f => f.Retries is not null) ? frames.Sum(f => f.Retries ?? 0) : null, "", 0),
+        };
+
+        var flags = new List<RunFlag>();
+        if (!complete)
+        {
+            var seconds = t.Length > 1 ? t[^1] - t[0] : 0;
+            flags.Add(new RunFlag("incomplete", FlagSeverity.Invalid, $"Incomplete: ended after {seconds.ToString("0.0", Invariant)} s."));
+        }
+
+        flags.AddRange(LinkFlags(t));
+        if (rate < AdviceRate)
+        {
+            flags.Add(new RunFlag("link-advice", FlagSeverity.Info,
+                "Under 15 samples/s: setting the USB adapter's latency timer to 1 ms often helps."));
+        }
+
+        return new RunFigures(figures, [], Ordered(flags), rate is { } r ? $"{r.ToString("0.0", Invariant)} samples/s" : "n/a");
+    }
+
+    /// <summary>
+    /// The incomplete flag, then gaps and a slow link over the frames from <paramref name="from"/>: the timed part of the run
+    /// and the sample before it.
+    /// </summary>
+    private static IEnumerable<RunFlag> Common(IReadOnlyList<PerfFrame> frames, int from, bool complete, Func<PerfFrame, double?> measure, string unit)
+    {
+        if (!complete)
+        {
+            var last = frames.Skip(from).Select(measure).LastOrDefault(value => value is { } x && double.IsFinite(x));
+            var at = last is { } value ? $"{Whole(value)} {unit}" : "n/a";
+            yield return new RunFlag("incomplete", FlagSeverity.Invalid, $"Incomplete: ended at {at}.");
+        }
+
+        foreach (var flag in LinkFlags(Times(frames)[from..]))
+        {
+            yield return flag;
+        }
+    }
+
     // A gap over 300 ms, or under 10 samples/s, can hide a knock event between samples (spec 11); samples at one instant or
     // out of order (retry bursts, review focus 4) make the timing itself doubtful.
     private static IEnumerable<RunFlag> LinkFlags(double[] t)
@@ -91,6 +183,15 @@ public static class RunAnalysis
         gear is { } g && inputs.SpeedometerKmhPerRpm is { } speedometer && speedometer.TryGetValue(g, out var ratio) && ratio > 0 && double.IsFinite(ratio)
             ? ratio
             : Calibrated(gear, inputs);
+
+    // Without a calibration, the median VS/N of the run in this gear at 30 km/h or more (spec 4.5); null when it has none.
+    private static double? RunRatio(int? gear, IReadOnlyList<PerfFrame> frames)
+    {
+        var median = RunMath.Median(frames
+            .Where(f => f.Gear == gear && f.SpeedKmh >= SlipFromKmh && f.Rpm > 0)
+            .Select(f => f.SpeedKmh!.Value / f.Rpm!.Value));
+        return median > 0 && double.IsFinite(median) ? median : null;
+    }
 
     private static RunFlag Uncalibrated(int? gear, string consequence) =>
         new("uncalibrated", FlagSeverity.Info, $"No speed calibration for {(gear is { } g ? Ordinal(g) : "this")} gear: {consequence}.");
@@ -201,6 +302,27 @@ public static class RunAnalysis
         return found
             ? new RunFlag("throttle", FlagSeverity.Suspect, $"Throttle body only {Whole(lowest)}° open with the pedal floored: the DME was limiting power.")
             : null;
+    }
+
+    // The cylinder of the worst retard in each rpm bin where a cylinder pulled timing (spec 6.1: worst knock and which cylinder).
+    private static IReadOnlyList<(double Rpm, double Value)> WorstCylinder(double[] rpm, KnockSummary knock, double from, double to)
+    {
+        if (!double.IsFinite(from) || !double.IsFinite(to) || to < from)
+        {
+            return [];
+        }
+
+        var worst = new SortedDictionary<int, (double Retard, int Cylinder)>();
+        for (var i = 0; i < rpm.Length; i++)
+        {
+            if (knock.Worst[i] is var retard && retard > 0 && RunMath.BinOf(rpm[i], from, to, BinWidth) is { } bin
+                && (!worst.TryGetValue(bin, out var top) || retard > top.Retard))
+            {
+                worst[bin] = (retard, knock.WorstCylinder[i]);
+            }
+        }
+
+        return worst.Select(pair => (from + pair.Key * BinWidth, (double)pair.Value.Cylinder)).ToArray();
     }
 
     private static RunFlag? HotIntake(IReadOnlyList<PerfFrame> frames)
@@ -315,6 +437,14 @@ public static class RunAnalysis
         return (at, at);
     }
 
+    // Air density from the run's median pressure and intake air; standard air when either is missing.
+    private static double Density(IReadOnlyList<PerfFrame> frames)
+    {
+        var density = RunMath.AirDensity(RunMath.Median(frames.Select(f => f.PressureKpa ?? double.NaN)),
+            RunMath.Median(frames.Select(f => f.IntakeC ?? double.NaN)));
+        return double.IsFinite(density) && density > 0 ? density : RunMath.AirDensity(101.325, 15);
+    }
+
     private static (double? Value, double? Rpm) Peak(IReadOnlyList<(double Rpm, double Value)> bins)
     {
         if (bins.Count == 0)
@@ -391,4 +521,13 @@ public static class RunAnalysis
 
     private static double[] Values(IReadOnlyList<PerfFrame> frames, Func<PerfFrame, double?> pick) =>
         frames.Select(f => pick(f) ?? double.NaN).ToArray();
+
+    private static PerfFrame[] Slice(IReadOnlyList<PerfFrame> frames, int from) => frames.Skip(from).ToArray();
+
+    private static double[] Nan(int count)
+    {
+        var values = new double[count];
+        Array.Fill(values, double.NaN);
+        return values;
+    }
 }
