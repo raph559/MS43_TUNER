@@ -255,6 +255,35 @@ public sealed class PerfRun
         Status = near ? "Hold it…" : "Press the pedal fully and hold it…";
     }
 
+    // The time the measure crossed level between the last frame before index that has one and index.
+    private double CrossingInto(int index, double level)
+    {
+        var at = _frames[index].At.TotalSeconds;
+        if (Measure(_frames[index]) is not { } value)
+        {
+            return at;
+        }
+
+        for (var i = index - 1; i >= 0; i--)
+        {
+            if (Measure(_frames[i]) is { } before)
+            {
+                return RunMath.CrossingTime([_frames[i].At.TotalSeconds, at], [before, value], level) ?? at;
+            }
+        }
+
+        return at;
+    }
+
+    // Time zero of a standing start: a line through 3 to 20 km/h, taken at 0 km/h.
+    private double? FitStart()
+    {
+        var from = Math.Max(_windowStart - 1, 0);
+        var frames = _frames.Skip(from).ToArray();
+        return RunMath.BackExtrapolatedStart(frames.Select(f => f.At.TotalSeconds).ToArray(),
+            frames.Select(f => Measure(f) ?? double.NaN).ToArray());
+    }
+
     private bool ReachedHundred(int endIndex) => _frames.Take(endIndex + 1).Skip(_windowStart).Any(f => Measure(f) >= 100);
 
     // A lift seen on one sample, then another reason to end: the window still ends before the lift.

@@ -76,6 +76,153 @@ public static class RunAnalysis
         return Calibrated(gear, inputs) is { } k ? frame => k * frame.Rpm : frame => frame.SpeedKmh * factor;
     }
 
+    private static RunFigures RollOn(PerfTestSpec spec, IReadOnlyList<PerfFrame> frames, AnalysisInputs inputs, bool complete)
+    {
+        var start = spec.StartKmh ?? double.NaN;
+        var end = spec.EndKmh ?? double.NaN;
+        var flags = new List<RunFlag>();
+        // Speed from rpm with the calibration, else VS itself with any GPS correction: the measure the run started and ended
+        // on (spec 6.3).
+        var ratio = Calibrated(spec.Gear, inputs);
+        if (ratio is null)
+        {
+            flags.Add(Uncalibrated(spec.Gear, "speed read from the speedometer"));
+        }
+
+        var speed = RollOnSpeed(spec.Gear, inputs);
+        var t = Times(frames);
+        var v = Values(frames, speed);
+        var (lead, first) = LastCrossing(t, v, start);
+        var tA = t[lead..];
+        var vA = v[lead..];
+        double? Cross(double level) => RunMath.CrossingTime(tA, vA, level);
+        double? Between(double a, double b) => Cross(a) is { } x && Cross(b) is { } y ? y - x : null;
+
+        var band = Slice(frames, first);
+        var knock = Knock(band, lead < first ? frames[lead] : null);
+        var figures = new List<Figure> { Fig("time", $"{Whole(start)} to {Whole(end)} km/h", Between(start, end), "s", 2) };
+        var splits = double.IsFinite(end - start) ? (int)Math.Floor((end - start) / 10 + Tolerance) : 0;
+        for (var i = 0; i < splits; i++)
+        {
+            var a = start + 10 * i;
+            figures.Add(Fig($"split-{Whole(a)}-{Whole(a + 10)}", $"{Whole(a)} to {Whole(a + 10)} km/h", Between(a, a + 10), "s", 2));
+        }
+
+        figures.Add(Fig("knock-max", "Most knock retard", knock.Max, "°CRK", 1));
+        figures.Add(Fig("knock-cyl", "Knock on cylinder", knock.Cylinder, "", 0));
+
+        var t0 = Cross(start);
+        var traces = new List<Trace>();
+        AddTimeTrace(traces, "speed-time", "Speed", "km/h", band, speed, t0, t0 is null ? null : start);
+        AddTimeTrace(traces, "rpm-time", "Engine speed", "rpm", band, f => f.Rpm, t0, null);
+
+        if (ratio is not null && Speedometer(spec.Gear, inputs) is { } k && Slip(band, _ => k) is { } slip)
+        {
+            flags.Add(slip);
+        }
+
+        flags.AddRange(knock.Flags);
+        flags.AddRange(Limits(band, inputs, speed, "km/h"));
+        flags.AddRange(Common(frames, lead, complete, speed, "km/h"));
+        if (HotIntake(band) is { } hot)
+        {
+            flags.Add(hot);
+        }
+
+        return new RunFigures(figures, traces, Ordered(flags), Value(figures, "time") is { } s ? Seconds(s) : "n/a");
+    }
+
+    private static RunFigures Standing(IReadOnlyList<PerfFrame> frames, AnalysisInputs inputs, bool complete)
+    {
+        // True speed: VS with any GPS correction of the speed calibration (spec 6.5).
+        var factor = SpeedFactor(inputs);
+        double? Speed(PerfFrame f) => f.SpeedKmh * factor;
+        var t = Times(frames);
+        var v = Values(frames, Speed);
+        // The launch follows the last stop; anything kept before it is not part of this start.
+        var stop = Array.FindLastIndex(v, speed => speed <= 0);
+        var from = Math.Max(stop, 0);
+        var tA = t[from..];
+        var vA = v[from..];
+        // Time zero is back-extrapolated over 3 to 20 km/h (spec 6.4).
+        var t0 = RunMath.BackExtrapolatedStart(tA, vA);
+        double? Cross(double level) => RunMath.CrossingTime(tA, vA, level);
+        double? FromZero(double level) => t0 is { } zero && Cross(level) is { } c ? c - zero : null;
+        double? Between(double a, double b) => Cross(a) is { } x && Cross(b) is { } y ? y - x : null;
+
+        var figures = new List<Figure>();
+        void Reached(string key, string label, double? value)
+        {
+            if (value is { } seconds && double.IsFinite(seconds))
+            {
+                figures.Add(Fig(key, label, seconds, "s", 2));
+            }
+        }
+
+        Reached("t-0-100", "0 to 100 km/h", FromZero(100));
+        Reached("t-0-200", "0 to 200 km/h", FromZero(200));
+        Reached("t-100-200", "100 to 200 km/h", Between(100, 200));
+        Reached("t-0-50", "0 to 50 km/h", FromZero(50));
+        Reached("t-50-100", "50 to 100 km/h", Between(50, 100));
+        figures.Add(Fig("launch-rpm", "Launch", frames.Count > 0 ? frames[from].Rpm : null, "rpm", 0));
+
+        // Each clutch press after time zero is a shift, timed from press to release (spec 6.4).
+        var origin = t0 ?? (tA.Length > 0 ? tA[0] : double.NaN);
+        var shift = 0;
+        bool? previous = null;
+        double? pressed = null;
+        for (var i = from; i < frames.Count; i++)
+        {
+            if (frames[i].Clutch is not { } clutch)
+            {
+                continue;
+            }
+
+            if (clutch && previous == false && t[i] > origin)
+            {
+                pressed = t[i];
+            }
+            else if (!clutch && pressed is { } at)
+            {
+                shift++;
+                figures.Add(Fig($"shift-{shift}", $"Shift {shift}", t[i] - at, "s", 2));
+                pressed = null;
+            }
+
+            previous = clutch;
+        }
+
+        var launched = Slice(frames, from);
+        var traces = new List<Trace>();
+        AddTimeTrace(traces, "speed-time", "Speed", "km/h", launched, Speed, t0 ?? origin, null);
+        AddTimeTrace(traces, "rpm-time", "Engine speed", "rpm", launched, f => f.Rpm, t0 ?? origin, null);
+
+        var flags = new List<RunFlag>();
+        // Wheelspin: VS against the calibrated speed of the gear the DME reports, outside shifts.
+        if (Slip(launched, f => f.Clutch != true && Calibrated(f.Gear, inputs) is not null ? Speedometer(f.Gear, inputs) : null) is { } slip)
+        {
+            flags.Add(slip);
+        }
+
+        if (Dsc(launched, Speed, "km/h") is { } dsc)
+        {
+            flags.Add(dsc);
+        }
+
+        var knock = Knock(launched.Skip(1).ToArray(), launched.FirstOrDefault());
+        flags.AddRange(knock.Flags);
+        flags.AddRange(Common(frames, from, complete, Speed, "km/h"));
+        if (HotIntake(launched) is { } hot)
+        {
+            flags.Add(hot);
+        }
+
+        var headline = Value(figures, "t-0-100") is { } to100 ? $"{to100.ToString("0.0", Invariant)} s to 100"
+            : Value(figures, "t-0-50") is { } to50 ? $"{to50.ToString("0.0", Invariant)} s to 50"
+            : "n/a";
+        return new RunFigures(figures, traces, Ordered(flags), headline);
+    }
+
     private static RunFigures Link(IReadOnlyList<PerfFrame> frames, bool complete)
     {
         var t = Times(frames).Where(double.IsFinite).ToArray();
