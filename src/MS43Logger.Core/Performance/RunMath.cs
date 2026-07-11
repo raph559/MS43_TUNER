@@ -207,6 +207,50 @@ public static partial class RunMath
     public static double AirDensity(double pressureKpa, double intakeC) => pressureKpa * 1000 / (287.05 * (intakeC + 273.15));
 
     /// <summary>
+    /// Wheel power (kW) and torque at the crank speed (Nm) per sample. kmhPerRpm is km/h per rpm in this gear.
+    /// Every entry is NaN when the tyre size cannot be read or the ratio is not positive, and NaN where the rpm slope is
+    /// unknown; torque is NaN at 0 rpm.
+    /// </summary>
+    public static (double[] PowerKw, double[] TorqueNm) Power(IReadOnlyList<double> t, IReadOnlyList<double> rpm, double kmhPerRpm,
+        CarValues car, double airDensity)
+    {
+        CheckLengths(t, rpm);
+        ArgumentNullException.ThrowIfNull(car);
+        var power = new double[rpm.Count];
+        var torque = new double[rpm.Count];
+        Array.Fill(power, double.NaN);
+        Array.Fill(torque, double.NaN);
+        if (TyreCircumference(car.TyreSize) is not { } circumference || !(kmhPerRpm > 0) || !double.IsFinite(kmhPerRpm))
+        {
+            return (power, torque);
+        }
+
+        var radius = circumference / (2 * Math.PI);
+        // Engine rad/s per m/s of road speed: the gearing that makes the flywheel part of the mass.
+        var engine = 2 * Math.PI / 60 * 3.6 / kmhPerRpm;
+        var effectiveMass = car.MassKg + car.WheelInertia / (radius * radius) + car.EngineInertia * engine * engine;
+        // Acceleration from the rpm slope, never from VS: its whole-km/h steps are too coarse.
+        var rpmSlope = Derivative(t, rpm);
+        for (var i = 0; i < rpm.Count; i++)
+        {
+            var n = rpm[i];
+            var speed = kmhPerRpm * n / 3.6;
+            var acceleration = kmhPerRpm / 3.6 * rpmSlope[i];
+            var force = effectiveMass * acceleration + 0.5 * airDensity * car.CdA * speed * speed + car.Crr * car.MassKg * Gravity;
+            var kw = force * speed / 1000;
+            if (!double.IsFinite(kw))
+            {
+                continue;
+            }
+
+            power[i] = kw;
+            torque[i] = n > 0 ? kw * 1000 * 60 / (2 * Math.PI * n) : double.NaN;
+        }
+
+        return (power, torque);
+    }
+
+    /// <summary>
     /// Mean (or max) of values in rpm bins of width centred on from, from + width, … up to to. A bin covers its centre ± half
     /// the width, the upper edge belonging to the next bin; readings past the last bin's upper edge, up to to, belong to the
     /// last bin, so the top of a band that is not a whole number of widths is kept. Empty bins are left out.

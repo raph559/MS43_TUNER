@@ -30,6 +30,29 @@ public static class RunAnalysis
     private static readonly (int From, int To)[] RpmMarks = [(2000, 4000), (3000, 6000), (4000, 6000)];
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
+    /// <summary>
+    /// Pure: the same window and inputs always give the same figures (spec 9: Compare recomputes with it). The window is a
+    /// run's frames as it keeps them, from before its start to its end: the start is found in them (the last upward crossing
+    /// of the start rpm or speed, the last stop before a standing start), so the frames kept before it change nothing.
+    /// <paramref name="complete"/> false adds the flag "incomplete".
+    /// </summary>
+    public static RunFigures Analyse(PerfTestSpec spec, IReadOnlyList<PerfFrame> window, AnalysisInputs inputs, bool complete)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        ArgumentNullException.ThrowIfNull(window);
+        ArgumentNullException.ThrowIfNull(inputs);
+        return spec.Kind switch
+        {
+            PerfTestKind.Pull => Pull(spec, window, inputs, complete, knockCheck: false),
+            PerfTestKind.KnockCheck => Pull(spec, window, inputs, complete, knockCheck: true),
+            PerfTestKind.RollOn => RollOn(spec, window, inputs, complete),
+            PerfTestKind.StandingStart => Standing(window, inputs, complete),
+            PerfTestKind.LinkTest => Link(window, complete),
+            // Calibration and the pedal step keep values in settings, not a result.
+            _ => new RunFigures([], [], [], "n/a"),
+        };
+    }
+
     /// <summary>Most severe first (invalid, cold, suspect, info), keeping the order within one severity.</summary>
     internal static IReadOnlyList<RunFlag> Ordered(IEnumerable<RunFlag> flags) => flags.OrderBy(flag => flag.Severity switch
     {
@@ -74,6 +97,128 @@ public static class RunAnalysis
         ArgumentNullException.ThrowIfNull(inputs);
         var factor = SpeedFactor(inputs);
         return Calibrated(gear, inputs) is { } k ? frame => k * frame.Rpm : frame => frame.SpeedKmh * factor;
+    }
+
+    private static RunFigures Pull(PerfTestSpec spec, IReadOnlyList<PerfFrame> frames, AnalysisInputs inputs, bool complete, bool knockCheck)
+    {
+        var start = spec.StartRpm ?? double.NaN;
+        var end = spec.EndRpm ?? double.NaN;
+        var t = Times(frames);
+        var rpm = Values(frames, f => f.Rpm);
+        var (lead, first) = LastCrossing(t, rpm, start);
+        var tA = t[lead..];
+        var rA = rpm[lead..];
+        double? Cross(double level) => RunMath.CrossingTime(tA, rA, level);
+        double? Between(double a, double b) => Cross(a) is { } x && Cross(b) is { } y ? y - x : null;
+
+        var band = Slice(frames, first);
+        var bandRpm = rpm[first..];
+        var before = lead < first ? frames[lead] : null;
+        var figures = new List<Figure>();
+        var traces = new List<Trace>();
+        var flags = new List<RunFlag>();
+        var knock = Knock(band, before);
+
+        if (!knockCheck)
+        {
+            figures.Add(Fig("time", $"{Whole(start)} to {Whole(end)} rpm", Between(start, end), "s", 2));
+            foreach (var (a, b) in RpmMarks)
+            {
+                if (a >= start && b <= end)
+                {
+                    figures.Add(Fig($"t-{a}-{b}", $"{a} to {b} rpm", Between(a, b), "s", 2));
+                }
+            }
+
+            // Power from the rpm slope in this gear (spec 7); the band starts at the crossing, the slope may use the sample before.
+            // The run's own ratio reads VS, so a GPS check corrects it as it does the calibration (spec 6.5).
+            var calibrated = Calibrated(spec.Gear, inputs);
+            var ratio = calibrated ?? RunRatio(spec.Gear, frames) * SpeedFactor(inputs);
+            if (calibrated is null)
+            {
+                flags.Add(Uncalibrated(spec.Gear, ratio is null ? "power not estimated" : "speed taken from this run"));
+            }
+
+            double[] power, torque;
+            if (ratio is { } k)
+            {
+                (power, torque) = RunMath.Power(tA, rA, k, inputs.Car, Density(band));
+            }
+            else
+            {
+                power = Nan(tA.Length);
+                torque = Nan(tA.Length);
+            }
+
+            var powerBins = RunMath.Bin(bandRpm, power[(first - lead)..], start, end, BinWidth);
+            var torqueBins = RunMath.Bin(bandRpm, torque[(first - lead)..], start, end, BinWidth);
+            var (peakPower, peakPowerRpm) = Peak(powerBins);
+            var (peakTorque, peakTorqueRpm) = Peak(torqueBins);
+            figures.Add(Fig("peak-power", "Peak power, wheels (estimate)", peakPower, "kW", 0));
+            figures.Add(Fig("peak-power-rpm", "Peak power at", peakPowerRpm, "rpm", 0));
+            figures.Add(Fig("peak-torque", "Peak torque, wheels (estimate)", peakTorque, "Nm", 0));
+            figures.Add(Fig("peak-torque-rpm", "Peak torque at", peakTorqueRpm, "rpm", 0));
+            figures.Add(Fig("knock-max", "Most knock retard", knock.Max, "°CRK", 1));
+            figures.Add(Fig("knock-cyl", "Knock on cylinder", knock.Cylinder, "", 0));
+            figures.Add(Fig("iat-start", "Intake air at the start", band.FirstOrDefault()?.IntakeC, "°C", 0));
+            figures.Add(Fig("iat-end", "Intake air at the end", band.LastOrDefault()?.IntakeC, "°C", 0));
+
+            AddTrace(traces, "power", "Power, wheels (estimate)", "kW", powerBins);
+            AddTrace(traces, "torque", "Torque, wheels (estimate)", "Nm", torqueBins);
+            AddTrace(traces, "ignition", "Ignition", "°CRK", RunMath.Bin(bandRpm, Values(band, IgnitionOf), start, end, BinWidth));
+            AddTrace(traces, "knock", "Knock retard", "°CRK", RunMath.Bin(bandRpm, knock.Worst, start, end, BinWidth, max: true));
+            AddTrace(traces, "knock-cyl", "Knock on cylinder", "", WorstCylinder(bandRpm, knock, start, end));
+            AddTrace(traces, "vanos-in", "VANOS intake", "°CRK", RunMath.Bin(bandRpm, Values(band, f => f.VanosIn), start, end, BinWidth));
+            AddTrace(traces, "vanos-ex", "VANOS exhaust", "°CRK", RunMath.Bin(bandRpm, Values(band, f => f.VanosEx), start, end, BinWidth));
+            AddTrace(traces, "afr", "AFR target", "AFR", RunMath.Bin(bandRpm, Values(band, f => f.AfrTarget), start, end, BinWidth));
+            AddTrace(traces, "maf", "Airflow", "kg/h", RunMath.Bin(bandRpm, Values(band, f => f.MafKgh), start, end, BinWidth));
+            AddTrace(traces, "load", "Load", "mg/stk", RunMath.Bin(bandRpm, Values(band, f => f.LoadMgStk), start, end, BinWidth));
+            AddTrace(traces, "injdc", "Injector duty", "%", RunMath.Bin(bandRpm, Values(band, f => f.InjectorDuty), start, end, BinWidth));
+            AddTrace(traces, "dme-torque", "DME torque", "Nm", RunMath.Bin(bandRpm, Values(band, f => f.DmeTorque), start, end, BinWidth));
+            if (calibrated is not null && Speedometer(spec.Gear, inputs) is { } slipRatio && Slip(band, _ => slipRatio) is { } slip)
+            {
+                flags.Add(slip);
+            }
+        }
+        else
+        {
+            figures.Add(Fig("knock-max", "Most knock retard", knock.Max, "°CRK", 1));
+            figures.Add(Fig("knock-cyl", "Knock on cylinder", knock.Cylinder, "", 0));
+            figures.Add(Fig("knock-events", "Knock events", knock.Logged ? knock.Events : null, "", 0));
+            for (var c = 0; c < 6; c++)
+            {
+                figures.Add(Fig($"knock-max-{c + 1}", $"Cylinder {c + 1}", knock.PerCylinder[c], "°CRK", 1));
+            }
+
+            // A rising RON adaptation means the DME is learning poor fuel or knock (spec 6.2).
+            figures.Add(Fig("ron-start", "RON adaptation at the start", band.FirstOrDefault()?.RonAdaptation, "", 2));
+            figures.Add(Fig("ron-end", "RON adaptation at the end", band.LastOrDefault()?.RonAdaptation, "", 2));
+
+            AddTrace(traces, "ignition", "Ignition", "°CRK", RunMath.Bin(bandRpm, Values(band, IgnitionOf), start, end, BinWidth));
+            AddTrace(traces, "knock", "Knock retard", "°CRK", RunMath.Bin(bandRpm, knock.Worst, start, end, BinWidth, max: true));
+            for (var c = 0; c < 6; c++)
+            {
+                var cylinder = c;
+                AddTrace(traces, $"knock-{c + 1}", $"Cylinder {c + 1}", "°CRK",
+                    RunMath.Bin(bandRpm, Values(band, f => cylinder < f.KnockRetard.Count ? f.KnockRetard[cylinder] : null), start, end, BinWidth, max: true));
+            }
+        }
+
+        var t0 = Cross(start);
+        AddTimeTrace(traces, "rpm-time", "Engine speed", "rpm", band, f => f.Rpm, t0, t0 is null ? null : start);
+
+        flags.AddRange(knock.Flags);
+        flags.AddRange(Limits(band, inputs, f => f.Rpm, "rpm"));
+        flags.AddRange(Common(frames, lead, complete, f => f.Rpm, "rpm"));
+        if (HotIntake(band) is { } hot)
+        {
+            flags.Add(hot);
+        }
+
+        var headline = knockCheck
+            ? !knock.Logged ? "n/a" : knock.Cylinder is { } cyl ? $"{knock.Max!.Value.ToString("0.0", Invariant)} °CRK on cylinder {cyl}" : "No knock"
+            : Headline(Value(figures, "time") is { } s ? Seconds(s) : null, Value(figures, "peak-power") is { } kw ? $"{Whole(kw)} kW" : null);
+        return new RunFigures(figures, traces, Ordered(flags), headline);
     }
 
     private static RunFigures RollOn(PerfTestSpec spec, IReadOnlyList<PerfFrame> frames, AnalysisInputs inputs, bool complete)
