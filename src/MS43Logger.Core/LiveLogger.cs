@@ -31,6 +31,9 @@ public sealed class LiveLogger
 
     public event EventHandler<string>? Status;
 
+    /// <summary>Raised with the number of timeouts in a row (1, then 2) when a timeout is about to be retried.</summary>
+    public event EventHandler<int>? Retrying;
+
     public event EventHandler<Exception>? Failed;
 
     public RateStats? Rate
@@ -90,6 +93,12 @@ public sealed class LiveLogger
             {
                 return;
             }
+            catch (Exception) when (token.IsCancellationRequested)
+            {
+                // Disconnect cancels the run, then closes the port under a poll still waiting for its reply: what that poll
+                // throws ends the run quietly instead of reporting a failure or a retry.
+                return;
+            }
             catch (TimeoutException error)
             {
                 timeouts++;
@@ -100,6 +109,7 @@ public sealed class LiveLogger
                 }
 
                 Status?.Invoke(this, $"Polling timeout ({timeouts}/{TimeoutLimit}). Retrying...");
+                Retrying?.Invoke(this, timeouts);
                 try
                 {
                     await Task.Delay(50, token);

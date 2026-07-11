@@ -144,7 +144,7 @@ public class LiveTableBindingTests
 
         var ron98 = LiveTableBinding.Resolve(Map, document, Table(document, "ip_iga_ron98_pl__n__maf"));
         Assert.StartsWith("No live input: the logger definition", ron98.CheckLogger(BundledDefinitions.Load("b25")));
-        Assert.Equal("Live input: N (rpm) on rows × MAFIGA (mg/stk) on columns.", ron98.Describe());
+        Assert.Equal("Live input: N (rpm) on rows, MAFIGA (mg/stk) on columns.", ron98.Describe());
     }
 
     [RealFileFact(TestData.CarBin, TestData.Xdf)]

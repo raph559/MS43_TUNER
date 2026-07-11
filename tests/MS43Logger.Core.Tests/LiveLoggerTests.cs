@@ -60,6 +60,19 @@ public class LiveLoggerTests
     }
 
     [Fact]
+    public async Task RetryingCountsTimeoutsInARow()
+    {
+        var logger = new LiveLogger(pause: TimeSpan.Zero);
+        var retries = new List<int>();
+        logger.Retrying += (_, count) => retries.Add(count);
+        var source = new FakeSource(Timeout(), Timeout(), () => Payload(1), Timeout(), Timeout(), Timeout(), () => Payload(2));
+
+        await logger.RunAsync(source, Ms43x, Ms43x.MatchChannels(["N"]), CancellationToken.None);
+
+        Assert.Equal(new[] { 1, 2, 1, 2 }, retries);
+    }
+
+    [Fact]
     public async Task OtherErrorsStopAtOnceAndCancellationIsQuiet()
     {
         var logger = new LiveLogger(pause: TimeSpan.Zero);
@@ -109,5 +122,27 @@ public class LiveLoggerTests
     public void GaugeAngleClampsAndSweeps(double value, double angle)
     {
         Assert.Equal(angle, GaugeMath.Angle(0, 8000, value), 9);
+    }
+
+    // Disconnect cancels the run, then closes the port under a poll still waiting for its reply (final review, Important 2).
+    [Fact]
+    public async Task APortClosedByDisconnectIsNotAFailure()
+    {
+        var logger = new LiveLogger(pause: TimeSpan.Zero);
+        Exception? failure = null;
+        var retries = 0;
+        logger.Failed += (_, error) => failure = error;
+        logger.Retrying += (_, _) => retries++;
+
+        using var closed = new CancellationTokenSource();
+        await logger.RunAsync(new FakeSource(() => { closed.Cancel(); throw new InvalidOperationException("The port is closed."); }),
+            Ms43x, Ms43x.MatchChannels(["N"]), closed.Token);
+        Assert.Null(failure);
+
+        using var timedOut = new CancellationTokenSource();
+        await logger.RunAsync(new FakeSource(() => { timedOut.Cancel(); throw new TimeoutException("no reply"); }),
+            Ms43x, Ms43x.MatchChannels(["N"]), timedOut.Token);
+        Assert.Null(failure);
+        Assert.Equal(0, retries);
     }
 }
