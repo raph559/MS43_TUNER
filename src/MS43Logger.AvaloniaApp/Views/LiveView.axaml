@@ -2,84 +2,571 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="using:MS43Logger.AvaloniaApp"
              xmlns:controls="using:MS43Logger.AvaloniaApp.Controls"
+             xmlns:theme="using:MS43Logger.AvaloniaApp.Theme"
              x:Class="MS43Logger.AvaloniaApp.Views.LiveView"
-             x:DataType="local:MainWindowViewModel">
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-        <StackPanel MaxWidth="1180" Margin="24,26,24,28" Spacing="0">
+             x:DataType="local:MainWindowViewModel"
+             Background="{DynamicResource PaneBrush}">
+    <UserControl.Styles>
+        <!-- Body (system 8): the Pane, 24 px in; 16 below 1200 px, where the band stacks and the dials shrink. -->
+        <Style Selector="DockPanel#LiveBody">
+            <Setter Property="Margin" Value="24" />
+        </Style>
+        <Style Selector="Window.tight DockPanel#LiveBody">
+            <Setter Property="Margin" Value="16" />
+        </Style>
+        <Style Selector="Window.tight controls|ReadoutBand">
+            <Setter Property="Stacked" Value="True" />
+        </Style>
+        <Style Selector="Border.cell">
+            <Setter Property="Padding" Value="20" />
+        </Style>
+        <Style Selector="Window.tight Border.cell">
+            <Setter Property="Padding" Value="16,12" />
+        </Style>
 
-            <!-- The cluster -->
-            <ItemsControl ItemsSource="{Binding Gauges}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <UniformGrid Columns="3" />
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="local:GaugeViewModel">
-                        <controls:Gauge Height="300" Margin="9,0" IsVisible="{Binding IsAvailable}"
-                                        Title="{Binding Title}" Unit="{Binding Unit}"
-                                        Minimum="{Binding Min}" Maximum="{Binding Max}"
-                                        MajorStep="{Binding Major}" MinorStep="{Binding Minor}"
-                                        LabelDivisor="{Binding LabelDivisor}" Decimals="{Binding Decimals}"
-                                        Value="{Binding Value}" RedFrom="{Binding RedFrom}"
-                                        IsLive="{Binding $parent[UserControl].((local:MainWindowViewModel)DataContext).IsConnected}" />
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+        <!-- A cell's name: the channel's ADX title in Ink2, its id in Cascadia Ink3. -->
+        <Style Selector="TextBlock.cell-title">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="LineHeight" Value="18" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style Selector="Run.cell-id">
+            <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
 
-            <!-- Session -->
-            <WrapPanel HorizontalAlignment="Center" Margin="0,18,0,30" ItemSpacing="22" LineSpacing="10">
-                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                    <CheckBox Content="Write CSV log" IsChecked="{Binding EnableCsvLogging}" />
-                    <TextBox Text="{Binding CsvPath}" Width="380" IsEnabled="{Binding EnableCsvLogging}" Watermark="CSV output path" />
-                    <Button Content="Browse" Click="BrowseCsvButton_Click" IsEnabled="{Binding EnableCsvLogging}" />
+        <!-- Readings (system 3.2): Data 88 rpm, Data 56 load and advance, Data 24 speed and tiles; the unit in UI Ink3. -->
+        <Style Selector="TextBlock.reading">
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+        </Style>
+        <Style Selector="TextBlock.reading Run.unit">
+            <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
+        <Style Selector="TextBlock#ReadoutRpm Run.unit">
+            <Setter Property="FontSize" Value="16" />
+        </Style>
+        <Style Selector="TextBlock.reading.tile Run.unit">
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+        <!-- A missing value (system 7.2): n/a in UI Ink3, never 0 and never a dash. -->
+        <Style Selector="TextBlock.reading.na">
+            <Setter Property="FontFamily" Value="{DynamicResource UiDisplayFont}" />
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="LineHeight" Value="26" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="ToolTip.Tip" Value="No value in the last sample." />
+        </Style>
+        <Style Selector="TextBlock.reading.small.na">
+            <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="LineHeight" Value="22" />
+        </Style>
+
+        <!-- The rpm caption: UI 12 Ink2 with the limit in Data 12 SemiBold Ink1; Ink3 while no bin is open. -->
+        <Style Selector="TextBlock.cap">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style Selector="TextBlock.cap Run.num">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+        </Style>
+        <Style Selector="TextBlock.cap.nb">
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
+
+        <!-- Dials: 220 / 184 px, 160 / 134 below 1200 px, where load and advance sit beside their names. -->
+        <Style Selector="controls|Gauge.large">
+            <Setter Property="Width" Value="220" />
+            <Setter Property="Height" Value="220" />
+        </Style>
+        <Style Selector="Window.tight controls|Gauge.large">
+            <Setter Property="Width" Value="160" />
+            <Setter Property="Height" Value="160" />
+        </Style>
+        <Style Selector="controls|Gauge.small">
+            <Setter Property="Width" Value="184" />
+            <Setter Property="Height" Value="184" />
+            <Setter Property="Margin" Value="0,8,0,-24" />
+        </Style>
+        <Style Selector="Window.tight controls|Gauge.small">
+            <Setter Property="Width" Value="134" />
+            <Setter Property="Height" Value="134" />
+            <Setter Property="Margin" Value="0,2,-15,-16" />
+        </Style>
+        <!-- The dial cells' name docks by style, so the tight step can move it beside the dial (a local value would win). -->
+        <Style Selector="DockPanel.dial > TextBlock.cell-title">
+            <Setter Property="DockPanel.Dock" Value="Top" />
+        </Style>
+        <Style Selector="Window.tight DockPanel.dial > TextBlock.cell-title">
+            <Setter Property="DockPanel.Dock" Value="Left" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="MaxWidth" Value="140" />
+        </Style>
+
+        <!-- Pinned tiles: shown at 1200 px wide and 760 px tall or more; below that the list holds the pins. -->
+        <Style Selector="Window.tight StackPanel#PinsSection, Window.short StackPanel#PinsSection">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="TextBlock.pins-head">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+        </Style>
+        <Style Selector="TextBlock.pins-head Run.num">
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
+        <Style Selector="TextBlock.tile-title">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style Selector="TextBlock.tile-id">
+            <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
+
+        <!-- Banner, note and CSV row (system 7.2, 8): the banner 16 px above what follows, 12 below 1200 px. -->
+        <Style Selector="Border#LiveBanner">
+            <Setter Property="Margin" Value="0,0,0,16" />
+        </Style>
+        <Style Selector="Window.tight Border#LiveBanner">
+            <Setter Property="Margin" Value="0,0,0,12" />
+        </Style>
+        <Style Selector="DockPanel#CsvRow">
+            <Setter Property="Margin" Value="0,0,0,20" />
+        </Style>
+        <Style Selector="Window.tight DockPanel#CsvRow">
+            <Setter Property="Margin" Value="0,0,0,16" />
+        </Style>
+        <!-- The path shows its end ("…\ms43-20261019-2225.csv") until the field is being edited. -->
+        <Style Selector="TextBox#CsvPathBox /template/ TextPresenter#PART_TextPresenter">
+            <Setter Property="Opacity" Value="0" />
+        </Style>
+        <Style Selector="TextBox#CsvPathBox:focus /template/ TextPresenter#PART_TextPresenter">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="TextBlock#CsvPathShown">
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+        </Style>
+        <Style Selector="TextBlock#CsvPathShown:disabled">
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
+
+        <!-- Channels (system 5.6): the section 24 px under the band, 12 below 1200 px; two columns, one below 1200. -->
+        <Style Selector="DockPanel#ChannelsSection">
+            <Setter Property="Margin" Value="0,24,0,0" />
+        </Style>
+        <Style Selector="Window.tight DockPanel#ChannelsSection">
+            <Setter Property="Margin" Value="0,12,0,0" />
+        </Style>
+        <Style Selector="ScrollViewer#ListScroller">
+            <Setter Property="VerticalScrollBarVisibility" Value="Disabled" />
+        </Style>
+        <Style Selector="Window.tight ScrollViewer#ListScroller">
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+        </Style>
+        <Style Selector="Window.tight controls|ListColumns">
+            <Setter Property="Stacked" Value="True" />
+        </Style>
+        <Style Selector="Window.tight Border.colhead.second">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="TextBlock.section-title">
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="LineHeight" Value="22" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+        </Style>
+        <Style Selector="TextBlock.list-count">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
+        <Style Selector="TextBlock.list-count Run.num">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+        </Style>
+        <Style Selector="Border.colhead">
+            <Setter Property="Height" Value="28" />
+            <Setter Property="BorderBrush" Value="{DynamicResource HairlineBrush}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+        </Style>
+        <Style Selector="Border.colhead TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.group-head">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="Margin" Value="8,10,0,6" />
+        </Style>
+        <Style Selector="TextBlock.group-head Run.num">
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
+        <!-- Rows: 32 px and a hairline; the list's own selection look is off, a row is a reading, not a choice. -->
+        <Style Selector="ListBox.channels ListBoxItem">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinHeight" Value="33" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="ListBox.channels ListBoxItem:selected">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="FontWeight" Value="Normal" />
+        </Style>
+        <Style Selector="ListBox.channels ListBoxItem:selected /template/ Border#PART_Bar">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="TextBlock.row-name">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <!-- The value: Data 16 SemiBold; a missing one reads n/a in UI 13 Ink3 with why (system 7.2). -->
+        <Style Selector="TextBlock.row-value">
+            <Setter Property="FontFamily" Value="{DynamicResource DataFont}" />
+            <Setter Property="FontFeatures" Value="{x:Static theme:Typography.Tabular}" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="LineHeight" Value="20" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+            <Setter Property="TextAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.row-value.na">
+            <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+            <Setter Property="ToolTip.Tip" Value="No value in the last sample." />
+        </Style>
+        <Style Selector="DockPanel.stale TextBlock.row-value, DockPanel.stale TextBlock.reading">
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
+        <Style Selector="TextBlock.row-unit">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style Selector="TextBlock.empty-line">
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+    </UserControl.Styles>
+
+    <DockPanel Name="LiveBody" Classes.stale="{Binding IsStale}">
+
+        <!-- What went wrong and the way out (system 7.2); "Show details" opens the connection log. -->
+        <Border Name="LiveBanner" DockPanel.Dock="Top" Classes="banner warn" IsVisible="{Binding HasBanner}">
+            <DockPanel>
+                <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource WarnBrush}" Margin="0,1,12,0"
+                                     VerticalAlignment="Top" />
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" Margin="12,0,0,0" VerticalAlignment="Center">
+                    <Button Name="BannerAction" Content="{Binding BannerActionText}" Click="BannerAction_Click"
+                            IsVisible="{Binding BannerActionText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    <Button Name="ShowDetailsButton" Classes="quiet" Content="Show details" Click="ShowDetails_Click" IsVisible="{Binding HasConnectionLog}" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                    <TextBlock Classes="muted" Text="Elapsed" VerticalAlignment="Center" />
-                    <TextBlock Classes="num" Text="{Binding ElapsedTime}" VerticalAlignment="Center" />
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                    <controls:NumberText Name="BannerText" Classes="body" Value="{Binding Banner}" Foreground="{DynamicResource Ink1Brush}" TextWrapping="Wrap" />
+                    <controls:NumberText Classes="label" Value="{Binding BannerDetail}" TextWrapping="Wrap"
+                                         IsVisible="{Binding BannerDetail, Converter={x:Static ObjectConverters.IsNotNull}}" />
                 </StackPanel>
-                <Button Content="Performance tests" Click="OpenPerformanceWindow_Click" VerticalAlignment="Center" />
-                <TextBlock Classes="muted" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="340"
-                           Text="If the ECU refuses the baud switch with the engine running, connect before you start it." />
-            </WrapPanel>
+            </DockPanel>
+        </Border>
 
-            <!-- Channels -->
-            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" Margin="0,0,0,10">
-                <TextBlock Classes="heading" Text="Channels" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="1" Classes="muted" Margin="14,0,0,0" VerticalAlignment="Center"
-                           Text="{Binding VisibleChannelCount, StringFormat='{}{0} shown'}" />
-                <TextBox Grid.Column="3" Width="300" Text="{Binding SearchText}" Watermark="Filter by name or ID" Margin="0,0,14,0" />
-                <CheckBox Grid.Column="4" Content="Pinned only" IsChecked="{Binding ShowPinnedOnly}" />
-            </Grid>
+        <!-- The baud-rate advice still helps while not connected (system 7.2). -->
+        <DockPanel Name="BaudNote" DockPanel.Dock="Top" Margin="0,0,0,12" IsVisible="{Binding IsNotConnected}">
+            <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Info}" Foreground="{DynamicResource Ink2Brush}" Margin="0,1,8,0" VerticalAlignment="Top" />
+            <TextBlock Classes="body" Foreground="{DynamicResource Ink2Brush}" TextWrapping="Wrap"
+                       Text="If the ECU refuses the faster baud rate while the engine runs, connect first, then start the engine." />
+        </DockPanel>
 
-            <ItemsControl ItemsSource="{Binding LiveValues}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <UniformGrid Columns="2" />
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="local:DecodedValueViewModel">
-                        <Border BorderBrush="{DynamicResource BezelBrush}" BorderThickness="0,1,0,0" Padding="0,9" Margin="0,0,28,0">
-                            <Grid ColumnDefinitions="26,*,128,112" ColumnSpacing="12">
-                                <Button Classes="ghost" Content="{Binding PinGlyph}" Click="PinButton_Click" CommandParameter="{Binding}"
-                                        ToolTip.Tip="Pin to the top" VerticalAlignment="Center" Foreground="{DynamicResource Ink3Brush}" />
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Classes="num muted" Text="{Binding Id}" FontSize="11.5" />
-                                </StackPanel>
-                                <controls:Sparkline Grid.Column="2" Height="30" VerticalAlignment="Center"
-                                                    History="{Binding History}" Version="{Binding HistoryVersion}"
-                                                    IsLive="{Binding $parent[UserControl].((local:MainWindowViewModel)DataContext).IsConnected}" />
-                                <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="4">
-                                    <TextBlock Classes="num" Text="{Binding Value}" FontSize="21" VerticalAlignment="Bottom" />
-                                    <TextBlock Classes="muted" Text="{Binding Units}" VerticalAlignment="Bottom" Margin="0,0,0,3" />
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+        <!-- The CSV log, set before connecting; while logging its facts live in the status bar (system 8). -->
+        <DockPanel Name="CsvRow" DockPanel.Dock="Top" IsVisible="{Binding IsNotConnected}" IsEnabled="{Binding !IsConnecting}">
+            <ToggleSwitch Name="CsvSwitch" DockPanel.Dock="Left" IsChecked="{Binding EnableCsvLogging}" AutomationProperties.Name="Write CSV log" OnContent="Write CSV log" OffContent="Write CSV log"
+                          VerticalAlignment="Center" />
+            <Button Name="BrowseCsvButton" DockPanel.Dock="Right" Content="Browse…" Click="BrowseCsvButton_Click" Margin="12,0,0,0" VerticalAlignment="Center" />
+            <Panel Margin="12,0,0,0" ToolTip.Tip="{Binding CsvPath}">
+                <TextBox Name="CsvPathBox" Text="{Binding CsvPath}" IsEnabled="{Binding EnableCsvLogging}" AutomationProperties.Name="CSV file" />
+                <TextBlock Name="CsvPathShown" Text="{Binding CsvPath}" TextTrimming="LeadingCharacterEllipsis" IsHitTestVisible="False"
+                           IsEnabled="{Binding EnableCsvLogging}" Margin="11,0,11,0" VerticalAlignment="Center"
+                           IsVisible="{Binding !#CsvPathBox.IsFocused}" />
+            </Panel>
+        </DockPanel>
+
+        <!-- The readout band (system 8): Tiles or Dials for rpm, load and advance; gear and speed are the same in both. -->
+        <controls:ReadoutBand Name="ReadoutBand" DockPanel.Dock="Top">
+            <!-- rpm -->
+            <Panel>
+                <Border Classes="cell" IsVisible="{Binding ShowsTiles}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Classes="cell-title" ToolTip.Tip="{Binding Gauges[0].FullName}"><Run Text="{Binding Gauges[0].ChannelTitle, Mode=OneWay}" /><Run Classes="cell-id" Text="{Binding Gauges[0].ChannelId, StringFormat='&#x2002;{0}', Mode=OneWay}" /></TextBlock>
+                        <Panel DockPanel.Dock="Top" Height="92" Margin="0,4,0,0">
+                            <controls:ReadingText Name="ReadoutRpm" Classes="data88 reading" Classes.na="{Binding !Gauges[0].HasValue}"
+                                                  Value="{Binding Gauges[0].Display}" Unit="{Binding Gauges[0].Unit}" />
+                        </Panel>
+                        <controls:ReadoutBar DockPanel.Dock="Bottom" Name="RpmBar" BarHeight="10" Margin="0,2,0,0"
+                                             Minimum="{Binding Gauges[0].Min}" Maximum="{Binding Gauges[0].Max}" Step="{Binding Gauges[0].Major}"
+                                             Value="{Binding Gauges[0].Value}" LimitFrom="{Binding Gauges[0].RedFrom}" IsLive="{Binding IsConnected}" />
+                        <!-- The caption ends at the rev-limit tick (the mockup's 88.8 %), or at the edge while no bin is open. -->
+                        <Grid DockPanel.Dock="Bottom" ColumnDefinitions="888*,112*">
+                            <controls:NumberText Classes="cap" Value="{Binding RevLimitCaption}" HorizontalAlignment="Right" IsVisible="{Binding HasRevLimit}" />
+                            <controls:NumberText Grid.ColumnSpan="2" Classes="cap nb" Value="{Binding RevLimitCaption}" HorizontalAlignment="Right"
+                                                 IsVisible="{Binding !HasRevLimit}" />
+                        </Grid>
+                        <Panel />
+                    </DockPanel>
+                </Border>
+                <Border Classes="cell" IsVisible="{Binding ShowsDials}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Classes="cell-title" ToolTip.Tip="{Binding Gauges[0].FullName}"><Run Text="{Binding Gauges[0].ChannelTitle, Mode=OneWay}" /><Run Classes="cell-id" Text="{Binding Gauges[0].ChannelId, StringFormat='&#x2002;{0}', Mode=OneWay}" /></TextBlock>
+                        <controls:NumberText DockPanel.Dock="Bottom" Classes="cap" Classes.nb="{Binding !HasRevLimit}" Value="{Binding RevLimitCaption}" HorizontalAlignment="Right" />
+                        <Panel />
+                    </DockPanel>
+                </Border>
+                <controls:Gauge Name="RpmDial" Classes="large" IsLarge="True" IsVisible="{Binding ShowsDials}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                Unit="{Binding Gauges[0].Unit}" ScaleNote="{Binding Gauges[0].ScaleNote}"
+                                Minimum="{Binding Gauges[0].Min}" Maximum="{Binding Gauges[0].Max}" MajorStep="{Binding Gauges[0].Major}" MinorStep="{Binding Gauges[0].Minor}"
+                                LabelDivisor="{Binding Gauges[0].LabelDivisor}" Decimals="{Binding Gauges[0].Decimals}"
+                                Value="{Binding Gauges[0].Value}" RedFrom="{Binding Gauges[0].RedFrom}" IsLive="{Binding IsConnected}" />
+            </Panel>
+
+            <!-- load -->
+            <Panel>
+                <Border Classes="cell" IsVisible="{Binding ShowsTiles}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Classes="cell-title" ToolTip.Tip="{Binding Gauges[1].FullName}"><Run Text="{Binding Gauges[1].ChannelTitle, Mode=OneWay}" /><Run Classes="cell-id" Text="{Binding Gauges[1].ChannelId, StringFormat='&#x2002;{0}', Mode=OneWay}" /></TextBlock>
+                        <Panel DockPanel.Dock="Top" Height="60" Margin="0,6,0,0">
+                            <controls:ReadingText Name="ReadoutLoad" Classes="data56 reading" Classes.na="{Binding !Gauges[1].HasValue}"
+                                                  Value="{Binding Gauges[1].Display}" Unit="{Binding Gauges[1].Unit}" />
+                        </Panel>
+                        <controls:ReadoutBar DockPanel.Dock="Bottom" Name="LoadBar" BarHeight="6" Margin="0,8,0,0"
+                                             Minimum="{Binding Gauges[1].Min}" Maximum="{Binding Gauges[1].Max}" Step="{Binding Gauges[1].Major}"
+                                             Value="{Binding Gauges[1].Value}" IsLive="{Binding IsConnected}" />
+                        <Panel />
+                    </DockPanel>
+                </Border>
+                <Border Classes="cell" IsVisible="{Binding ShowsDials}">
+                    <DockPanel Classes="dial">
+                        <TextBlock Classes="cell-title" ToolTip.Tip="{Binding Gauges[1].FullName}"><Run Text="{Binding Gauges[1].ChannelTitle, Mode=OneWay}" /><Run Classes="cell-id" Text="{Binding Gauges[1].ChannelId, StringFormat='&#x2002;{0}', Mode=OneWay}" /></TextBlock>
+                        <controls:Gauge Name="LoadDial" Classes="small" HorizontalAlignment="Center" VerticalAlignment="Top"
+                                        Unit="{Binding Gauges[1].Unit}" Minimum="{Binding Gauges[1].Min}" Maximum="{Binding Gauges[1].Max}"
+                                        MajorStep="{Binding Gauges[1].Major}" MinorStep="{Binding Gauges[1].Minor}" LabelDivisor="{Binding Gauges[1].LabelDivisor}"
+                                        Decimals="{Binding Gauges[1].Decimals}" Value="{Binding Gauges[1].Value}" IsLive="{Binding IsConnected}" />
+                    </DockPanel>
+                </Border>
+            </Panel>
+
+            <!-- advance -->
+            <Panel>
+                <Border Classes="cell" IsVisible="{Binding ShowsTiles}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Classes="cell-title" ToolTip.Tip="{Binding Gauges[2].FullName}"><Run Text="{Binding Gauges[2].ChannelTitle, Mode=OneWay}" /><Run Classes="cell-id" Text="{Binding Gauges[2].ChannelId, StringFormat='&#x2002;{0}', Mode=OneWay}" /></TextBlock>
+                        <Panel DockPanel.Dock="Top" Height="60" Margin="0,6,0,0">
+                            <controls:ReadingText Name="ReadoutAdvance" Classes="data56 reading" Classes.na="{Binding !Gauges[2].HasValue}"
+                                                  Value="{Binding Gauges[2].Display}" Unit="{Binding Gauges[2].Unit}" />
+                        </Panel>
+                        <controls:ReadoutBar DockPanel.Dock="Bottom" Name="AdvanceBar" BarHeight="6" Margin="0,8,0,0"
+                                             Minimum="{Binding Gauges[2].Min}" Maximum="{Binding Gauges[2].Max}" Step="{Binding Gauges[2].Major}"
+                                             ZeroAt="{Binding Gauges[2].ZeroAt}" Value="{Binding Gauges[2].Value}" IsLive="{Binding IsConnected}" />
+                        <Panel />
+                    </DockPanel>
+                </Border>
+                <Border Classes="cell" IsVisible="{Binding ShowsDials}">
+                    <DockPanel Classes="dial">
+                        <TextBlock Classes="cell-title" ToolTip.Tip="{Binding Gauges[2].FullName}"><Run Text="{Binding Gauges[2].ChannelTitle, Mode=OneWay}" /><Run Classes="cell-id" Text="{Binding Gauges[2].ChannelId, StringFormat='&#x2002;{0}', Mode=OneWay}" /></TextBlock>
+                        <controls:Gauge Name="AdvanceDial" Classes="small" HorizontalAlignment="Center" VerticalAlignment="Top"
+                                        Unit="{Binding Gauges[2].Unit}" Minimum="{Binding Gauges[2].Min}" Maximum="{Binding Gauges[2].Max}"
+                                        MajorStep="{Binding Gauges[2].Major}" MinorStep="{Binding Gauges[2].Minor}" LabelDivisor="{Binding Gauges[2].LabelDivisor}"
+                                        Decimals="{Binding Gauges[2].Decimals}" ZeroAt="{Binding Gauges[2].ZeroAt}" Value="{Binding Gauges[2].Value}"
+                                        IsLive="{Binding IsConnected}" />
+                    </DockPanel>
+                </Border>
+            </Panel>
+
+            <!-- gear: the slots wrap under the name when the cell is narrow -->
+            <Border Classes="cell">
+                <WrapPanel ItemSpacing="12" LineSpacing="8">
+                    <TextBlock Classes="cell-title" VerticalAlignment="Center" ToolTip.Tip="{Binding GearReadout.FullName}"><Run Text="{Binding GearReadout.ChannelTitle, Mode=OneWay}" /><Run Classes="cell-id" Text="{Binding GearReadout.ChannelId, StringFormat='&#x2002;{0}', Mode=OneWay}" /></TextBlock>
+                    <controls:GearSlots Name="GearSlots" Gear="{Binding Gear}" IsLive="{Binding IsConnected}" />
+                </WrapPanel>
+            </Border>
+
+            <!-- speed -->
+            <Border Classes="cell">
+                <StackPanel Spacing="8">
+                    <TextBlock Classes="cell-title" ToolTip.Tip="{Binding SpeedReadout.FullName}"><Run Text="{Binding SpeedReadout.ChannelTitle, Mode=OneWay}" /><Run Classes="cell-id" Text="{Binding SpeedReadout.ChannelId, StringFormat='&#x2002;{0}', Mode=OneWay}" /></TextBlock>
+                    <Panel Height="28">
+                        <controls:ReadingText Name="SpeedReadout" Classes="data24 reading small" Classes.na="{Binding !SpeedReadout.HasValue}"
+                                              Value="{Binding SpeedReadout.Display}" Unit="{Binding SpeedReadout.Unit}" />
+                    </Panel>
+                </StackPanel>
+            </Border>
+        </controls:ReadoutBand>
+
+        <!-- Pinned tiles (system 8), the pins in title order -->
+        <!-- The pins decide whether there are tiles; the window's size whether they show (a style cannot beat a binding). -->
+        <Panel DockPanel.Dock="Top" IsVisible="{Binding HasPinned}">
+        <StackPanel Name="PinsSection" Margin="0,24,0,0" Spacing="8">
+            <TextBlock Classes="pins-head"><Run Text="Pinned" /><Run Classes="num" Text="{Binding TileValues.Count, StringFormat='&#x2002;{0}', Mode=OneWay}" /></TextBlock>
+            <!-- The frame clips the tiles' own left and top hairlines where they meet it, as the mockup draws them. -->
+            <Border BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="1" CornerRadius="12" ClipToBounds="True">
+            <ScrollViewer MaxHeight="146" HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl Name="PinnedTiles" ItemsSource="{Binding TileValues}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <controls:TileGrid />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="local:DecodedValueViewModel">
+                            <Border BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="1,1,0,0" Margin="-1,-1,0,0">
+                            <StackPanel Margin="16,10,16,12">
+                                <TextBlock Classes="tile-title" Text="{Binding Title}" ToolTip.Tip="{Binding Title}" />
+                                <!-- The reading first; the id takes what is left and trims, since the value is what a tile is for. -->
+                                <DockPanel Height="28" Margin="0,4,0,0">
+                                    <controls:ReadingText DockPanel.Dock="Left" Classes="data24 reading tile small" Classes.na="{Binding !HasValue}" Value="{Binding Value}"
+                                                          Unit="{Binding Units}" VerticalAlignment="Bottom" />
+                                    <TextBlock Classes="tile-id" Text="{Binding Id}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="8,0,0,4"
+                                               TextTrimming="CharacterEllipsis" />
+                                </DockPanel>
+                            </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+            </Border>
         </StackPanel>
-    </ScrollViewer>
+        </Panel>
+
+        <!-- Channels (system 5.6): Pinned on the left and Not pinned on the right, each scrolling on its own. -->
+        <DockPanel Name="ChannelsSection">
+            <DockPanel DockPanel.Dock="Top" Height="32">
+                <TextBlock Classes="section-title" Text="Channels" VerticalAlignment="Center" />
+                <TextBlock Classes="list-count" Margin="12,0,0,0" VerticalAlignment="Center"><Run Classes="num" Text="{Binding VisibleChannelCount, Mode=OneWay}" /><Run Text=" shown" /></TextBlock>
+                <Button Name="PerformanceButton" DockPanel.Dock="Right" Classes="quiet" Content="Performance tests" Click="OpenPerformanceWindow_Click"
+                        VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal" Spacing="16" Margin="20,0,0,0">
+                    <TextBox Name="ChannelFilter" Width="300" Watermark="Filter by name or ID" Text="{Binding SearchText}" VerticalAlignment="Center"
+                             AutomationProperties.Name="Filter channels">
+                        <TextBox.InnerLeftContent>
+                            <controls:StrokeIcon Data="{StaticResource Icon.Search}" Foreground="{DynamicResource Ink2Brush}" Margin="10,0,0,0" VerticalAlignment="Center" />
+                        </TextBox.InnerLeftContent>
+                        <TextBox.InnerRightContent>
+                            <Border Classes="kbd" Margin="8,0,6,0" VerticalAlignment="Center">
+                                <TextBlock Text="Ctrl K" />
+                            </Border>
+                        </TextBox.InnerRightContent>
+                    </TextBox>
+                    <ToggleSwitch Name="PinnedOnlySwitch" IsChecked="{Binding ShowPinnedOnly}" AutomationProperties.Name="Pinned only" OnContent="Pinned only" OffContent="Pinned only" VerticalAlignment="Center" />
+                </StackPanel>
+            </DockPanel>
+
+            <DockPanel DockPanel.Dock="Top" Height="48" IsVisible="{Binding NoMatchText, Converter={x:Static ObjectConverters.IsNotNull}}">
+                <Button DockPanel.Dock="Right" Classes="quiet" Content="Clear filter" Click="ClearFilter_Click" VerticalAlignment="Center" />
+                <TextBlock Name="NoMatchText" Classes="empty-line" Margin="8,0,0,0" Text="{Binding NoMatchText}" />
+            </DockPanel>
+
+            <ScrollViewer Name="ListScroller" Margin="0,12,0,0" HorizontalScrollBarVisibility="Disabled">
+                <controls:ListColumns>
+                    <DockPanel>
+                            <Border Classes="colhead" DockPanel.Dock="Top">
+                                <Grid ColumnDefinitions="32,*,80,72,48" ColumnSpacing="12">
+                                    <TextBlock Grid.Column="1" Text="Channel" />
+                                    <controls:NumberText Grid.Column="2" Value="{Binding TrendLabel}" />
+                                    <TextBlock Grid.Column="3" Text="Value" HorizontalAlignment="Right" />
+                                </Grid>
+                            </Border>
+                        <TextBlock DockPanel.Dock="Top" Classes="group-head"><Run Text="Pinned" /><Run Classes="num" Text="{Binding PinnedValues.Count, StringFormat='&#x2002;{0}', Mode=OneWay}" /></TextBlock>
+                        <TextBlock Name="NoPinsText" DockPanel.Dock="Top" Classes="empty-line" Height="48" Margin="8,0,0,0" IsVisible="{Binding ShowsNoPins}"
+                                   Text="No pinned channels. Use the pin on a row to keep it at the top." />
+                        <ListBox Name="PinnedList" Classes="channels" ItemsSource="{Binding PinnedValues}" AutomationProperties.Name="Pinned channels">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="local:DecodedValueViewModel">
+                                        <Border BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="0,0,0,1" Height="33">
+                                            <Grid ColumnDefinitions="32,*,80,72,48" ColumnSpacing="12">
+                                                <Button Classes="quiet icon" Click="PinButton_Click" CommandParameter="{Binding}" ToolTip.Tip="{Binding PinTip}"
+                                                        AutomationProperties.Name="{Binding PinName}" VerticalAlignment="Center">
+                                                    <Panel>
+                                                        <controls:StrokeIcon Data="{StaticResource Icon.Pin}" IsVisible="{Binding !IsPinned}" />
+                                                        <controls:StrokeIcon Data="{StaticResource Icon.PinFilled}" FillData="{StaticResource Icon.PinFilled.Fill}"
+                                                                             IsVisible="{Binding IsPinned}" />
+                                                    </Panel>
+                                                </Button>
+                                                <TextBlock Grid.Column="1" Classes="row-name" ToolTip.Tip="{Binding FullName}"><Run Text="{Binding Title, Mode=OneWay}" /><Run Classes="cell-id" Text="{Binding Id, StringFormat='&#x2002;{0}', Mode=OneWay}" /></TextBlock>
+                                                <controls:Sparkline Grid.Column="2" Height="20" VerticalAlignment="Center" History="{Binding History}"
+                                                                    Version="{Binding HistoryVersion}" Units="{Binding Units}"
+                                                                    IsStale="{Binding $parent[UserControl].((local:MainWindowViewModel)DataContext).IsStale}" />
+                                                <TextBlock Name="RowValue" Grid.Column="3" Classes="row-value" Classes.na="{Binding !HasValue}" Text="{Binding Value}" />
+                                                <TextBlock Name="RowUnit" Grid.Column="4" Classes="row-unit" Text="{Binding Units}" ToolTip.Tip="{Binding Units}"
+                                                           IsVisible="{Binding HasValue}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                        </ListBox>
+                    </DockPanel>
+                    <DockPanel>
+                            <Border Classes="colhead second" DockPanel.Dock="Top">
+                                <Grid ColumnDefinitions="32,*,80,72,48" ColumnSpacing="12">
+                                    <TextBlock Grid.Column="1" Text="Channel" />
+                                    <controls:NumberText Grid.Column="2" Value="{Binding TrendLabel}" />
+                                    <TextBlock Grid.Column="3" Text="Value" HorizontalAlignment="Right" />
+                                </Grid>
+                            </Border>
+                        <TextBlock DockPanel.Dock="Top" Classes="group-head" IsVisible="{Binding !ShowPinnedOnly}"><Run Text="Not pinned" /><Run Classes="num" Text="{Binding OtherValues.Count, StringFormat='&#x2002;{0}', Mode=OneWay}" /></TextBlock>
+                        <ListBox Name="OtherList" Classes="channels" ItemsSource="{Binding OtherValues}" AutomationProperties.Name="Channels not pinned">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="local:DecodedValueViewModel">
+                                        <Border BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="0,0,0,1" Height="33">
+                                            <Grid ColumnDefinitions="32,*,80,72,48" ColumnSpacing="12">
+                                                <Button Classes="quiet icon" Click="PinButton_Click" CommandParameter="{Binding}" ToolTip.Tip="{Binding PinTip}"
+                                                        AutomationProperties.Name="{Binding PinName}" VerticalAlignment="Center">
+                                                    <Panel>
+                                                        <controls:StrokeIcon Data="{StaticResource Icon.Pin}" IsVisible="{Binding !IsPinned}" />
+                                                        <controls:StrokeIcon Data="{StaticResource Icon.PinFilled}" FillData="{StaticResource Icon.PinFilled.Fill}"
+                                                                             IsVisible="{Binding IsPinned}" />
+                                                    </Panel>
+                                                </Button>
+                                                <TextBlock Grid.Column="1" Classes="row-name" ToolTip.Tip="{Binding FullName}"><Run Text="{Binding Title, Mode=OneWay}" /><Run Classes="cell-id" Text="{Binding Id, StringFormat='&#x2002;{0}', Mode=OneWay}" /></TextBlock>
+                                                <controls:Sparkline Grid.Column="2" Height="20" VerticalAlignment="Center" History="{Binding History}"
+                                                                    Version="{Binding HistoryVersion}" Units="{Binding Units}"
+                                                                    IsStale="{Binding $parent[UserControl].((local:MainWindowViewModel)DataContext).IsStale}" />
+                                                <TextBlock Name="RowValue" Grid.Column="3" Classes="row-value" Classes.na="{Binding !HasValue}" Text="{Binding Value}" />
+                                                <TextBlock Name="RowUnit" Grid.Column="4" Classes="row-unit" Text="{Binding Units}" ToolTip.Tip="{Binding Units}"
+                                                           IsVisible="{Binding HasValue}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                        </ListBox>
+                    </DockPanel>
+                </controls:ListColumns>
+            </ScrollViewer>
+        </DockPanel>
+    </DockPanel>
 </UserControl>

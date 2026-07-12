@@ -1,0 +1,169 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:MS43Logger.AvaloniaApp"
+             xmlns:controls="using:MS43Logger.AvaloniaApp.Controls"
+             x:Class="MS43Logger.AvaloniaApp.Views.SettingsView"
+             x:DataType="local:SettingsViewModel"
+             Width="510">
+    <UserControl.Styles>
+        <Style Selector="TextBlock.section">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,0,0,-4" />
+        </Style>
+        <!-- Rows (system 5.12): label left, control right, so every control in the dialog shares one right edge. -->
+        <Style Selector="DockPanel.row">
+            <Setter Property="MinHeight" Value="32" />
+        </Style>
+        <Style Selector="DockPanel.row > TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,0,12,0" />
+        </Style>
+        <Style Selector="DockPanel.row > ToggleSwitch">
+            <Setter Property="OnContent" Value="{x:Null}" />
+            <Setter Property="OffContent" Value="{x:Null}" />
+        </Style>
+        <!-- The dialog's segments are full 32 px controls. -->
+        <Style Selector="Border.seg">
+            <Setter Property="Height" Value="32" />
+        </Style>
+        <Style Selector="ToggleButton.seg">
+            <Setter Property="Padding" Value="12,0" />
+        </Style>
+    </UserControl.Styles>
+
+    <DockPanel>
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto">
+            <StackPanel>
+                <TextBlock Classes="title" Text="Settings" />
+                <TextBlock Name="SettingsNote" Text="Changes apply right away and are saved." Foreground="{DynamicResource Ink2Brush}"
+                           Margin="0,4,0,0" IsVisible="{Binding !HasSaveError}" />
+            </StackPanel>
+            <Button Name="CloseButton" Grid.Column="1" Classes="quiet icon" Click="Close_Click" VerticalAlignment="Top" Margin="12,-5,-8,0"
+                    ToolTip.Tip="Close (Esc)" AutomationProperties.Name="Close">
+                <controls:StrokeIcon Data="{StaticResource Icon.Close}" />
+            </Button>
+        </Grid>
+
+        <Border Name="SaveErrorBanner" DockPanel.Dock="Top" Classes="banner warn" Margin="0,12,0,0" IsVisible="{Binding HasSaveError}">
+            <DockPanel>
+                <controls:StrokeIcon Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource WarnBrush}" VerticalAlignment="Top" Margin="0,1,8,0" />
+                <Button Name="TryAgainButton" DockPanel.Dock="Right" Content="Try again" Click="TryAgain_Click" Margin="12,0,0,0" VerticalAlignment="Center" />
+                <TextBlock Name="SaveErrorText" Text="{Binding SaveError}" TextWrapping="Wrap" VerticalAlignment="Center" />
+            </DockPanel>
+        </Border>
+
+        <!-- The scroll bar never auto-hides: at 1024 x 680 it is the only sign that the Saving section is below. It takes
+             the right edge of the column, which the close button shares; the controls give way to it while it shows. -->
+        <ScrollViewer Margin="0,24,0,0" HorizontalScrollBarVisibility="Disabled" AllowAutoHide="False">
+            <StackPanel Spacing="24">
+                <StackPanel Spacing="12">
+                    <TextBlock Classes="section" Text="Appearance" />
+                    <DockPanel Classes="row">
+                        <Border Classes="seg" DockPanel.Dock="Right" AutomationProperties.Name="Theme">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <ToggleButton Name="ThemeNight" Classes="seg" Content="Night" IsChecked="{Binding IsNightTheme}" />
+                                <ToggleButton Name="ThemeDay" Classes="seg" Content="Day" IsChecked="{Binding IsDayTheme}" />
+                                <ToggleButton Name="ThemeFollow" Classes="seg" Content="Follow Windows" IsChecked="{Binding IsFollowWindows}" />
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Text="Theme" />
+                    </DockPanel>
+                    <DockPanel Classes="row">
+                        <Border Classes="seg" DockPanel.Dock="Right" AutomationProperties.Name="Live readouts">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <ToggleButton Name="SettingsTiles" Classes="seg" Content="Tiles" IsChecked="{Binding IsTiles}" />
+                                <ToggleButton Name="SettingsDials" Classes="seg" Content="Dials" IsChecked="{Binding IsDials}" />
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Text="Live readouts" />
+                    </DockPanel>
+                </StackPanel>
+
+                <StackPanel Spacing="12">
+                    <TextBlock Classes="section" Text="Live" />
+                    <DockPanel Classes="row">
+                        <Border Classes="seg" DockPanel.Dock="Right" AutomationProperties.Name="Trend length">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <ToggleButton Name="Trend10" Classes="seg" IsChecked="{Binding IsTrend10}" AutomationProperties.Name="10 s">
+                                    <TextBlock><Run Classes="num" Text="10" /><Run Text=" s" /></TextBlock>
+                                </ToggleButton>
+                                <ToggleButton Name="Trend30" Classes="seg" IsChecked="{Binding IsTrend30}" AutomationProperties.Name="30 s">
+                                    <TextBlock><Run Classes="num" Text="30" /><Run Text=" s" /></TextBlock>
+                                </ToggleButton>
+                                <ToggleButton Name="Trend60" Classes="seg" IsChecked="{Binding IsTrend60}" AutomationProperties.Name="60 s">
+                                    <TextBlock><Run Classes="num" Text="60" /><Run Text=" s" /></TextBlock>
+                                </ToggleButton>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Text="Trend length" />
+                    </DockPanel>
+                    <DockPanel Classes="row">
+                        <TextBlock DockPanel.Dock="Left" Text="Log folder" TextWrapping="NoWrap" />
+                        <!-- Field, then Browse…: the order Tab follows. -->
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBox Name="LogFolderBox" Text="{Binding LogFolder, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="Log folder" ToolTip.Tip="{Binding LogFolder}" />
+                            <Button Name="LogFolderBrowse" Grid.Column="1" Content="Browse…" Click="Browse_Click" Margin="12,0,0,0" />
+                        </Grid>
+                    </DockPanel>
+                    <DockPanel Classes="row">
+                        <ToggleSwitch Name="StartCsvSwitch" DockPanel.Dock="Right" IsChecked="{Binding StartCsvOnConnect}"
+                                      AutomationProperties.Name="Start writing the CSV log when connected" />
+                        <TextBlock Text="Start writing the CSV log when connected" Tag="StartCsvSwitch" Tapped="Label_Tapped" />
+                    </DockPanel>
+                    <DockPanel Name="TimingNote">
+                        <controls:StrokeIcon Data="{StaticResource Icon.Info}" Foreground="{DynamicResource Ink2Brush}" VerticalAlignment="Top" Margin="0,1,8,0" />
+                        <TextBlock Foreground="{DynamicResource Ink2Brush}" TextWrapping="Wrap">
+                            <Run Text="Logging timing is fixed: the pause between requests and the stop after " /><Run Classes="num" Text="3" /><Run Text=" timeouts in a row keep logging as reliable as before." />
+                        </TextBlock>
+                    </DockPanel>
+                </StackPanel>
+
+                <StackPanel Spacing="12">
+                    <TextBlock Classes="section" Text="Tune" />
+                    <DockPanel Classes="row">
+                        <Border Classes="seg" DockPanel.Dock="Right" AutomationProperties.Name="Open maps showing">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <ToggleButton Name="MapsPhysical" Classes="seg" Content="Physical values" IsChecked="{Binding IsPhysical}" />
+                                <ToggleButton Name="MapsRaw" Classes="seg" Content="Raw values" IsChecked="{Binding IsRaw}" />
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Text="Open maps showing" />
+                    </DockPanel>
+                    <DockPanel Classes="row">
+                        <Border Classes="seg" DockPanel.Dock="Right" AutomationProperties.Name="Live cursor trail">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <ToggleButton Name="TrailOff" Classes="seg" Content="Off" IsChecked="{Binding IsTrailOff}" />
+                                <ToggleButton Name="TrailShort" Classes="seg" Content="Short" IsChecked="{Binding IsTrailShort}" />
+                                <ToggleButton Name="TrailLong" Classes="seg" Content="Long" IsChecked="{Binding IsTrailLong}" />
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Text="Live cursor trail" />
+                    </DockPanel>
+                    <DockPanel Classes="row">
+                        <ToggleSwitch Name="ReopenSwitch" DockPanel.Dock="Right" IsChecked="{Binding ReopenLastBin}"
+                                      AutomationProperties.Name="Reopen the last bin when the app starts" />
+                        <TextBlock Text="Reopen the last bin when the app starts" Tag="ReopenSwitch" Tapped="Label_Tapped" />
+                    </DockPanel>
+                </StackPanel>
+
+                <StackPanel Spacing="12">
+                    <TextBlock Classes="section" Text="Saving" />
+                    <StackPanel Spacing="0">
+                        <DockPanel Classes="row">
+                            <ToggleSwitch Name="BakSwitch" DockPanel.Dock="Right" IsChecked="{Binding KeepBackup}"
+                                          AutomationProperties.Name="Keep a .bak copy before the first save" />
+                            <TextBlock Text="Keep a .bak copy before the first save" Tag="BakSwitch" Tapped="Label_Tapped" />
+                        </DockPanel>
+                        <TextBlock Classes="label" TextWrapping="Wrap" Text="The .bak holds the file as it was on disk before your first save in a session." />
+                    </StackPanel>
+                    <DockPanel Classes="row">
+                        <ToggleSwitch Name="EditLogSwitch" DockPanel.Dock="Right" IsChecked="{Binding AppendEditLog}"
+                                      AutomationProperties.Name="Add changes to the edit log next to the bin (TunerPro format)" />
+                        <TextBlock Text="Add changes to the edit log next to the bin (TunerPro format)" Tag="EditLogSwitch" Tapped="Label_Tapped" />
+                    </DockPanel>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

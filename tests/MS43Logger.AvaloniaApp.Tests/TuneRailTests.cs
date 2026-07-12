@@ -135,6 +135,8 @@ public sealed class TuneRailTests : IDisposable
 
         Assert.Null(tune.Document);
         Assert.Contains("524288", tune.ErrorMessage);
+        Assert.StartsWith("Not opened: partial.bin is 32768 bytes.", tune.ErrorMessage);
+        Assert.Equal(TuneAction.OpenBin, tune.ErrorAction);
     }
 
     [AvaloniaFact]

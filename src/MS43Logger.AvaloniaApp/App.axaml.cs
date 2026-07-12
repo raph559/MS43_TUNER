@@ -23,15 +23,19 @@ public partial class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
-    public static void SetTheme(string? themeName)
+    /// <summary>Night and Day fix the theme; Follow Windows tracks the Windows app theme while the app runs.</summary>
+    public static void SetTheme(ThemeMode mode)
     {
         if (Current is not Application app)
         {
             return;
         }
 
-        app.RequestedThemeVariant = string.Equals(themeName, "Light", StringComparison.OrdinalIgnoreCase)
-            ? ThemeVariant.Light
-            : ThemeVariant.Dark;
+        app.RequestedThemeVariant = mode switch
+        {
+            ThemeMode.Day => ThemeVariant.Light,
+            ThemeMode.FollowWindows => ThemeVariant.Default,
+            _ => ThemeVariant.Dark,
+        };
     }
 }

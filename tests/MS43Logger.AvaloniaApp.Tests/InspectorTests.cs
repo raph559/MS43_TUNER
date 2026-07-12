@@ -51,9 +51,9 @@ public class InspectorTests
         var (window, shell) = await TuneScreen.OpenAsync(select: "c_conf_load");
         var value = shell.Tune.Value!;
 
-        Assert.Equal(new[] { "0: Map sensor", "1: Maf sensor", "2: Alpha-N" }, value.Choices!.Select(choice => choice.Text));
+        Assert.Equal(new[] { "Map sensor", "Maf sensor", "Alpha-N" }, value.Choices!.Select(choice => choice.Text));
         Assert.Equal(1, value.SelectedChoice!.Value);
-        Assert.True(Find.Named<ComboBox>(window, "ChoiceBox").IsEffectivelyVisible);
+        Assert.True(Find.Named<ListBox>(window, "ChoiceList").IsEffectivelyVisible);
         Screens.Save(window, "tune-switch");
     }
 
@@ -71,7 +71,7 @@ public class InspectorTests
         value.SelectedChoice = value.Choices![0];
 
         Assert.Equal(0, value.Current.Raw);
-        Assert.Equal("1 unsaved change", shell.Tune.DirtyText);
+        Assert.Equal("1 item not saved", shell.Tune.SaveStateText);
         shell.Tune.History!.Undo();
         Assert.Equal(1, shell.Tune.Value!.Current.Raw);
         Assert.Equal(1, shell.Tune.Value.SelectedChoice!.Value);

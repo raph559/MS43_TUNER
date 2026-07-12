@@ -14,7 +14,17 @@ public sealed record RailGroup(string Title) : RailEntry;
 
 public sealed record RailCategory(string Name, int Count, bool IsExpanded) : RailEntry;
 
-public sealed record Fact(string Label, string Text);
+/// <summary>One inspector row: a label and a value, with an optional second line; <see cref="TextIsId"/> sets the value as an id.</summary>
+public sealed record Fact(string Label, string Text, string? Detail = null, bool TextIsId = false);
+
+public enum TuneAction
+{
+    None,
+    OpenBin,
+    OpenXdf,
+    SaveAs,
+    UseAnotherXdf,
+}
 
 public enum SaveChoice
 {
@@ -39,9 +49,11 @@ public sealed class TuneViewModel : ViewModelBase
     private XdfItem? _selectedItem;
     private TableEditorViewModel? _editor;
     private ValueEditorViewModel? _value;
-    private IReadOnlyList<Fact> _facts = Array.Empty<Fact>();
-    private string _legendMin = string.Empty;
-    private string _legendMax = string.Empty;
+    private IReadOnlyList<Fact> _limitFacts = Array.Empty<Fact>();
+    private IReadOnlyList<Fact> _detailFacts = Array.Empty<Fact>();
+    private string? _scaleCaption;
+    private (string? Min, string? Mid, string? Max) _scaleLabels;
+    private string? _surfaceNote;
     private string _toolValue = string.Empty;
     private string _searchText = string.Empty;
     private bool _modifiedOnly;
@@ -53,7 +65,11 @@ public sealed class TuneViewModel : ViewModelBase
     private string? _plateXdf;
     private string? _firmwareWarning;
     private string? _errorMessage;
+    private TuneAction _errorAction;
+    private bool _needsXdf;
     private bool _isBusy;
+    private string? _busyText;
+    private bool _inspectorOpen;
 
     public TuneViewModel(AppSettings settings, TimeProvider? time = null)
     {
@@ -78,28 +94,86 @@ public sealed class TuneViewModel : ViewModelBase
 
     public bool HasDocument => Document is not null;
 
-    public string PlateFile { get => _plateFile; private set => SetField(ref _plateFile, value); }
+    public string PlateFile { get => _plateFile; private set => SetPlate(ref _plateFile, value); }
 
-    public string? PlateFirmware { get => _plateFirmware; private set => SetField(ref _plateFirmware, value); }
+    public string? PlateFirmware { get => _plateFirmware; private set => SetPlate(ref _plateFirmware, value); }
 
-    public string? PlateXdf { get => _plateXdf; private set => SetField(ref _plateXdf, value); }
+    public string? PlateXdf { get => _plateXdf; private set => SetPlate(ref _plateXdf, value); }
+
+    /// <summary>The file block's tooltip: the bin name, then the firmware and XDF line, which the header hides when it is short.</summary>
+    public string? PlateTip => HasDocument ? $"{PlateFile}\nFirmware {PlateFirmware} · XDF {PlateXdf}" : null;
 
     /// <summary>Set when the XDF was written for other firmware than the bin's.</summary>
     public string? FirmwareWarning { get => _firmwareWarning; private set => SetField(ref _firmwareWarning, value); }
 
-    public string? ErrorMessage { get => _errorMessage; set => SetField(ref _errorMessage, value); }
+    /// <summary>What went wrong last (system 7.1); <see cref="ErrorAction"/> is the banner's way out.</summary>
+    public string? ErrorMessage { get => _errorMessage; private set => SetField(ref _errorMessage, value); }
 
-    public bool IsBusy { get => _isBusy; private set => SetField(ref _isBusy, value); }
+    public TuneAction ErrorAction { get => _errorAction; private set => SetField(ref _errorAction, value); }
 
-    /// <summary>"Saved", or how many items changed since the last save.</summary>
-    public string DirtyText
+    /// <summary>The banner's action button: "Open bin…", "Open XDF…", "Save as…" or "Use another XDF…".</summary>
+    public string? ErrorActionText => ErrorAction switch
+    {
+        TuneAction.OpenBin => "Open bin…",
+        TuneAction.OpenXdf => "Open XDF…",
+        TuneAction.SaveAs => "Save as…",
+        TuneAction.UseAnotherXdf => "Use another XDF…",
+        _ => null,
+    };
+
+    /// <summary>The last open stopped for want of an XDF: on first run the empty block says so instead of a banner.</summary>
+    public bool NeedsXdf { get => _needsXdf; private set => SetField(ref _needsXdf, value); }
+
+    public bool HasErrorBanner => ErrorMessage is not null && !(NeedsXdf && Document is null);
+
+    public bool IsBusy
+    {
+        get => _isBusy;
+        private set
+        {
+            if (SetField(ref _isBusy, value))
+            {
+                OnPropertyChanged(nameof(ShowsBusyBar));
+            }
+        }
+    }
+
+    /// <summary>"Reading CAR_current_43X001_SP95_STAGE1.bin…", then "Reading Siemens_MS43_MS43X001_512K.xdf…"; null when idle.</summary>
+    public string? BusyText { get => _busyText; private set => SetField(ref _busyText, value); }
+
+    /// <summary>With a bin open the reading shows as the 2 px bar under the header; on first run the empty block shows it.</summary>
+    public bool ShowsBusyBar => IsBusy && HasDocument;
+
+    /// <summary>Shows a problem with its way out, or clears it with null.</summary>
+    public void ShowError(string? message, TuneAction action = TuneAction.None)
+    {
+        NeedsXdf = false;
+        ErrorMessage = message;
+        ErrorAction = message is null ? TuneAction.None : action;
+        OnPropertyChanged(nameof(ErrorActionText));
+        OnPropertyChanged(nameof(HasErrorBanner));
+    }
+
+    /// <summary>The header chip: "Saved", "1 item not saved" or "3 items not saved"; empty with no bin open.</summary>
+    public string SaveStateText
     {
         get
         {
             var count = Document?.ModifiedItems().Count ?? 0;
-            return Document is null ? string.Empty : count == 0 ? "Saved" : $"{count} unsaved {(count == 1 ? "change" : "changes")}";
+            return Document is null ? string.Empty : count == 0 ? "Saved" : $"{count} {(count == 1 ? "item" : "items")} not saved";
         }
     }
+
+    public bool HasUnsavedChanges => Document?.IsModified == true;
+
+    /// <summary>The XDF remembered for the last opened bin's firmware when that file is no longer on disk.</summary>
+    public string? MissingXdfPath { get; private set; }
+
+    /// <summary>The Settings dialog changed a choice that this screen shows.</summary>
+    public void SettingsChanged() => OnPropertyChanged(nameof(SaveTip));
+
+    /// <summary>Save's tooltip; it only promises a .bak while the Settings switch keeps one.</summary>
+    public string SaveTip => !HasUnsavedChanges ? "Nothing to save" : Settings.KeepBackup ? "Save (Ctrl S). A .bak keeps the file as it was." : "Save (Ctrl S)";
 
     /// <summary>The editor for the selected table, map, curve or axis; null for values, switches and flags.</summary>
     public TableEditorViewModel? Editor { get => _editor; private set => SetField(ref _editor, value); }
@@ -107,15 +181,89 @@ public sealed class TuneViewModel : ViewModelBase
     /// <summary>The editor for the selected value, switch or flag; null for tables.</summary>
     public ValueEditorViewModel? Value { get => _value; private set => SetField(ref _value, value); }
 
-    public IReadOnlyList<Fact> Facts { get => _facts; private set => SetField(ref _facts, value); }
+    /// <summary>The inspector's "Edit limits": Storable, Step, the XDF range when it narrows, and the active cell or value.</summary>
+    public IReadOnlyList<Fact> LimitFacts
+    {
+        get => _limitFacts;
+        private set
+        {
+            if (SetField(ref _limitFacts, value))
+            {
+                OnPropertyChanged(nameof(HasLimits));
+            }
+        }
+    }
+
+    public bool HasLimits => LimitFacts.Count > 0;
+
+    /// <summary>The inspector's "Details": address, size, units, scaling and the axes.</summary>
+    public IReadOnlyList<Fact> DetailFacts { get => _detailFacts; private set => SetField(ref _detailFacts, value); }
+
+    /// <summary>Below 1280 px the inspector is an overlay that Details opens.</summary>
+    public bool InspectorOpen { get => _inspectorOpen; set => SetField(ref _inspectorOpen, value); }
+
+    public string PinText => SelectedItem is { } item && _settings.IsPinned(item.Title) ? "Unpin" : "Pin";
+
+    /// <summary>"'colmajor' is read-only: …" for storage the app cannot write; null for an editable item.</summary>
+    public string? ReadOnlyReason => SelectedItem switch
+    {
+        XdfTable { Z.Data.UnsupportedReason: { } reason } table => $"'{table.Title}' is read-only: {reason}.",
+        XdfConstant { Data.UnsupportedReason: { } reason } constant => $"'{constant.Title}' is read-only: {reason}.",
+        XdfFlag { Data.UnsupportedReason: { } reason } flag => $"'{flag.Title}' is read-only: {reason}.",
+        _ => null,
+    };
+
+    public bool IsReadOnlyItem => ReadOnlyReason is not null;
+
+    /// <summary>The rail's one line when a search finds nothing (system 7.1).</summary>
+    public string? NoMatchText => HasDocument && SearchText.Trim().Length > 0 && Rail.Count == 0
+        ? $"No map or value matches \"{SearchText.Trim()}\"."
+        : null;
 
     public bool ShowsSurface => Editor is { Values: { Rows: > 1, Cols: > 1 } };
 
+    /// <summary>A one-column table (a curve or an axis) sits centred in the pane with its key line (system 8, owner).</summary>
+    public bool CentreGrid => Editor is { Values.Cols: 1 };
+
+
+
     public bool ShowsCurve => Editor is not null && !ShowsSurface;
 
-    public string LegendMin { get => _legendMin; private set => SetField(ref _legendMin, value); }
+    /// <summary>The inspector's chart title: "Surface" for a map, "Breakpoints" for an axis, "Curve" for a curve.</summary>
+    public string ShapeTitle => ShowsSurface ? "Surface" : IsAxis ? "Breakpoints" : "Curve";
 
-    public string LegendMax { get => _legendMax; private set => SetField(ref _legendMax, value); }
+    /// <summary>An axis: its pane carries the breakpoint rule and its inspector the tables that use it (system 5.13).</summary>
+    public bool IsAxis => SelectedItem is not null && Catalog is not null && Catalog.Kind(SelectedItem) == ItemKind.Axis;
+
+    /// <summary>The tables that use the selected axis, from the XDF's axis links; empty for anything else.</summary>
+    public IReadOnlyList<XdfItem> UsedBy => SelectedItem is XdfTable table && IsAxis ? Catalog!.AxisUsers(table) : [];
+
+    public bool HasNoUsers => IsAxis && UsedBy.Count == 0;
+
+    /// <summary>The colour scale's caption (system 2.2): "Colour: 3.0 to 39.0 °CRK. Hatched cells are at the storage limit (-23.6)."</summary>
+    public string? ScaleCaption { get => _scaleCaption; private set => SetField(ref _scaleCaption, value); }
+
+    public string? ScaleMinLabel => _scaleLabels.Min;
+
+    public string? ScaleMidLabel => _scaleLabels.Mid;
+
+    public string? ScaleMaxLabel => _scaleLabels.Max;
+
+    /// <summary>Under the surface: the cells it leaves out, "The 6990 rpm row (storage limit) is not drawn."</summary>
+    public string? SurfaceNote
+    {
+        get => _surfaceNote;
+        private set
+        {
+            if (SetField(ref _surfaceNote, value))
+            {
+                OnPropertyChanged(nameof(SurfaceHint));
+            }
+        }
+    }
+
+    /// <summary>The surface's line: how to turn it, then what it leaves out.</summary>
+    public string SurfaceHint => SurfaceNote is { } note ? "Drag to turn, or use the arrow keys. " + note : "Drag to turn, or use the arrow keys.";
 
     /// <summary>Asks whether to save unsaved edits; set by the window. Without it, unsaved edits are never dropped.</summary>
     public Func<string, Task<SaveChoice>>? AskToSave { get; set; }
@@ -128,6 +276,8 @@ public sealed class TuneViewModel : ViewModelBase
     public bool CanRedo => History?.CanRedo ?? false;
 
     public string UndoTip => History?.NextUndoLabel is { } label ? "Undo: " + label : "Nothing to undo";
+
+    public string RedoTip => CanRedo ? "Redo (Ctrl Y)" : "Nothing to redo";
 
     /// <summary>Runs a toolbar operation on the selected cells; Set, Add and Scale % use <see cref="ToolValue"/>.</summary>
     public bool RunTool(EditKind kind)
@@ -162,8 +312,16 @@ public sealed class TuneViewModel : ViewModelBase
 
         try
         {
-            document.Save(path);
-            ErrorMessage = null;
+            try
+            {
+                document.Save(path, options: new SaveOptions(_settings.KeepBackup, _settings.AppendEditLog));
+                ShowError(null);
+            }
+            catch (EditLogException error)
+            {
+                ShowError($"Saved. The edit log {Path.GetFileName(error.LogPath)} was not written: {Reason(error.InnerException ?? error)}.");
+            }
+
             PlateFile = Path.GetFileName(document.Path ?? PlateFile);
             _settings.LastBin = document.Path;
             _settings.Save();
@@ -171,7 +329,7 @@ public sealed class TuneViewModel : ViewModelBase
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            ErrorMessage = "Not saved: " + error.Message;
+            ShowError($"Not saved: {Reason(error)}. The file on disk is unchanged.", TuneAction.SaveAs);
             return false;
         }
     }
@@ -194,6 +352,12 @@ public sealed class TuneViewModel : ViewModelBase
     }
 
     public string SelectedKindText => SelectedItem is null || Catalog is null ? string.Empty : Catalog.Kind(SelectedItem).ToString();
+
+    /// <summary>The selected item's kind, for its glyph in the title row.</summary>
+    public ItemKind SelectedKind => SelectedItem is null || Catalog is null ? ItemKind.Value : Catalog.Kind(SelectedItem);
+
+    /// <summary>A bin is open and nothing is picked yet (system 7.1).</summary>
+    public bool NothingSelected => HasDocument && SelectedItem is null;
 
     public string SearchText
     {
@@ -262,8 +426,13 @@ public sealed class TuneViewModel : ViewModelBase
             {
                 Editor?.Dispose();
                 Value?.Dispose();
-                Editor = value is XdfTable table && Document is not null && History is not null
-                    ? new TableEditorViewModel(Document, History, table) { Selection = new CellRange(0, 0, 0, 0) }
+                Editor = value is XdfTable table && Document is not null && History is not null && Catalog is not null
+                    ? new TableEditorViewModel(Document, History, table)
+                    {
+                        Selection = new CellRange(0, 0, 0, 0),
+                        ShowRaw = _settings.OpenMapsRaw,
+                        NumberRows = Catalog.Kind(table) == ItemKind.Axis,
+                    }
                     : null;
                 Value = value is XdfConstant or XdfFlag && Document is not null && History is not null && Catalog is not null
                     ? new ValueEditorViewModel(Document, History, value, Catalog)
@@ -274,7 +443,8 @@ public sealed class TuneViewModel : ViewModelBase
                 {
                     editor.PropertyChanged += (_, e) =>
                     {
-                        if (e.PropertyName == nameof(TableEditorViewModel.Values) && ReferenceEquals(editor, Editor))
+                        if (e.PropertyName is nameof(TableEditorViewModel.Values) or nameof(TableEditorViewModel.Selection) or nameof(TableEditorViewModel.ActiveCell)
+                            && ReferenceEquals(editor, Editor))
                         {
                             BuildFacts();
                         }
@@ -293,8 +463,18 @@ public sealed class TuneViewModel : ViewModelBase
                 }
                 LiveCursor.Bind(Document, Editor);
                 OnPropertyChanged(nameof(SelectedKindText));
+                OnPropertyChanged(nameof(SelectedKind));
+                OnPropertyChanged(nameof(NothingSelected));
+                OnPropertyChanged(nameof(PinText));
+                OnPropertyChanged(nameof(ReadOnlyReason));
+                OnPropertyChanged(nameof(IsReadOnlyItem));
                 OnPropertyChanged(nameof(ShowsSurface));
                 OnPropertyChanged(nameof(ShowsCurve));
+                OnPropertyChanged(nameof(CentreGrid));
+                OnPropertyChanged(nameof(IsAxis));
+                OnPropertyChanged(nameof(UsedBy));
+                OnPropertyChanged(nameof(HasNoUsers));
+                OnPropertyChanged(nameof(ShapeTitle));
                 BuildFacts();
                 if (value is not null)
                 {
@@ -308,40 +488,61 @@ public sealed class TuneViewModel : ViewModelBase
 
     /// <summary>
     /// Opens a bin with an XDF. Without an XDF, the one last used for the bin's firmware is taken. Problems end up in
-    /// <see cref="ErrorMessage"/> and leave the current document open.
+    /// <see cref="ErrorMessage"/> with their way out and leave the current document open; nothing but a cancellation
+    /// escapes, so the start-up reopen cannot bring the app down.
     /// </summary>
     public async Task OpenAsync(string binPath, string? xdfPath)
     {
-        ErrorMessage = null;
+        ShowError(null);
+        MissingXdfPath = null;
         IsBusy = true;
+        var readingXdf = false;
         try
         {
+            BusyText = $"Reading {Path.GetFileName(binPath)}…";
             var image = await Task.Run(() => BinImage.Load(binPath));
             var firmware = FirmwareIdentifier.Identify(image);
-            xdfPath ??= firmware.SoftwareId is string id && _settings.XdfByFirmware.TryGetValue(id, out var remembered) && File.Exists(remembered) ? remembered : null;
+            var remembered = firmware.SoftwareId is string id && _settings.XdfByFirmware.TryGetValue(id, out var path) ? path : null;
+            MissingXdfPath = xdfPath is null && remembered is not null && !File.Exists(remembered) ? remembered : null;
+            xdfPath ??= remembered is not null && File.Exists(remembered) ? remembered : null;
             if (xdfPath is null)
             {
-                ErrorMessage = $"Choose the XDF for {(firmware.SoftwareId is null ? "this bin" : "firmware " + firmware.SoftwareId)}.";
+                ShowError($"Choose the XDF for {(firmware.SoftwareId is null ? "this bin" : "firmware " + firmware.SoftwareId)}.", TuneAction.OpenXdf);
+                NeedsXdf = true;
+                OnPropertyChanged(nameof(HasErrorBanner));
                 return;
             }
 
+            readingXdf = true;
+            BusyText = $"Reading {Path.GetFileName(xdfPath)}…";
             var xdf = await Task.Run(() => XdfDefinition.LoadFromFile(xdfPath));
             var document = CalibrationDocument.FromParts(xdf, image, Path.GetFullPath(binPath));
             Attach(document, xdfPath);
         }
-        catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or System.Xml.XmlException)
+        catch (InvalidDataException error) when (!readingXdf)
         {
-            ErrorMessage = error.Message;
+            // BinImage's message names the file and its size: "backup.bin is 262144 bytes. An MS43 bin is …".
+            ShowError("Not opened: " + error.Message, TuneAction.OpenBin);
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            var file = Path.GetFileName(readingXdf ? xdfPath : binPath);
+            ShowError($"Not opened: {file} could not be read ({Reason(error)}).", readingXdf ? TuneAction.OpenXdf : TuneAction.OpenBin);
         }
         finally
         {
             IsBusy = false;
+            BusyText = null;
         }
     }
+
+    /// <summary>An exception's message as a clause inside a sentence: without its closing full stop.</summary>
+    private static string Reason(Exception error) => error.Message.Trim().TrimEnd('.');
 
     public void TogglePin(XdfItem item)
     {
         _settings.TogglePin(item.Title);
+        OnPropertyChanged(nameof(PinText));
         RebuildRail();
     }
 
@@ -372,6 +573,7 @@ public sealed class TuneViewModel : ViewModelBase
             OnPropertyChanged(nameof(CanUndo));
             OnPropertyChanged(nameof(CanRedo));
             OnPropertyChanged(nameof(UndoTip));
+            OnPropertyChanged(nameof(RedoTip));
         };
         Catalog = new XdfCatalog(document.Xdf);
         PlateFile = Path.GetFileName(document.Path ?? "untitled.bin");
@@ -392,90 +594,211 @@ public sealed class TuneViewModel : ViewModelBase
         SelectedItem = null;
         LiveCursor.Bind(document, null);
         OnPropertyChanged(nameof(HasDocument));
-        OnPropertyChanged(nameof(DirtyText));
+        OnPropertyChanged(nameof(NothingSelected));
+        OnPropertyChanged(nameof(ShowsBusyBar));
+        OnPropertyChanged(nameof(HasErrorBanner));
+        OnPropertyChanged(nameof(PlateTip));
+        OnPropertyChanged(nameof(SaveStateText));
+        OnPropertyChanged(nameof(HasUnsavedChanges));
+        OnPropertyChanged(nameof(SaveTip));
         RebuildRail();
         DocumentOpened?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnDocumentChanged(object? sender, EventArgs e)
     {
-        OnPropertyChanged(nameof(DirtyText));
+        OnPropertyChanged(nameof(SaveStateText));
+        OnPropertyChanged(nameof(HasUnsavedChanges));
+        OnPropertyChanged(nameof(SaveTip));
         BuildFacts();
         RebuildRail();
     }
 
     private void BuildFacts()
     {
-        var facts = new List<Fact>();
-        LegendMin = LegendMax = string.Empty;
+        var limits = new List<Fact>();
+        var details = new List<Fact>();
+        ScaleCaption = null;
+        SurfaceNote = null;
+        SetScaleLabels(null, null, null);
         string Hex(long? address) => address is long a ? "0x" + a.ToString("X5", System.Globalization.CultureInfo.InvariantCulture) : "none";
         string Bits(XdfData data) => $"{data.ElementBits} bit{(data.Signed ? ", signed" : string.Empty)}";
-        string Axis(AxisValues axis, int count) =>
-            string.Join(", ", new[] { axis.Name, axis.Units, $"{count} points" }.Where(part => !string.IsNullOrWhiteSpace(part)));
 
         switch (SelectedItem)
         {
-            case XdfTable table when Editor is { } editor && Catalog is { } catalog:
+            case XdfTable table when Editor is { } editor && Catalog is { } catalog && Document is { } document:
                 var values = editor.Values;
-                facts.Add(new Fact("Address", Hex(table.Z.Data.Address)));
-                facts.Add(new Fact("Size", $"{values.Rows} × {values.Cols}, {Bits(table.Z.Data)}"));
-                if (table.Z.Units.Length > 0)
+                var z = table.Z;
+                AddLimits(limits, EditLimits.For(document.Reader.Codec, z.Math, z.Data, z.Min, z.Max), editor.Units, z.DecimalPlaces);
+                if (editor.Selection is not null)
                 {
-                    facts.Add(new Fact("Units", table.Z.Units));
+                    var (row, col) = editor.ActiveCell;
+                    var position = editor.Position(row, col);
+                    limits.Add(position.Length == 0
+                        ? new Fact("Active cell", editor.CellText(row, col))
+                        : new Fact("Active cell", position, editor.CellText(row, col)));
                 }
 
-                facts.Add(new Fact("Scaling", table.Z.Math.Equation));
-                if (values.Rows > 1)
+                details.Add(new Fact("Address", Hex(z.Data.Address)));
+                details.Add(new Fact("Size", $"{values.Rows} × {values.Cols}, {Bits(z.Data)}"));
+                if (editor.Units.Length > 0)
                 {
-                    facts.Add(new Fact("Rows", Axis(values.Y, values.Rows)));
+                    details.Add(new Fact("Units", editor.Units));
+                }
+
+                details.Add(new Fact("Scaling", z.Math.Equation, TextIsId: true));
+                // An axis's rows are its numbered breakpoints, not an axis of their own (system 5.13).
+                if (values.Rows > 1 && !editor.NumberRows)
+                {
+                    details.Add(Axis("Rows", values.Y, values.Rows));
                 }
 
                 if (values.Cols > 1)
                 {
-                    facts.Add(new Fact("Columns", Axis(values.X, values.Cols)));
+                    details.Add(Axis("Columns", values.X, values.Cols));
                 }
 
-                if (catalog.Kind(table) == ItemKind.Axis)
-                {
-                    var users = catalog.AxisUsers(table);
-                    facts.Add(new Fact("Used by", users.Count == 0 ? "no table in this XDF" : string.Join(", ", users.Take(4).Select(user => user.Title)) + (users.Count > 4 ? $" and {users.Count - 4} more" : string.Empty)));
-                }
-
-                if (!table.Z.Data.IsSupported)
-                {
-                    facts.Add(new Fact("Read-only", table.Z.Data.UnsupportedReason ?? string.Empty));
-                }
-
-                var finite = values.Physical.Cast<double>().Where(double.IsFinite).ToList();
-                if (finite.Count > 0)
-                {
-                    var units = table.Z.Units.Length > 0 ? " " + table.Z.Units : string.Empty;
-                    LegendMin = ValueCodec.Format(finite.Min(), 0, table.Z.DecimalPlaces, null, 16).Replace('-', '−') + units;
-                    LegendMax = ValueCodec.Format(finite.Max(), 0, table.Z.DecimalPlaces, null, 16).Replace('-', '−') + units;
-                }
+                DescribeScale(editor);
 
                 break;
             case XdfConstant constant when Value is { } value:
-                facts.Add(new Fact("Address", Hex(constant.Data.Address)));
-                facts.Add(new Fact("Size", Bits(constant.Data)));
-                facts.Add(new Fact("Raw", $"{value.Current.Raw} (0x{value.Current.Raw:X})"));
-                facts.Add(new Fact("Scaling", constant.Math.Equation));
-                if (constant.RangeLow is not null || constant.RangeHigh is not null)
+                var raw = $"raw {value.Current.Raw} (0x{Masked(value.Current.Raw, constant.Data):X})";
+                if (value.Choices is { } choices)
                 {
-                    facts.Add(new Fact("Range", $"{constant.RangeLow?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "…"} to {constant.RangeHigh?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "…"}"));
+                    // A switch (system 5.13): its choices come from the XDF description, its range in words.
+                    limits.Add(new Fact("Choices", $"{choices.Count}, from the XDF description"));
+                    if (SwitchRange(value.Limits) is { } range)
+                    {
+                        limits.Add(new Fact("XDF range", range));
+                    }
+
+                    limits.Add(new Fact("Value", value.SelectedChoice?.Label ?? $"{value.Current.Display}, not one of the choices", raw));
+                }
+                else
+                {
+                    AddLimits(limits, value.Limits, value.Units, constant.DecimalPlaces);
+                    limits.Add(new Fact("Value", WithUnits(value.Current.Display, value.Units), raw));
                 }
 
+                details.Add(new Fact("Address", Hex(constant.Data.Address)));
+                details.Add(new Fact("Size", Bits(constant.Data)));
+                if (value.Units.Length > 0)
+                {
+                    details.Add(new Fact("Units", value.Units));
+                }
+
+                details.Add(new Fact("Scaling", constant.Math.Equation, TextIsId: true));
                 break;
             case XdfFlag flag:
-                facts.Add(new Fact("Address", Hex(flag.Data.Address)));
-                facts.Add(new Fact("Bit mask", "0x" + flag.Mask.ToString("X2", System.Globalization.CultureInfo.InvariantCulture)));
+                details.Add(new Fact("Address", Hex(flag.Data.Address)));
+                details.Add(new Fact("Size", Bits(flag.Data)));
+                details.Add(new Fact("Bit mask", "0x" + flag.Mask.ToString("X2", System.Globalization.CultureInfo.InvariantCulture)));
                 break;
         }
 
-        Facts = facts;
+        LimitFacts = limits;
+        DetailFacts = details;
     }
 
+    /// <summary>The colour scale's labels and caption and the surface's note, from the editor's colour range (system 2.2).</summary>
+    private void DescribeScale(TableEditorViewModel editor)
+    {
+        var values = editor.Values;
+        var z = values.Table.Z;
+        var range = editor.ColourRange;
+        var hatched = range.Hatched;
+        string Number(double value) => ValueCodec.Format(value, 0, z.DecimalPlaces, null, 16);
+        string Cell(int row, int col) => ValueCodec.Format(values.Physical[row, col], values.Raw[row, col], z.DecimalPlaces, z.OutputType, z.Data.ElementBits);
+        var limits = string.Join(" and ", hatched.OrderBy(cell => cell).Select(cell => Cell(cell.Row, cell.Col)).Distinct());
+        var hatchNote = hatched.Count > 0 ? $" Hatched cells are at the storage limit ({limits})." : string.Empty;
+        var working = Enumerable.Range(0, values.Rows).SelectMany(r => Enumerable.Range(0, values.Cols).Select(c => (Row: r, Col: c)))
+            .Where(cell => !hatched.Contains(cell) && double.IsFinite(values.Physical[cell.Row, cell.Col])).ToList();
+        if (working.Count == 0)
+        {
+            return;
+        }
+
+        if (range.IsConstant)
+        {
+            var value = WithUnits(Cell(working[0].Row, working[0].Col), editor.Units);
+            ScaleCaption = hatched.Count == 0 ? $"All {working.Count} cells are {value}" : $"All {working.Count} working cells are {value}.{hatchNote}";
+            SetScaleLabels(Number(range.Min), null, Number(range.Max));
+        }
+        else
+        {
+            ScaleCaption = $"Colour: {WithUnits($"{Number(range.Min)} to {Number(range.Max)}", editor.Units)}.{hatchNote}";
+            SetScaleLabels(Number(range.Min), Number((range.Min + range.Max) / 2), Number(range.Max));
+        }
+
+        if (ShowsSurface && hatched.Count > 0)
+        {
+            var rows = Enumerable.Range(0, values.Rows).Where(r => Enumerable.Range(0, values.Cols).All(c => hatched.Contains((r, c)))).ToList();
+            var onlyRows = hatched.All(cell => rows.Contains(cell.Row));
+            var units = values.Y.Units.Length > 0 ? " " + values.Y.Units : string.Empty;
+            var labels = rows.Select(editor.RowLabel).ToList();
+            SurfaceNote = !onlyRows ? $"{hatched.Count} cells at the storage limit are not drawn."
+                : rows.Count == 1 ? $"The {labels[0]}{units} row (storage limit) is not drawn."
+                : $"The {string.Join(", ", labels.Take(labels.Count - 1))} and {labels[^1]}{units} rows (storage limit) are not drawn.";
+        }
+    }
+
+    private void SetScaleLabels(string? min, string? mid, string? max)
+    {
+        _scaleLabels = (min, mid, max);
+        OnPropertyChanged(nameof(ScaleMinLabel));
+        OnPropertyChanged(nameof(ScaleMidLabel));
+        OnPropertyChanged(nameof(ScaleMaxLabel));
+    }
+
+    /// <summary>"Storable", "Step" and, when the XDF narrows it, "XDF range", in the item's units (system 5.13).</summary>
+    private static void AddLimits(List<Fact> facts, EditLimits limits, string units, int? decimals)
+    {
+        string Number(double value) => ValueCodec.Format(value, 0, decimals, null, 16);
+        facts.Add(new Fact("Storable", WithUnits($"{Number(limits.StorableMin)} to {Number(limits.StorableMax)}", units)));
+        if (limits.Step is double step)
+        {
+            // The step keeps every digit it has: 0.375, not 0.4.
+            facts.Add(new Fact("Step", WithUnits(step.ToString("0.#########", System.Globalization.CultureInfo.InvariantCulture), units)));
+        }
+
+        if (limits.XdfLow is not null || limits.XdfHigh is not null)
+        {
+            facts.Add(new Fact("XDF range", WithUnits($"{Number(limits.XdfLow ?? limits.StorableMin)} to {Number(limits.XdfHigh ?? limits.StorableMax)}", units)));
+        }
+    }
+
+    // A switch's XDF range in words (system 5.13): "up to 4", "from 1" or "1 to 4"; null where it narrows nothing.
+    private static string? SwitchRange(EditLimits limits)
+    {
+        static string Whole(double value) => ValueCodec.Format(value, 0, 0, null, 16);
+        return (limits.XdfLow, limits.XdfHigh) switch
+        {
+            (double low, double high) => $"{Whole(low)} to {Whole(high)}",
+            (null, double high) => $"up to {Whole(high)}",
+            (double low, null) => $"from {Whole(low)}",
+            _ => null,
+        };
+    }
+
+    // The raw value as its element stores it, so a negative signed value shows its own bits ("0xFF", not 16 F's).
+    private static long Masked(long raw, XdfData data) => data.ElementBits >= 64 ? raw : raw & ((1L << data.ElementBits) - 1);
+
+    /// <summary>An axis as the mockup's two lines: its id, then "rpm, 20 points".</summary>
+    private static Fact Axis(string label, AxisValues axis, int count)
+    {
+        var summary = string.Join(", ", new[] { axis.Units, $"{count} points" }.Where(part => !string.IsNullOrWhiteSpace(part)));
+        return string.IsNullOrWhiteSpace(axis.Name) ? new Fact(label, summary) : new Fact(label, axis.Name, summary, TextIsId: true);
+    }
+
+    private static string WithUnits(string text, string units) => units.Length > 0 && units != "-" ? $"{text} {units}" : text;
+
     private void RebuildRail()
+    {
+        FillRail();
+        OnPropertyChanged(nameof(NoMatchText));
+    }
+
+    private void FillRail()
     {
         Rail.Clear();
         if (Catalog is not XdfCatalog catalog || Document is not CalibrationDocument document)
@@ -543,6 +866,14 @@ public sealed class TuneViewModel : ViewModelBase
                     Rail.Add(Entry(item, true));
                 }
             }
+        }
+    }
+
+    private void SetPlate<T>(ref T field, T value, [System.Runtime.CompilerServices.CallerMemberName] string? name = null)
+    {
+        if (SetField(ref field, value, name))
+        {
+            OnPropertyChanged(nameof(PlateTip));
         }
     }
 }

@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -5,16 +6,22 @@ using Avalonia.Media;
 
 namespace MS43Logger.AvaloniaApp.Controls;
 
-/// <summary>The last seconds of a channel: a line with a faint area under it and a dot at the newest sample.</summary>
+/// <summary>
+/// A channel's trend in the Live list: the samples of the trend window placed by time, an Ink2 1.25 px line
+/// and an Ink1 dot at the newest sample, both Ink3 once the values are frozen. Never orange: a row is data, not now. A
+/// flat channel stays flat because the vertical span is never less than its unit's minimum (5 °C, 1 V, 2 %, 100 rpm,
+/// 10 mg/stk, 2 kPa).
+/// </summary>
 public sealed class Sparkline : Control
 {
     public static readonly StyledProperty<SampleHistory?> HistoryProperty = AvaloniaProperty.Register<Sparkline, SampleHistory?>(nameof(History));
     public static readonly StyledProperty<int> VersionProperty = AvaloniaProperty.Register<Sparkline, int>(nameof(Version));
-    public static readonly StyledProperty<bool> IsLiveProperty = AvaloniaProperty.Register<Sparkline, bool>(nameof(IsLive));
+    public static readonly StyledProperty<string?> UnitsProperty = AvaloniaProperty.Register<Sparkline, string?>(nameof(Units));
+    public static readonly StyledProperty<bool> IsStaleProperty = AvaloniaProperty.Register<Sparkline, bool>(nameof(IsStale));
 
     static Sparkline()
     {
-        AffectsRender<Sparkline>(HistoryProperty, VersionProperty, IsLiveProperty);
+        AffectsRender<Sparkline>(HistoryProperty, VersionProperty, UnitsProperty, IsStaleProperty);
     }
 
     public Sparkline()
@@ -27,50 +34,69 @@ public sealed class Sparkline : Control
     /// <summary>Bind to the history's version so the line redraws on every sample.</summary>
     public int Version { get => GetValue(VersionProperty); set => SetValue(VersionProperty, value); }
 
-    public bool IsLive { get => GetValue(IsLiveProperty); set => SetValue(IsLiveProperty, value); }
+    /// <summary>The channel's unit, which sets the smallest vertical span.</summary>
+    public string? Units { get => GetValue(UnitsProperty); set => SetValue(UnitsProperty, value); }
+
+    public bool IsStale { get => GetValue(IsStaleProperty); set => SetValue(IsStaleProperty, value); }
+
+    /// <summary>The smallest span the line spreads over, by unit, so sensor noise does not fill the row.</summary>
+    public static double MinimumSpan(string? units) => units?.Trim() switch
+    {
+        "°C" => 5,
+        "V" => 1,
+        "%" => 2,
+        "rpm" => 100,
+        "mg/stk" => 10,
+        "kPa" => 2,
+        _ => 0,
+    };
 
     public override void Render(DrawingContext context)
     {
-        var values = History?.Values.ToArray();
-        if (values is null || values.Length < 2 || Bounds.Width <= 0 || Bounds.Height <= 0)
+        if (History is not { Latest: { } latest } history || Bounds.Width <= 0 || Bounds.Height <= 4)
         {
             return;
         }
 
-        double lo = values.Min(), hi = values.Max();
-        if (hi - lo < 1e-9)
+        var points = history.Window(latest);
+        if (points.Count == 0)
         {
-            lo -= 1;
-            hi += 1;
+            return;
         }
 
-        var w = Bounds.Width;
-        var h = Bounds.Height;
-        Point At(int i) => new(i * w / (SampleHistory.Capacity - 1), h - 3 - (values[i] - lo) / (hi - lo) * (h - 6));
-
-        var line = new StreamGeometry();
-        var area = new StreamGeometry();
-        using (var g = line.Open())
-        using (var a = area.Open())
+        double low = points.Min(point => point.Value), high = points.Max(point => point.Value);
+        var minimum = Math.Max(MinimumSpan(Units), Math.Max(Math.Abs(high), Math.Abs(low)) * 0.02);
+        if (high - low < minimum)
         {
-            g.BeginFigure(At(0), false);
-            a.BeginFigure(new Point(0, h), true);
-            a.LineTo(At(0));
-            for (var i = 1; i < values.Length; i++)
+            var centre = (high + low) / 2;
+            (low, high) = (centre - Math.Max(minimum, 1e-9) / 2, centre + Math.Max(minimum, 1e-9) / 2);
+        }
+
+        var width = Bounds.Width;
+        var height = Bounds.Height;
+        var from = latest - history.Span;
+        Point At((DateTimeOffset Time, double Value) point) => new(
+            Math.Clamp((point.Time - from).TotalSeconds / history.Span.TotalSeconds, 0, 1) * (width - 3) + 1,
+            height - 2 - (point.Value - low) / (high - low) * (height - 4));
+
+        var ink = ThemeBrushes.Get(this, IsStale ? "Ink3Brush" : "Ink2Brush");
+        if (points.Count > 1)
+        {
+            var line = new StreamGeometry();
+            using (var g = line.Open())
             {
-                g.LineTo(At(i));
-                a.LineTo(At(i));
+                g.BeginFigure(At(points[0]), false);
+                foreach (var point in points.Skip(1))
+                {
+                    g.LineTo(At(point));
+                }
+
+                g.EndFigure(false);
             }
 
-            a.LineTo(new Point(At(values.Length - 1).X, h));
-            g.EndFigure(false);
-            a.EndFigure(true);
+            context.DrawGeometry(null, new Pen(ink, 1.25, lineJoin: PenLineJoin.Round), line);
         }
 
-        var ink = ThemeBrushes.Color(this, "Ink2Color");
-        context.DrawGeometry(new SolidColorBrush(ink, 0.12), null, area);
-        context.DrawGeometry(null, new Pen(new SolidColorBrush(ink), 1.4), line);
-        var end = At(values.Length - 1);
-        context.DrawEllipse(IsLive ? ThemeBrushes.Get(this, "NeedleBrush") : new SolidColorBrush(ink), null, end, 2.6, 2.6);
+        context.DrawEllipse(ThemeBrushes.Get(this, IsStale ? "Ink3Brush" : "Ink1Brush"), null, At(points[^1]), 2, 2);
     }
 }
