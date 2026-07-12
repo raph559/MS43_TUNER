@@ -46,6 +46,9 @@ public sealed class PerfResult
     /// <summary>The car values, speed calibration and full-pedal value <see cref="Figures"/> were computed with.</summary>
     public AnalysisInputs Inputs { get; init; } = default!;
 
+    /// <summary>Null when no bin was open.</summary>
+    public TuneIdentity? Tune { get; init; }
+
     /// <summary>The bundled definition the payloads decode with: "ms43x", "b25", ….</summary>
     public string Variant { get; init; } = "";
 
@@ -74,6 +77,46 @@ public sealed class PerfResult
     /// <summary>Fields a later version of the app wrote that this one does not know, written back as they were.</summary>
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Unknown { get; set; }
+
+    /// <summary>
+    /// A result of <paramref name="outcome"/>, made at <paramref name="created"/>, the time its last sample arrived: the first
+    /// sample's wall time is reckoned back from it on the run clock.
+    /// </summary>
+    public static PerfResult From(RunOutcome outcome, string name, string description, AnalysisInputs inputs, TuneIdentity? tune,
+        string variant, AdxDefinition definition, DateTimeOffset created, string appVersion)
+    {
+        ArgumentNullException.ThrowIfNull(outcome);
+        ArgumentNullException.ThrowIfNull(inputs);
+        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentException.ThrowIfNullOrWhiteSpace(variant);
+        var samples = outcome.Samples;
+        var span = samples.Count > 0 ? samples[^1].At - samples[0].At : TimeSpan.Zero;
+        return new PerfResult
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Name = name ?? "",
+            Description = description ?? "",
+            Created = created,
+            AppVersion = appVersion ?? "",
+            Spec = outcome.Spec,
+            Complete = outcome.Complete,
+            Figures = outcome.Figures,
+            Start = outcome.Start,
+            End = outcome.End,
+            Armed = outcome.Armed,
+            Inputs = inputs,
+            Tune = tune,
+            Variant = variant,
+            DefinitionFile = definition.SourceName,
+            DefinitionSha256 = BundledDefinitions.Sha256(variant),
+            SamplesStart = created - span,
+            SampleAt = samples.Select(sample => sample.At.TotalSeconds).ToArray(),
+            Payloads = samples.Select(sample => Convert.ToBase64String(sample.Payload)).ToArray(),
+            SampleRetries = samples.Any(sample => sample.Retries is not null) ? samples.Select(sample => sample.Retries ?? 0).ToArray() : null,
+            WindowStart = outcome.WindowStart,
+            WindowEnd = outcome.WindowEnd,
+        };
+    }
 }
 
 /// <summary>What the results list shows of one file; <see cref="ReadOnly"/> marks a newer schema, which is never rewritten.</summary>
