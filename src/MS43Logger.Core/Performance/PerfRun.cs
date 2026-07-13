@@ -165,6 +165,38 @@ public sealed class PerfRun
 
     public event EventHandler? Changed;
 
+    public void Push(PerfFrame frame, ReadOnlyMemory<byte> payload)
+    {
+        ArgumentNullException.ThrowIfNull(frame);
+        if (Stage is RunStage.Finished or RunStage.Cancelled)
+        {
+            return;
+        }
+
+        _latest = frame;
+        _live = null;
+        switch (Spec.Kind)
+        {
+            case PerfTestKind.Pull or PerfTestKind.KnockCheck or PerfTestKind.RollOn:
+                PushPullType(frame, payload);
+                break;
+            case PerfTestKind.StandingStart:
+                PushStanding(frame, payload);
+                break;
+            case PerfTestKind.SpeedCalibration:
+                PushCalibration(frame);
+                break;
+            case PerfTestKind.LinkTest:
+                PushLink(frame, payload);
+                break;
+            case PerfTestKind.Pedal:
+                PushPedal(frame);
+                break;
+        }
+
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>Stops a waiting or running test without an outcome; a finished run keeps its outcome.</summary>
     public void Cancel()
     {
@@ -377,6 +409,101 @@ public sealed class PerfRun
             {
                 Progress = Share(m - StartLevel, EndLevel - StartLevel);
             }
+        }
+    }
+
+    private void PushStanding(PerfFrame frame, ReadOnlyMemory<byte> payload)
+    {
+        var speed = Measure(frame);
+        if (Stage == RunStage.Waiting)
+        {
+            var wasArmed = _armed;
+            Record(frame, payload, prune: true);
+            var warm = Warm(frame);
+            if (speed is { } v)
+            {
+                _stoppedSince = v <= 0 ? _stoppedSince ?? frame.At : null;
+            }
+
+            var stopped = speed <= 0 && _stoppedSince is { } since && frame.At - since >= StoppedFor;
+            _checks = StandingChecks(frame, warm, stopped);
+            // Running at the first moving sample after a stop of 1 s.
+            if (speed > 0 && wasArmed && warm)
+            {
+                StartRunning(frame);
+                var index = OpenWindow(_frames.Count - 1, null);
+                _peak = speed;
+                _peakAt = index;
+                Progress = Share(speed.Value, EndLevel);
+                return;
+            }
+
+            _armed = warm && stopped;
+            if (_armed && !wasArmed)
+            {
+                _armedConditions = ConditionsOf(frame);
+            }
+
+            Status = _armed ? "Waiting for the launch…" : WaitingText;
+            return;
+        }
+
+        Record(frame, payload, prune: false);
+        Watch(frame);
+        var at = _frames.Count - 1;
+        if (speed is { } s)
+        {
+            // Time zero is back-extrapolated once the speed has passed 20 km/h; until then it is the first moving sample.
+            if (!_t0Fitted && s > FitAboveKmh && FitStart() is { } zero)
+            {
+                _t0 = zero;
+                _t0Fitted = true;
+            }
+
+            if (s >= EndLevel)
+            {
+                Finish(true, null, at);
+                return;
+            }
+
+            if (_peak is { } peak && s <= peak - SpeedDrop)
+            {
+                StandingEnd($"speed dropped from {MeasureText(_frames[_peakAt])}", _peakAt);
+                return;
+            }
+
+            if (_peak is null || s > _peak)
+            {
+                _peak = s;
+                _peakAt = at;
+            }
+        }
+
+        if (PedalShare(frame) is { } share)
+        {
+            if (share >= Released)
+            {
+                _releasedFrom = -1;
+            }
+            else
+            {
+                if (_releasedFrom < 0)
+                {
+                    _releasedFrom = at;
+                }
+
+                if (frame.At - _frames[_releasedFrom].At >= ReleasedFor)
+                {
+                    StandingEnd($"pedal released at {MeasureText(_frames[_releasedFrom])}", _releasedFrom - 1);
+                    return;
+                }
+            }
+        }
+
+        Elapsed = frame.At.TotalSeconds - _t0;
+        if (speed is { } kmh)
+        {
+            Progress = Share(kmh, EndLevel);
         }
     }
 
