@@ -22,6 +22,61 @@ public class LoggerCoreTests
     }
 
     [Fact]
+    public void BundledMs43xDefinitionListsItsBitmasks()
+    {
+        var definition = BundledDefinitions.Load("ms43x");
+
+        Assert.Contains(new AdxBitmaskDefinition("CHSTATE", "Catalyst Heating", 0x01, 0x08, 0x08), definition.Bitmasks);
+        Assert.Contains(new AdxBitmaskDefinition("VANOSACTIVE", "VANOS Active", 0x02, 0x03, 0x02), definition.Bitmasks);
+        Assert.DoesNotContain(definition.Values, value => value.Id == "CHSTATE");
+    }
+
+    // Tests read clutch, brake and warm-up bits by id; a bit the definition lacks is unknown, never off (performance spec 4.3).
+    [Fact]
+    public void BitmasksDecodeFromThePayload()
+    {
+        var ms43x = BundledDefinitions.Load("ms43x");
+        var payload = new byte[73];
+
+        payload[0x01] = 0x04;
+        Assert.True(ms43x.DecodeBitmask("WUPSTATE", payload));
+        Assert.False(ms43x.DecodeBitmask("CHSTATE", payload));
+
+        payload[0x02] = 0x02;
+        Assert.True(ms43x.DecodeBitmask("VANOSACTIVE", payload));
+        Assert.False(ms43x.DecodeBitmask("VANOSPASSIVE", payload));
+        payload[0x02] = 0x00;
+        Assert.True(ms43x.DecodeBitmask("VANOSPASSIVE", payload));
+
+        payload[0x00] = 0x80;
+        Assert.True(ms43x.DecodeBitmask("cSsTaTe", payload));
+
+        Assert.Null(ms43x.DecodeBitmask("NOSUCHBIT", payload));
+        Assert.Null(ms43x.FindBitmask("NOSUCHBIT"));
+        Assert.Null(ms43x.DecodeBitmask("WUPSTATE", new byte[1]));
+        Assert.Throws<InvalidOperationException>(() => ms43x.FindBitmask("wupstate")!.IsSet(new byte[1]));
+
+        var b30 = BundledDefinitions.Load("b30");
+        var stock = new byte[82];
+        stock[0] = 0x10;
+        Assert.True(b30.DecodeBitmask("CLUTCHSWITCH", stock));
+    }
+
+    [Fact]
+    public void BundledDefinitionsHaveAStableHash()
+    {
+        var a = BundledDefinitions.Sha256("ms43x");
+
+        Assert.Matches("^[0-9a-f]{64}$", a);
+        Assert.Equal(a, BundledDefinitions.Sha256("MS43X"));
+        Assert.NotEqual(a, BundledDefinitions.Sha256("b25"));
+    }
+
+    [Fact]
+    public void StockPayloadsAreEightyTwoBytes() =>
+        Assert.Equal(82, LivePayloads.Build(BundledDefinitions.Load("b25"), ("RPM", 3000L)).Length);
+
+    [Fact]
     public void Ms43xSixteenBitChannelsAreLsbFirst()
     {
         // The frame is copied from C167 RAM, so words arrive low byte first; the ADX marks them with <flags>0x00000002</flags>.
@@ -113,6 +168,7 @@ public class LoggerCoreTests
         session.Disconnect();
 
         Assert.Equal(payload, loggedPayload);
+        Assert.Equal(1, session.LastAttempts);
         Assert.Equal(connectExchange.Request.Bytes, fakePort.Writes[0]);
         Assert.Equal(monitorExchange.Request.Bytes, fakePort.Writes[1]);
         Assert.Equal(disconnectExchange.Request.Bytes, fakePort.Writes[2]);
@@ -139,11 +195,16 @@ public class LoggerCoreTests
         using var session = new Ds2Session(definition, fakePort);
         session.Connect();
 
+        var before = System.Diagnostics.Stopwatch.GetTimestamp();
         var loggedPayload = session.PollPayload();
 
         session.Disconnect();
 
         Assert.Equal(payload, loggedPayload);
+        // The reply answered the second request, sent once the first had timed out (final review, finding 2).
+        Assert.Equal(2, session.LastAttempts);
+        Assert.True(System.Diagnostics.Stopwatch.GetElapsedTime(before, session.LastRequestTimestamp!.Value)
+            >= TimeSpan.FromMilliseconds(monitorExchange.Response.ListenTimeout * 0.8));
         Assert.Equal(4, fakePort.Writes.Count);
         Assert.Equal(monitorExchange.Request.Bytes, fakePort.Writes[1]);
         Assert.Equal(monitorExchange.Request.Bytes, fakePort.Writes[2]);

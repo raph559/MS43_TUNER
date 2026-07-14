@@ -113,6 +113,70 @@ public class LiveLoggerTests
         Assert.Equal(Payload(2), samples[1].Payload.ToArray());
     }
 
+    // Tests time a run on the request's monotonic stamp, not the wall clock after decoding (performance spec 4.2).
+    [Fact]
+    public async Task SamplesCarryRequestAndReplyTimes()
+    {
+        var logger = new LiveLogger(pause: TimeSpan.Zero);
+        var samples = new List<LiveSample>();
+        logger.SampleReceived += (_, sample) => samples.Add(sample);
+        Func<byte[]> Slow(byte rpmHigh) => () =>
+        {
+            Thread.Sleep(5);
+            return Payload(rpmHigh);
+        };
+
+        await logger.RunAsync(new FakeSource(Slow(1), Slow(2), Slow(3)), Ms43x, Ms43x.MatchChannels(["N"]), CancellationToken.None);
+
+        Assert.Equal(3, samples.Count);
+        Assert.All(samples, s => Assert.True(s.RequestedAt < s.RepliedAt));
+        Assert.True(samples[0].RepliedAt <= samples[1].RequestedAt);
+        Assert.True(samples[1].RepliedAt <= samples[2].RequestedAt);
+    }
+
+    // A poll the source retried inside its call is stamped at the request that got the reply, not at the first one, which
+    // timed out 400 ms earlier on the ms43x definition (final review, finding 2).
+    [Fact]
+    public async Task ARetriedPollIsStampedAtTheRequestThatReplied()
+    {
+        var logger = new LiveLogger(pause: TimeSpan.Zero);
+        var samples = new List<LiveSample>();
+        logger.SampleReceived += (_, sample) => samples.Add(sample);
+
+        await logger.RunAsync(new RetryingSource(Payload(1)), Ms43x, Ms43x.MatchChannels(["N"]), CancellationToken.None);
+
+        var sample = Assert.Single(samples);
+        Assert.Equal(1, sample.Retries);
+        var beforeReply = sample.RepliedAt - sample.RequestedAt;
+        Assert.True(beforeReply < TimeSpan.FromMilliseconds(100), $"stamped {beforeReply.TotalMilliseconds:0} ms before its reply");
+        Assert.True(sample.RequestedAt > TimeSpan.Zero);
+    }
+
+    // The first request times out inside the call, the second one gets the reply.
+    private sealed class RetryingSource(byte[] payload) : IPayloadSource
+    {
+        private bool _polled;
+
+        public long? LastRequestTimestamp { get; private set; }
+
+        public int LastAttempts { get; private set; }
+
+        public byte[] PollPayload()
+        {
+            if (_polled)
+            {
+                throw new OperationCanceledException();
+            }
+
+            _polled = true;
+            Thread.Sleep(250);
+            LastRequestTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
+            LastAttempts = 2;
+            Thread.Sleep(5);
+            return payload;
+        }
+    }
+
     [Theory]
     [InlineData(0, -225)]
     [InlineData(8000, 45)]
