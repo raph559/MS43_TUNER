@@ -240,4 +240,58 @@ public class PerfChannelsTests
             }
         }
     }
+
+    [Fact]
+    public void SyntheticPullCrossesItsBand()
+    {
+        var samples = SyntheticRuns.Pull(Ms43x, 3, 1700, 6500, 6);
+        var frames = samples.Select(s => Frame(s, Ms43x)).ToList();
+
+        Assert.Equal(30 + 181, frames.Count);
+        Assert.Equal(1700, frames[0].Rpm);
+        Assert.Equal(10, frames[0].Pedal!.Value, 0);
+        Assert.Equal(10, frames[29].Pedal!.Value, 0);
+        Assert.Equal(100, frames[30].Pedal!.Value, 0);
+        Assert.Equal(6500, frames[^1].Rpm);
+        Assert.All(frames, f => Assert.Equal(3, f.Gear));
+        Assert.All(frames, f => Assert.Equal(0, f.KnockRetard.Max(k => k!.Value), 3));
+        Assert.Equal(Math.Round(6500 * 22.3 / 1000), frames[^1].SpeedKmh);
+        Assert.Equal(92, frames[0].CoolantC!.Value, 0);
+        Assert.Equal(88, frames[0].OilC!.Value, 0);
+        Assert.Equal(TimeSpan.FromSeconds(7), samples[^1].RequestedAt);
+        Assert.All(samples.Select((s, i) => (s, i)), x => Assert.Equal(TimeSpan.FromSeconds(x.i / 30.0), x.s.RequestedAt));
+        Assert.All(samples, s => Assert.True(s.RequestedAt < s.RepliedAt));
+        Assert.All(samples, s => Assert.Equal(73, s.Payload.Length));
+    }
+
+    [Fact]
+    public void SyntheticKnockSitsInItsBand()
+    {
+        var frames = SyntheticRuns.Pull(Ms43x, 4, 1200, 6000, 6, knockCyl4: 1.5).Select(s => Frame(s, Ms43x)).ToList();
+
+        Assert.All(frames, f => Assert.Equal(f.Rpm is >= 5000 and <= 5600 ? 1.5 : 0, f.KnockRetard[3]!.Value, 3));
+        Assert.Contains(frames, f => f.KnockRetard[3] > 1);
+        Assert.All(frames, f => Assert.Equal(0, f.KnockRetard[0]!.Value, 3));
+    }
+
+    [Fact]
+    public void SyntheticIdleAndStandingStart()
+    {
+        var idle = SyntheticRuns.Idle(Ms43x, 31, coolantC: 64, oilC: 60).Select(s => Frame(s, Ms43x)).ToList();
+        Assert.Equal(931, idle.Count);
+        Assert.All(idle, f => Assert.Equal((750d, 0, 0d), (f.Rpm!.Value, f.Gear!.Value, f.SpeedKmh!.Value)));
+        Assert.Equal(64, idle[0].CoolantC!.Value, 0);
+        Assert.Equal(60, idle[0].OilC!.Value, 0);
+        Assert.Equal(TimeSpan.FromSeconds(31), idle[^1].At);
+
+        var standing = SyntheticRuns.Standing(Ms43x, 7.6).Select(s => Frame(s, Ms43x)).ToList();
+        Assert.All(standing.Where(f => f.At < TimeSpan.FromSeconds(2)), f => Assert.Equal(0, f.SpeedKmh));
+        Assert.All(standing, f => Assert.Equal(1, f.Gear));
+        var top = standing.FindIndex(f => f.SpeedKmh == 100);
+        Assert.InRange(standing[top].At.TotalSeconds, 9.5, 9.6);
+        Assert.True(standing[^1].At.TotalSeconds >= 2 + 7.6 + 1.5 - 1e-6);
+        Assert.Equal(0, standing[^1].Pedal!.Value, 0);
+        Assert.Equal(100, standing[^1].SpeedKmh);
+        Assert.All(standing, f => Assert.InRange(f.Rpm!.Value, 800, 6500));
+    }
 }
