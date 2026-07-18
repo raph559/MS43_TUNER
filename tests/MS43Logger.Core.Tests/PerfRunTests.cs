@@ -445,4 +445,396 @@ public class PerfRunTests
         Assert.DoesNotContain(RunAnalysis.Analyse(PerfTestSpec.Pull(3), frames.Select(x => x.Frame).ToArray(), Inputs(), complete: true).Flags,
             f => f.Code == "timing");
     }
+
+    [Fact]
+    public void LinkLostEndsARunAsIncomplete()
+    {
+        var run = new PerfRun(PerfTestSpec.Pull(3), Inputs(), warmUp);
+        Drive(run, Frames(ThirdPull()).TakeWhile(x => x.Frame.Rpm < 4500));
+        Assert.Equal(RunStage.Running, run.Stage);
+
+        run.LinkLost();
+        Assert.Equal(RunStage.Finished, run.Stage);
+        var outcome = run.Outcome!;
+        Assert.False(outcome.Complete);
+        var flag = Flag(outcome.Figures, "link-lost");
+        Assert.Equal(FlagSeverity.Invalid, flag.Severity);
+        Assert.Matches(@"^Incomplete: link lost at 44\d\d rpm$", run.Status);
+        Assert.Equal(run.Status + ".", flag.Message);
+        Assert.DoesNotContain(outcome.Figures.Flags, f => f.Code == "incomplete");
+        Assert.Equal(2.5, Fig(outcome.Figures, "t-2000-4000").Value!.Value, 0.02);
+
+        // Waiting, or past the trigger but before the band, there is nothing to keep.
+        var waiting = new PerfRun(PerfTestSpec.Pull(3), Inputs(), warmUp);
+        Drive(waiting, Frames(ThirdPull()).Take(10));
+        waiting.LinkLost();
+        Assert.Equal(RunStage.Cancelled, waiting.Stage);
+        Assert.Null(waiting.Outcome);
+
+        var early = new PerfRun(PerfTestSpec.Pull(3), Inputs(), warmUp);
+        Drive(early, Frames(ThirdPull()).TakeWhile(x => x.Frame.Rpm < 1900 || x.Frame.At < TimeSpan.FromSeconds(1)));
+        Assert.Equal(RunStage.Running, early.Stage);
+        early.LinkLost();
+        Assert.Equal(RunStage.Cancelled, early.Stage);
+        Assert.Null(early.Outcome);
+    }
+
+    [Fact]
+    public void AnalysisIsPure()
+    {
+        var spec = PerfTestSpec.Pull(3);
+        var frames = Frames(ThirdPull(knockCyl4: 1.5)).Select(x => x.Frame).ToArray();
+        var a = RunAnalysis.Analyse(spec, frames, Inputs(), complete: true);
+        var b = RunAnalysis.Analyse(spec, frames, Inputs(), complete: true);
+
+        Assert.Equal(a.Figures, b.Figures);
+        Assert.Equal(a.Flags, b.Flags);
+        Assert.Equal(a.Headline, b.Headline);
+        Assert.Equal(a.Traces.Select(t => t.Key), b.Traces.Select(t => t.Key));
+        for (var i = 0; i < a.Traces.Count; i++)
+        {
+            Assert.Equal(a.Traces[i].X, b.Traces[i].X);
+            Assert.Equal(a.Traces[i].Y, b.Traces[i].Y);
+        }
+
+        // A run's figures are the analysis of the samples it keeps, so a stored result can be recomputed (spec 9.1).
+        var run = new PerfRun(spec, Inputs(), warmUp);
+        Drive(run, ThirdPull(knockCyl4: 1.5));
+        var kept = run.Outcome!.Samples.Select(Decode).ToArray();
+        Assert.Equal(run.Outcome.Figures.Figures, RunAnalysis.Analyse(spec, kept, Inputs(), complete: true).Figures);
+    }
+
+    [Fact]
+    public void SamplesStartTwoSecondsEarly()
+    {
+        // 3 s more of the hold before the pull, so more than 2 s are there to keep.
+        var pull = Frames(ThirdPull());
+        var lead = Enumerable.Range(0, 90).Select(i => (pull[0].Frame with { At = TimeSpan.FromSeconds(i / 30.0) }, pull[0].Payload));
+        var run = new PerfRun(PerfTestSpec.Pull(3), Inputs(), warmUp);
+        Drive(run, lead.Concat(Later(pull, 3)));
+
+        var outcome = run.Outcome!;
+        var windowAt = outcome.Samples[outcome.WindowStart].At;
+        Assert.True(outcome.Samples[0].At <= windowAt - TimeSpan.FromSeconds(2));
+        Assert.True(outcome.Samples[1].At > windowAt - TimeSpan.FromSeconds(2));
+        Assert.True(Decode(outcome.Samples[outcome.WindowStart]).Rpm >= 2000);
+        Assert.True(Decode(outcome.Samples[outcome.WindowStart - 1]).Rpm < 2000);
+        Assert.Equal(outcome.Samples.Count - 1, outcome.WindowEnd);
+        Assert.True(Decode(outcome.Samples[^1]).Rpm >= 6400);
+        Assert.Equal(5.5, Fig(outcome.Figures, "time").Value!.Value, 0.02);
+
+        // With under 2 s before the start, everything there was is kept.
+        var shortLead = new PerfRun(PerfTestSpec.Pull(3), Inputs(), warmUp);
+        Drive(shortLead, pull);
+        Assert.Equal(TimeSpan.Zero, shortLead.Outcome!.Samples[0].At);
+    }
+
+    [Fact]
+    public void AFalseStartGoesBackToWaiting()
+    {
+        // Floored, then lifted at 1900 rpm before the band: nothing was timed, so the run waits again.
+        var run = new PerfRun(PerfTestSpec.Pull(3), Inputs(), warmUp);
+        Drive(run, Splice(ThirdPull(), ThirdPull(pedalPercent: 10), f => f.Rpm >= 1900).TakeWhile(x => x.Frame.Rpm < 2300));
+        Assert.Equal(RunStage.Waiting, run.Stage);
+        Assert.Null(run.Outcome);
+        Assert.Equal("Waiting for the ready checks…", run.Status);
+
+        Drive(run, Later(Frames(ThirdPull()), 10));
+        Assert.Equal(RunStage.Finished, run.Stage);
+        Assert.True(run.Outcome!.Complete);
+        Assert.Equal(5.5, Fig(run.Outcome.Figures, "time").Value!.Value, 0.02);
+        // Of the false start, at most the sample straddling the 2 s before the window is kept.
+        Assert.True(run.Outcome.Samples.Count(s => s.At < TimeSpan.FromSeconds(10)) <= 1);
+    }
+
+    [Fact]
+    public void GearChangeEndsThePull()
+    {
+        var run = new PerfRun(PerfTestSpec.Pull(3), Inputs(), warmUp);
+        Drive(run, Splice(ThirdPull(), SyntheticRuns.Pull(Ms43x, 4, 1700, 6500, 6.0), f => f.Rpm >= 4000));
+
+        Assert.False(run.Outcome!.Complete);
+        Assert.Matches(@"^Incomplete: gear changed at 40\d\d rpm$", run.Status);
+        Assert.Equal(3, Decode(run.Outcome.Samples[^1]).Gear);
+    }
+
+    [Fact]
+    public void ColdMidRunIsKeptButMarkedCold()
+    {
+        var run = new PerfRun(PerfTestSpec.Pull(3), Inputs(), warmUp);
+        Drive(run, Splice(ThirdPull(), ThirdPull(coolantC: 70), f => f.Rpm >= 4000));
+
+        var outcome = run.Outcome!;
+        Assert.True(outcome.Complete);
+        var cold = Flag(outcome.Figures, "cold");
+        Assert.Equal(FlagSeverity.Cold, cold.Severity);
+        Assert.Equal("Engine cold: not comparable.", cold.Message);
+        Assert.Equal(70, outcome.End.CoolantC!.Value, 0.5);
+    }
+
+    [Fact]
+    public void ColdOilMarksTheRunSuspect()
+    {
+        var run = new PerfRun(PerfTestSpec.Pull(3), Inputs(), warmUp);
+        Drive(run, ThirdPull(oilC: 60));
+
+        var outcome = run.Outcome!;
+        Assert.True(outcome.Complete);
+        var oil = Flag(outcome.Figures, "oil-cold");
+        Assert.Equal(FlagSeverity.Suspect, oil.Severity);
+        Assert.Equal("Oil 60 °C: below working temperature (80 °C).", oil.Message);
+        Assert.DoesNotContain(outcome.Figures.Flags, f => f.Code == "cold");
+    }
+
+    [Fact]
+    public void SpeedCalibrationCapturesASteadyGear()
+    {
+        var run = new PerfRun(PerfTestSpec.SpeedCalibration(), Inputs(), warmUp);
+        Assert.Equal(RunStage.Running, run.Stage);
+
+        // 100 km/h at 3000 rpm in 5th, light pedal, for 5 s.
+        Drive(run, SyntheticRuns.Pull(Ms43x, 5, 3000, 3000, 4.0, kmhPer1000: 100 / 3.0, pedalPercent: 20));
+        Assert.Equal(100 / 3000.0, Assert.Single(run.Captured).Value, 1e-9);
+        Assert.Equal(5, run.Captured.Keys.Single());
+        Assert.Equal("Captured 5th gear", run.Status);
+        Assert.Equal(RunStage.Running, run.Stage);
+        Assert.Null(run.Outcome);
+
+        run.Cancel();
+        Assert.Equal(RunStage.Cancelled, run.Stage);
+        Assert.Single(run.Captured);
+
+        // Below 50 km/h nothing is captured.
+        var slow = new PerfRun(PerfTestSpec.SpeedCalibration(), Inputs(), warmUp);
+        Drive(slow, SyntheticRuns.Pull(Ms43x, 2, 3000, 3000, 4.0, kmhPer1000: 40 / 3.0, pedalPercent: 20));
+        Assert.Empty(slow.Captured);
+    }
+
+    [Fact]
+    public void PedalStepReadsTheHighestPedal()
+    {
+        // Ignition on and engine off, the pedal pressed to 96 and held.
+        var run = new PerfRun(PerfTestSpec.Pedal(), Inputs(fullPedal: 0), warmUp);
+        Assert.Equal(RunStage.Running, run.Stage);
+        Drive(run, SyntheticRuns.Pull(Ms43x, 0, 0, 0, 3.0, pedalPercent: 96));
+
+        Assert.Equal(RunStage.Finished, run.Stage);
+        Assert.Equal(96, run.PedalReading!.Value, 0.5);
+        Assert.Null(run.Outcome);
+
+        // With the engine running it waits.
+        var running = new PerfRun(PerfTestSpec.Pedal(), Inputs(fullPedal: 0), warmUp);
+        Drive(running, SyntheticRuns.Pull(Ms43x, 0, 750, 750, 3.0, pedalPercent: 96));
+        Assert.Equal(RunStage.Running, running.Stage);
+        Assert.False(Assert.Single(running.Checks, c => c.Label == "Engine off").Met);
+    }
+
+    [Fact]
+    public void CancelStopsARun()
+    {
+        var run = new PerfRun(PerfTestSpec.Pull(3), Inputs(), warmUp);
+        var frames = Frames(ThirdPull());
+        Drive(run, frames.Take(80));
+        Assert.Equal(RunStage.Running, run.Stage);
+        var changed = false;
+        run.Changed += (_, _) => changed = true;
+
+        run.Cancel();
+        Assert.True(changed);
+        Assert.Equal(RunStage.Cancelled, run.Stage);
+        Assert.Equal("Cancelled", run.Status);
+        Drive(run, frames.Skip(80));
+        Assert.Equal(RunStage.Cancelled, run.Stage);
+        Assert.Null(run.Outcome);
+    }
+
+    // Spec 5: oil that is not reported marks a run suspect, as cold oil does (minor review, findings 3 and 50).
+    [Fact]
+    public void UnreportedOilMarksTheRunSuspect()
+    {
+        var run = new PerfRun(PerfTestSpec.Pull(3), Inputs(), warmUp);
+        Drive(run, Frames(ThirdPull()).Select(x => (x.Frame with { OilC = null }, x.Payload)));
+
+        var outcome = run.Outcome!;
+        Assert.True(outcome.Complete);
+        var oil = Flag(outcome.Figures, "oil-unreported");
+        Assert.Equal(FlagSeverity.Suspect, oil.Severity);
+        Assert.Equal("Oil temperature not reported by this ECU.", oil.Message);
+        Assert.Null(outcome.Start.OilC);
+        Assert.DoesNotContain(outcome.Figures.Flags, f => f.Code == "oil-cold");
+    }
+
+    // Oil at 80 °C or more that has not held there for 10 s yet is still amber, and the flag says so: it never calls a
+    // reading above the target "below" it (minor review, finding 66).
+    [Fact]
+    public void OilStillInItsHoldIsNotCalledBelow()
+    {
+        var frames = Frames(ThirdPull(oilC: 88));
+        var run = new PerfRun(PerfTestSpec.Pull(3), Inputs(), warmUp);
+        // One cold reading just before the pull: its 10 s hold runs through the whole pull.
+        Drive(run, [(frames[0].Frame with { OilC = 70 }, frames[0].Payload), .. Later(frames, 0.5)]);
+
+        var oil = Flag(run.Outcome!.Figures, "oil-cold");
+        Assert.Equal(FlagSeverity.Suspect, oil.Severity);
+        Assert.Equal("Oil 88 °C: had not held 80 °C for 10 s yet.", oil.Message);
+    }
+
+    // A standing start that reached 100 km/h keeps its times when the link drops later; only what it never reached is
+    // missing. Before 100 km/h it is still incomplete (minor review, finding 4).
+    [Fact]
+    public void LinkLostAfterAHundredKeepsTheStandingStart()
+    {
+        var frames = Frames(SyntheticRuns.Standing(Ms43x, 7.6));
+        var top = Array.FindIndex(frames, x => x.Frame.SpeedKmh >= 100);
+        var run = new PerfRun(PerfTestSpec.StandingStart(), Inputs(), warmUp);
+        Drive(run, frames.Take(top + 5));
+        Assert.Equal(RunStage.Running, run.Stage);
+
+        run.LinkLost();
+
+        var outcome = run.Outcome!;
+        Assert.True(outcome.Complete);
+        Assert.Equal("Done", run.Status);
+        Assert.Equal(7.6, Fig(outcome.Figures, "t-0-100").Value!.Value, 0.05);
+        var lost = Flag(outcome.Figures, "link-lost");
+        Assert.Equal(FlagSeverity.Info, lost.Severity);
+        Assert.Equal("Link lost at 100 km/h: the times it reached are kept.", lost.Message);
+        Assert.DoesNotContain(outcome.Figures.Flags, f => f.Severity == FlagSeverity.Invalid);
+
+        var early = new PerfRun(PerfTestSpec.StandingStart(), Inputs(), warmUp);
+        Drive(early, frames.TakeWhile(x => x.Frame.SpeedKmh < 60));
+        early.LinkLost();
+        Assert.False(early.Outcome!.Complete);
+        Assert.Equal(FlagSeverity.Invalid, Flag(early.Outcome.Figures, "link-lost").Severity);
+    }
+
+    // Floored only once the revs were past the start, the pull cannot be timed from 2000 rpm: the run says so and waits for a
+    // lift, then a proper pull runs (minor review, finding 8).
+    [Fact]
+    public void FullThrottleAboveTheStartSaysWhy()
+    {
+        var run = new PerfRun(PerfTestSpec.Pull(3), Inputs(), warmUp);
+        Drive(run, Splice(ThirdPull(pedalPercent: 50), ThirdPull(), f => f.Rpm >= 2100).TakeWhile(x => x.Frame.Rpm < 3000));
+
+        Assert.Equal(RunStage.Waiting, run.Stage);
+        Assert.Null(run.Outcome);
+        Assert.Equal("Full throttle came above 2000 rpm: lift off and start again below 1800 rpm.", run.Status);
+
+        Drive(run, Later(Frames(ThirdPull()), 10));
+        Assert.Equal(RunStage.Finished, run.Stage);
+        Assert.True(run.Outcome!.Complete);
+    }
+
+    // The ready checks hold from the failing side too: held outside its window a pull or roll-on never starts, a standing
+    // start stopped for under 1 s never arms, and a calibration held for 2.5 s captures nothing (minor review, finding 52).
+    [Fact]
+    public void ReadyChecksRefuseOutsideTheirWindow()
+    {
+        foreach (var held in new[] { 1900.0, 1200 })
+        {
+            var frames = Frames(SyntheticRuns.Pull(Ms43x, 3, held, 6500, 6.0));
+            var pull = new PerfRun(PerfTestSpec.Pull(3), Inputs(), warmUp);
+            Drive(pull, frames.TakeWhile(x => x.Frame.Pedal < 90));
+            var window = Assert.Single(pull.Checks, c => c.Label == "Between 1300 and 1800 rpm");
+            Assert.False(window.Met);
+            Assert.Equal($"{held} rpm", window.Detail);
+
+            Drive(pull, frames.SkipWhile(x => x.Frame.Pedal < 90));
+            Assert.Equal(RunStage.Waiting, pull.Stage);
+            Assert.Null(pull.Outcome);
+        }
+
+        // 2601 rpm in 3rd is 58 km/h: inside 5 km/h of the start.
+        var rollOn = new PerfRun(PerfTestSpec.RollOn(3), Inputs(), warmUp);
+        Drive(rollOn, SyntheticRuns.Pull(Ms43x, 3, 2601, 4619, 4.0, holdSeconds: 2));
+        Assert.Equal(RunStage.Waiting, rollOn.Stage);
+        Assert.Null(rollOn.Outcome);
+
+        var standing = new PerfRun(PerfTestSpec.StandingStart(), Inputs(), warmUp);
+        var launch = Frames(SyntheticRuns.Standing(Ms43x, 7.6)).Where(x => x.Frame.At >= TimeSpan.FromSeconds(1.5)).ToArray();
+        Drive(standing, launch.TakeWhile(x => x.Frame.SpeedKmh <= 0));
+        Assert.False(Assert.Single(standing.Checks, c => c.Label == "Stopped").Met);
+        Drive(standing, launch.SkipWhile(x => x.Frame.SpeedKmh <= 0));
+        Assert.Equal(RunStage.Waiting, standing.Stage);
+        Assert.Null(standing.Outcome);
+
+        var calibration = new PerfRun(PerfTestSpec.SpeedCalibration(), Inputs(), warmUp);
+        Drive(calibration, SyntheticRuns.Pull(Ms43x, 5, 3000, 3000, 1.5, kmhPer1000: 100 / 3.0, pedalPercent: 20));
+        Assert.Empty(calibration.Captured);
+        Assert.False(Assert.Single(calibration.Checks, c => c.Label == "Steady for 3 s").Met);
+    }
+
+    // A roll-on waits for a steady speed 5 to 15 km/h below its start (spec 6.3): still climbing through that window at a
+    // light pedal, it does not start when floored (minor review, finding 7).
+    [Fact]
+    public void RollOnNeedsASteadySpeed()
+    {
+        // 44 to 55 km/h over 2 s at a light pedal, then floored.
+        var climb = Frames(SyntheticRuns.Pull(Ms43x, 3, 1973, 2466, 2.0, pedalPercent: 20, holdSeconds: 0));
+        var floored = Later(Frames(SyntheticRuns.Pull(Ms43x, 3, 2466, 4619, 3.0, holdSeconds: 0)), 2 + 1 / 30.0);
+        var run = new PerfRun(PerfTestSpec.RollOn(3), Inputs(), warmUp);
+        Drive(run, climb);
+        Assert.False(Assert.Single(run.Checks, c => c.Label == "Steady between 45 and 55 km/h").Met);
+
+        Drive(run, floored);
+        Assert.Equal(RunStage.Waiting, run.Stage);
+        Assert.Null(run.Outcome);
+    }
+
+    // Conditions are kept from when the ready checks were met, beside those at the start and the end (spec 8; minor review,
+    // finding 7).
+    [Fact]
+    public void ConditionsAreKeptFromTheArm()
+    {
+        var run = new PerfRun(PerfTestSpec.Pull(3), Inputs(), warmUp);
+        Drive(run, Splice(ThirdPull(oilC: 84), ThirdPull(oilC: 88), f => f.Pedal >= 90));
+
+        var outcome = run.Outcome!;
+        Assert.Equal(84, outcome.Armed!.OilC!.Value, 0.6);
+        Assert.Equal(92, outcome.Armed.CoolantC!.Value, 0.6);
+        Assert.Equal(88, outcome.Start.OilC!.Value, 0.6);
+    }
+
+    // Spec 4.4: full throttle is the pedal with the throttle body not far behind. A floored pedal over a nearly shut throttle
+    // (limp-home, a torque cut), the malfunction light or DSC acting makes a pull doubtful, and the flag says why (minor
+    // review, finding 56).
+    [Fact]
+    public void ALimitedPullIsFlagged()
+    {
+        var limp = Frames(SyntheticRuns.Pull(Ms43x, 3, 1700, 6500, 6.0, throttleShare: 0.2)).Select(x => x.Frame).ToArray();
+        var throttle = Flag(RunAnalysis.Analyse(PerfTestSpec.Pull(3), limp, Inputs(), complete: true), "throttle");
+        Assert.Equal(FlagSeverity.Suspect, throttle.Severity);
+        Assert.Equal("Throttle body only 20° open with the pedal floored: the DME was limiting power.", throttle.Message);
+
+        var frames = Frames(ThirdPull()).Select(x => x.Frame).ToArray();
+        Assert.DoesNotContain(RunAnalysis.Analyse(PerfTestSpec.Pull(3), frames, Inputs(), complete: true).Flags,
+            f => f.Code is "throttle" or "eml" or "dsc");
+        // Two samples behind are a throttle catching up, not a limit.
+        var lag = frames.Select((f, i) => i is 100 or 101 ? f with { Throttle = 10 } : f).ToArray();
+        Assert.DoesNotContain(RunAnalysis.Analyse(PerfTestSpec.Pull(3), lag, Inputs(), complete: true).Flags, f => f.Code == "throttle");
+
+        var eml = Flag(RunAnalysis.Analyse(PerfTestSpec.Pull(3), frames.Select(f => f with { MalfunctionLamp = true }).ToArray(), Inputs(),
+            complete: true), "eml");
+        Assert.Equal((FlagSeverity.Suspect, "The engine malfunction light was on: the DME may have limited power."), (eml.Severity, eml.Message));
+
+        var asr = frames.Select(f => f with { TorqueIntervention = f.Rpm is >= 3000 and <= 3500 }).ToArray();
+        var dsc = Flag(RunAnalysis.Analyse(PerfTestSpec.Pull(3), asr, Inputs(), complete: true), "dsc");
+        Assert.Equal((FlagSeverity.Suspect, "DSC intervened on engine torque between 3000 and 3500 rpm: the times are traction-limited."),
+            (dsc.Severity, dsc.Message));
+    }
+
+    // At 23 samples/s and 777 rpm/s the marks fall at different points between samples, so a time read from a sample's stamp
+    // would be up to 43 ms off; interpolated crossings give the analytic times (spec 4.6; minor review, finding 72).
+    [Fact]
+    public void CrossingsAreInterpolatedAtAnyPhase()
+    {
+        var run = new PerfRun(PerfTestSpec.Pull(3), Inputs(), warmUp);
+        Drive(run, SyntheticRuns.Pull(Ms43x, 3, 1700, 6500, 4800 / 777.0, rate: 23));
+
+        var figures = run.Outcome!.Figures;
+        Assert.Equal(4400 / 777.0, Fig(figures, "time").Value!.Value, 0.005);
+        Assert.Equal(2000 / 777.0, Fig(figures, "t-2000-4000").Value!.Value, 0.005);
+        Assert.Equal(3000 / 777.0, Fig(figures, "t-3000-6000").Value!.Value, 0.005);
+        Assert.Equal(2000 / 777.0, Fig(figures, "t-4000-6000").Value!.Value, 0.005);
+    }
 }
