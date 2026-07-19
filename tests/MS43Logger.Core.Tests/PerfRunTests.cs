@@ -823,6 +823,30 @@ public class PerfRunTests
             (dsc.Severity, dsc.Message));
     }
 
+    // A GPS-checked calibration corrects the speedometer, so a standing start and an uncalibrated roll-on are timed on true
+    // speed (minor review, finding 57).
+    [Fact]
+    public void GpsCorrectionAppliesToTheSpeedometer()
+    {
+        // The speedometer reads 3 % low in the gear that was checked: true speed is 1.03 × VS.
+        var gps = new AnalysisInputs(new CarValues(1480, "205/55 R16", false), new Dictionary<int, double> { [5] = 0.0333 * 1.03 },
+            SyntheticRuns.FullPedal, new Dictionary<int, double> { [5] = 0.0333 });
+
+        var run = new PerfRun(PerfTestSpec.StandingStart(), gps, warmUp);
+        Drive(run, SyntheticRuns.Standing(Ms43x, 7.6));
+        var standing = run.Outcome!.Figures;
+        Assert.Equal(7.6 / 1.03, Fig(standing, "t-0-100").Value!.Value, 0.05);
+        Assert.Equal(7.6 / 2 / 1.03, Fig(standing, "t-0-50").Value!.Value, 0.05);
+
+        var rollOn = Frames(SyntheticRuns.Pull(Ms43x, 3, 2152, 4619, 4.0)).Select(x => x.Frame).ToArray();
+        var vsPerSecond = (4619 - 2152) / 4.0 * 0.0223;
+        Assert.Equal((100 - 60) / 1.03 / vsPerSecond, Fig(RunAnalysis.Analyse(PerfTestSpec.RollOn(3), rollOn, gps, complete: true), "time").Value!.Value,
+            0.05);
+        // Without a GPS check the speedometer is trusted.
+        Assert.Equal(40 / vsPerSecond, Fig(RunAnalysis.Analyse(PerfTestSpec.RollOn(3), rollOn, Inputs(calibrated: false), complete: true), "time").Value!.Value,
+            0.05);
+    }
+
     // At 23 samples/s and 777 rpm/s the marks fall at different points between samples, so a time read from a sample's stamp
     // would be up to 43 ms off; interpolated crossings give the analytic times (spec 4.6; minor review, finding 72).
     [Fact]
@@ -836,5 +860,126 @@ public class PerfRunTests
         Assert.Equal(2000 / 777.0, Fig(figures, "t-2000-4000").Value!.Value, 0.005);
         Assert.Equal(3000 / 777.0, Fig(figures, "t-3000-6000").Value!.Value, 0.005);
         Assert.Equal(2000 / 777.0, Fig(figures, "t-4000-6000").Value!.Value, 0.005);
+    }
+
+    // The power estimate against the hand-worked figure (spec 7). The synthetic 3rd-gear pull: 800 rpm/s, 1480 kg, 205/55 R16
+    // (r 0.3065 m), k 0.0223 km/h per rpm, 101.9 kPa and 25 °C. At 4000 rpm v = 24.78 m/s and a = 4.956 m/s²; m_eff = 1480 +
+    // 4.5 / r² + 0.20 × (2π / 60 × 3.6 / k)² = 1585 kg; F = 7855 + 219 drag + 160 rolling = 8234 N, so P = 204.0 kW and
+    // T = 487 Nm (minor review, finding 73).
+    [Fact]
+    public void PowerMatchesTheWorkedExample()
+    {
+        var frames = Frames(ThirdPull()).Select(x => x.Frame).ToArray();
+        static double At4000(RunFigures figures, string key)
+        {
+            var trace = Assert.Single(figures.Traces, t => t.Key == key);
+            return trace.Y[trace.X.ToList().IndexOf(4000)];
+        }
+
+        var calibrated = RunAnalysis.Analyse(PerfTestSpec.Pull(3), frames, Inputs(), complete: true);
+        Assert.Equal(204.0, At4000(calibrated, "power"), 2.04);
+        Assert.Equal(487.1, At4000(calibrated, "torque"), 4.87);
+
+        // Without a calibration the run's own VS / N gives the same, within VS's whole-km/h steps.
+        var uncalibrated = RunAnalysis.Analyse(PerfTestSpec.Pull(3), frames, Inputs(calibrated: false), complete: true);
+        Assert.Equal(At4000(calibrated, "power"), At4000(uncalibrated, "power"), 2.04);
+
+        // 20 kPa less air pressure only lowers the drag, ½ ρ CdA v² at 24.78 m/s, times v.
+        var thin = frames.Select(f => f with { PressureKpa = f.PressureKpa - 20 }).ToArray();
+        var lower = RunAnalysis.Analyse(PerfTestSpec.Pull(3), thin, Inputs(), complete: true);
+        var (pressure, intake) = (frames[^1].PressureKpa!.Value, frames[^1].IntakeC!.Value);
+        var v = 0.0223 * 4000 / 3.6;
+        var drag = 0.5 * (RunMath.AirDensity(pressure, intake) - RunMath.AirDensity(pressure - 20, intake)) * 0.60 * v * v * v / 1000;
+        Assert.Equal(drag, At4000(calibrated, "power") - At4000(lower, "power"), 0.02);
+    }
+
+    // Pressing the clutch or the brake ends a pull as incomplete on the sample before the press; revs falling 100 rpm below
+    // their peak end it at the peak (spec 6; minor review, finding 74).
+    [Fact]
+    public void ClutchBrakeAndARevDropEndThePull()
+    {
+        foreach (var clutch in new[] { true, false })
+        {
+            var run = new PerfRun(PerfTestSpec.Pull(3), Inputs(), warmUp);
+            Drive(run, SyntheticRuns.Pull(Ms43x, 3, 1700, 6500, 6.0, clutchFromRpm: clutch ? 5000 : null, brakeFromRpm: clutch ? null : 5000));
+
+            var outcome = run.Outcome!;
+            Assert.False(outcome.Complete);
+            Assert.Matches($"^Incomplete: {(clutch ? "clutch" : "brake")} pressed at 50\\d\\d rpm$", run.Status);
+            Assert.Equal(run.Status + ".", Flag(outcome.Figures, "incomplete").Message);
+            var last = Decode(outcome.Samples[^1]);
+            Assert.True(last.Rpm < 5000);
+            Assert.False(clutch ? last.Clutch : last.Brake);
+            Assert.Equal(outcome.Samples.Count - 1, outcome.WindowEnd);
+        }
+
+        var frames = Frames(ThirdPull());
+        var peak = Array.FindIndex(frames, x => x.Frame.Rpm >= 5000);
+        var top = frames[peak].Frame;
+        var falling = Enumerable.Range(1, 6)
+            .Select(i => (top with { At = top.At + TimeSpan.FromSeconds(i / 30.0), Rpm = top.Rpm - 25 * i }, frames[peak].Payload));
+        var drop = new PerfRun(PerfTestSpec.Pull(3), Inputs(), warmUp);
+        Drive(drop, frames.Take(peak + 1).Concat(falling));
+        Assert.Matches(@"^Incomplete: revs dropped from 50\d\d rpm$", drop.Status);
+        Assert.Equal(top.Rpm, Decode(drop.Outcome!.Samples[^1]).Rpm);
+        Assert.Equal(top.At, drop.Outcome.Samples[^1].At);
+    }
+
+    // The flags that guard the figures (minor review, finding 75): slip takes three samples in a row with VS more than 3 % from
+    // k × N at 30 km/h or more; a slow link, a link test under 15 samples/s and hot intake air are each named.
+    [Fact]
+    public void GuardFlagsFire()
+    {
+        var frames = Frames(ThirdPull()).Select(x => x.Frame).ToArray();
+        PerfFrame[] Fast(int count) => frames
+            .Select((f, i) => i >= 120 && i < 120 + count ? f with { SpeedKmh = Math.Round(1.05 * 0.0223 * f.Rpm!.Value) } : f)
+            .ToArray();
+
+        var slip = Flag(RunAnalysis.Analyse(PerfTestSpec.Pull(3), Fast(3), Inputs(), complete: true), "slip");
+        Assert.Equal(FlagSeverity.Suspect, slip.Severity);
+        Assert.Matches(@"^Speedometer and engine speed disagree by up to [456] %: wheelspin or clutch slip\.$", slip.Message);
+        Assert.DoesNotContain(RunAnalysis.Analyse(PerfTestSpec.Pull(3), Fast(2), Inputs(), complete: true).Flags, f => f.Code == "slip");
+        Assert.DoesNotContain(RunAnalysis.Analyse(PerfTestSpec.Pull(3), Fast(3), Inputs(calibrated: false), complete: true).Flags,
+            f => f.Code == "slip");
+
+        var slow = Frames(SyntheticRuns.Pull(Ms43x, 3, 1700, 6500, 6.0, rate: 8)).Select(x => x.Frame).ToArray();
+        var slowLink = Flag(RunAnalysis.Analyse(PerfTestSpec.Pull(3), slow, Inputs(), complete: true), "slow-link");
+        Assert.Equal((FlagSeverity.Suspect, "Only 8.0 samples/s: knock events may be undercounted."), (slowLink.Severity, slowLink.Message));
+
+        var link = new PerfRun(PerfTestSpec.LinkTest(), Inputs(), warmUp);
+        Drive(link, SyntheticRuns.Idle(Ms43x, 31, rate: 12));
+        var advice = Flag(link.Outcome!.Figures, "link-advice");
+        Assert.Equal((FlagSeverity.Info, "Under 15 samples/s: setting the USB adapter's latency timer to 1 ms often helps."), (advice.Severity, advice.Message));
+        Assert.DoesNotContain(link.Outcome.Figures.Flags, f => f.Code == "slow-link");
+
+        var hot = Frames(SyntheticRuns.Pull(Ms43x, 3, 1700, 6500, 6.0, intakeC: 50)).Select(x => x.Frame).ToArray();
+        var intake = Flag(RunAnalysis.Analyse(PerfTestSpec.Pull(3), hot, Inputs(), complete: true), "hot-intake");
+        Assert.Equal(FlagSeverity.Suspect, intake.Severity);
+        Assert.Matches(@"^Intake air reached 5\d °C, above 45 °C\.$", intake.Message);
+    }
+
+    // The link test gives the interval spread from its shortest interval, and the retries the logger made (spec 6.6; minor
+    // review, finding 6).
+    [Fact]
+    public void LinkTestCountsRetries()
+    {
+        var frames = Frames(SyntheticRuns.Idle(Ms43x, 31))
+            .Select((x, i) => (Frame: x.Frame with { Retries = i % 100 == 50 ? 1 : 0 }, x.Payload))
+            .ToArray();
+        var run = new PerfRun(PerfTestSpec.LinkTest(), Inputs(), warmUp);
+        Drive(run, frames);
+
+        var figures = run.Outcome!.Figures;
+        var shortest = Fig(figures, "interval-min");
+        Assert.Equal(("Shortest interval", "ms", 0), (shortest.Label, shortest.Unit, shortest.Decimals));
+        Assert.Equal(1000 / 30.0, shortest.Value!.Value, 0.5);
+        var retries = Fig(figures, "retries");
+        Assert.Equal(("Retries", 0), (retries.Label, retries.Decimals));
+        Assert.Equal(9, retries.Value);
+        Assert.Equal(frames.Take(run.Outcome.Samples.Count).Select(x => x.Frame.Retries), run.Outcome.Samples.Select(s => s.Retries));
+
+        // A source that reports no retries gives n/a, never zero.
+        var unknown = RunAnalysis.Analyse(PerfTestSpec.LinkTest(), Frames(SyntheticRuns.Idle(Ms43x, 31)).Select(x => x.Frame).ToArray(), Inputs(), true);
+        Assert.Null(Fig(unknown, "retries").Value);
     }
 }
