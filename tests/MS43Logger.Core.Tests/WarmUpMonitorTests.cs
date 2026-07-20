@@ -246,4 +246,93 @@ public class WarmUpMonitorTests
         Assert.False(fresh.CoolantCold);
         Assert.Empty(fresh.Banners);
     }
+
+    [Fact]
+    public void HotAndOverheat()
+    {
+        m.Push(F(0, coolant: 117, oil: 90));
+
+        var hot = Assert.Single(m.Banners);
+        // What happened, then what to do.
+        Assert.Equal(("coolant-hot", WarmUpLevel.Caution, "Coolant 117 °C: running hot. Ease off and let it idle to cool."), (hot.Code, hot.Level, hot.Text));
+
+        m.Push(F(1, coolant: 112, oil: 90));
+        Assert.Equal(new[] { "coolant-hot" }, Codes());
+        m.Push(F(2, coolant: 109.9, oil: 90));
+        Assert.Empty(m.Banners);
+
+        m.Push(F(3, oil: 132));
+        Assert.Equal("Oil 132 °C: running hot. Ease off and let it idle to cool.", Assert.Single(m.Banners, b => b.Code == "oil-hot").Text);
+        m.Push(F(4, oil: 126));
+        Assert.Equal(new[] { "oil-hot" }, Codes());
+        m.Push(F(5, oil: 124));
+        Assert.Empty(m.Banners);
+
+        m.Push(F(6, coolant: 117, overheat: true));
+        var overheat = m.Banners[0];
+        Assert.Equal(("overheat", WarmUpLevel.Danger, "The ECU reports engine overheating."), (overheat.Code, overheat.Level, overheat.Text));
+        Assert.Equal(new[] { "overheat", "coolant-hot" }, Codes());
+
+        // An unknown bit keeps the lamp as it was; only a cleared bit clears it.
+        m.Push(F(7, coolant: 117, overheat: null));
+        Assert.Contains("overheat", Codes());
+        m.Push(F(8, coolant: 117, overheat: false));
+        Assert.DoesNotContain("overheat", Codes());
+    }
+
+    [Fact]
+    public void DangerComesFirstThenCautionThenInfo()
+    {
+        m.Push(F(0, coolant: 64, oil: -48, overheat: true));
+
+        Assert.Equal(new[] { WarmUpLevel.Danger, WarmUpLevel.Danger, WarmUpLevel.Info }, m.Banners.Select(b => b.Level));
+        Assert.Equal(new[] { "overheat", "coolant-cold", "oil-unreported" }, Codes());
+
+        m.Push(F(1, coolant: 64, oil: 140, overheat: false));
+
+        Assert.Equal(new[] { "coolant-cold", "oil-hot" }, Codes());
+    }
+
+    [Fact]
+    public void ChangedFiresOnlyOnChange()
+    {
+        var raised = 0;
+        m.Changed += (_, _) => raised++;
+
+        m.Push(F(0, coolant: 64, oil: 90));
+        m.Push(F(0.1, coolant: 64, oil: 90));
+        Assert.Equal(1, raised);
+
+        // The text carries the reading in whole degrees: 64.2 reads as 64, 65 is a new text.
+        m.Push(F(0.2, coolant: 64.2, oil: 90));
+        Assert.Equal(1, raised);
+        m.Push(F(0.3, coolant: 65, oil: 90));
+        Assert.Equal(2, raised);
+
+        m.Push(F(0.4, coolant: 65.3, oil: 90));
+        Assert.Equal(2, raised);
+    }
+
+    [Fact]
+    public void ResetForgetsEverything()
+    {
+        var raised = 0;
+        m.Push(F(0, coolant: 64, oil: -48, overheat: true));
+        m.Changed += (_, _) => raised++;
+
+        m.Reset();
+
+        Assert.Equal(1, raised);
+        Assert.Empty(m.Banners);
+        Assert.False(m.CoolantCold);
+        Assert.False(m.OilUnreported);
+
+        m.Reset();
+        Assert.Equal(1, raised);
+
+        // After a reset the next reading is a first reading again: warm needs no wait, even with the clock back at zero.
+        m.Push(F(0, coolant: 92, oil: 88));
+        Assert.Empty(m.Banners);
+        Assert.Equal(1, raised);
+    }
 }
