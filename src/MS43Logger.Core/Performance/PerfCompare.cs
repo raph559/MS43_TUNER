@@ -38,6 +38,32 @@ public static class PerfCompare
     private static readonly Dictionary<string, AdxDefinition> Definitions = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
+    /// Recomputes both from their samples with <paramref name="current"/> (spec 9.2), so other car values or another speed
+    /// calibration never show up as a tune gain, over the band both runs share: a pull or roll-on is cut at the shared end, so
+    /// nothing above it counts. <paramref name="xdf"/> reads the tables that differ between the snapshots when it is the XDF
+    /// the runs were saved with (none without it);
+    /// <paramref name="sameTune"/> are the saved results the noise is taken from. Throws <see cref="InvalidDataException"/>
+    /// when a or b cannot be decoded again.
+    /// </summary>
+    public static PerfComparison Compare(PerfResult a, PerfResult b, AnalysisInputs current, XdfDefinition? xdf, IReadOnlyList<PerfResult>? sameTune = null)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        ArgumentNullException.ThrowIfNull(b);
+        ArgumentNullException.ThrowIfNull(current);
+        var (from, to) = Shared(a.Spec, b.Spec);
+        var framesA = Frames(a);
+        var framesB = Frames(b);
+        var figuresA = Recompute(a, framesA, from, to, current);
+        var figuresB = Recompute(b, framesB, from, to, current);
+        // Against the stored figures only the inputs may differ, so each is recomputed over its own band for this.
+        var recomputed = Differs(a, Own(a, framesA, from, to, current, figuresA)) || Differs(b, Own(b, framesB, from, to, current, figuresB));
+        var (tables, tablesNote) = Tables(a, b, xdf);
+        return new PerfComparison(figuresA, figuresB, from, to, Deltas(figuresA, figuresB), Mismatches(a, b), tables,
+            recomputed, sameTune is null ? null : SameTuneNoise(a, sameTune, from, to, current), SameTune(a, b),
+            DefinitionChanged(a) || DefinitionChanged(b), tablesNote);
+    }
+
+    /// <summary>
     /// The result's figures recomputed from its samples with <paramref name="inputs"/> over its own band, the flags only the run
     /// could see carried over: what it reads with these car values and this speed calibration (spec 9.2). Throws
     /// <see cref="InvalidDataException"/> when it cannot be decoded again.
