@@ -50,6 +50,71 @@ public sealed class PerfResultStore
     /// <summary>"Not saved: {reason}" and the like after an operation failed; null after one succeeded.</summary>
     public string? LastError { get; private set; }
 
+    /// <summary>
+    /// Every result in the folder, newest first. Temporary files are ignored; unreadable files are skipped and named in
+    /// <see cref="Skipped"/>. A file is read only when it is new or its write time or length changed since the last listing.
+    /// </summary>
+    public IReadOnlyList<PerfResultHeader> List()
+    {
+        var headers = new List<PerfResultHeader>();
+        var skipped = new List<string>();
+        string[] files;
+        try
+        {
+            files = Directory.Exists(Folder) ? Directory.GetFiles(Folder, "*" + Extension) : [];
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            files = [];
+        }
+
+        lock (_listed)
+        {
+            var present = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var path in files)
+            {
+                var fileName = Path.GetFileName(path);
+                present.Add(fileName);
+                try
+                {
+                    var info = new FileInfo(path);
+                    var (written, length) = (info.LastWriteTimeUtc, info.Length);
+                    if (!_listed.TryGetValue(fileName, out var listed) || listed.WrittenUtc != written || listed.Length != length)
+                    {
+                        listed = new Listed(written, length, Header(fileName, File.ReadAllBytes(path)));
+                        _listed[fileName] = listed;
+                    }
+
+                    if (listed.Header is { } header)
+                    {
+                        headers.Add(header);
+                    }
+                    else
+                    {
+                        skipped.Add($"{fileName}: {NotAResult}");
+                    }
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                {
+                    // Not kept: the next listing tries again.
+                    _listed.Remove(fileName);
+                    skipped.Add($"{fileName}: could not be read ({Reason(error)})");
+                }
+            }
+
+            foreach (var gone in _listed.Keys.Where(name => !present.Contains(name)).ToArray())
+            {
+                _listed.Remove(gone);
+            }
+        }
+
+        _skipped = skipped;
+        return headers
+            .OrderByDescending(header => header.Created)
+            .ThenByDescending(header => header.FileName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     /// <summary>The result in <paramref name="fileName"/>, a newer schema read as far as this app can; null when it cannot be read.</summary>
     public PerfResult? Load(string fileName)
     {
