@@ -7,8 +7,8 @@ public sealed record LiveAxisBinding(LiveInputSource Source, IReadOnlyList<long>
 /// <param name="Physical">That input in the axis's units, not clamped to the axis.</param>
 public sealed record LiveReading(string Channel, long Input, double Physical, string Units, int? DecimalPlaces, int Clamped);
 
-/// <summary>Where the engine is on a table for one sample. A null axis position means the table has one row or one column.</summary>
-public sealed record CursorFix(AxisPosition? Row, AxisPosition? Col, IReadOnlyList<CellWeight> Cells, double Value, IReadOnlyList<LiveReading> Inputs, bool Approximate);
+/// <summary>Where the engine is on a table for one sample, and whether the ECU is using the table. A null axis position means the table has one row or one column.</summary>
+public sealed record CursorFix(AxisPosition? Row, AxisPosition? Col, IReadOnlyList<CellWeight> Cells, double Value, IReadOnlyList<LiveReading> Inputs, bool Approximate, MapUse Use);
 
 /// <summary>
 /// Links an XDF table to the logger: XDF table → its data address → the code catalogue's axis inputs → the logger channel that carries
@@ -43,6 +43,9 @@ public sealed class LiveTableBinding
     public LiveAxisBinding? Col { get; }
 
     public bool Interpolates { get; }
+
+    /// <summary>Whether the ECU is using the table, evaluated with every <see cref="Locate"/>.</summary>
+    public MapUseBinding Use { get; }
 
     private IEnumerable<LiveAxisBinding> Axes => new[] { Row, Col }.OfType<LiveAxisBinding>();
 
@@ -157,10 +160,20 @@ public sealed class LiveTableBinding
             return null;
         }
 
+        return new LiveAxisBinding(source, ReadBreakpoints(image, axis)!, display.Math, display.Units, display.Decimals);
+    }
+
+    /// <summary>The breakpoints of an axis as stored in the bin (count, then the values), or null when they cannot be read.</summary>
+    internal static IReadOnlyList<long>? ReadBreakpoints(BinImage image, CatalogAxis axis)
+    {
         var count = ReadCount(image, axis);
+        if (count < 0)
+        {
+            return null;
+        }
+
         var values = new XdfData(axis.CountAddress + axis.ElementBits / 8, axis.ElementBits, false, true, count, 1, null);
-        var breakpoints = Enumerable.Range(0, count).Select(i => image.ReadElement(values, i)).ToList();
-        return new LiveAxisBinding(source, breakpoints, display.Math, display.Units, display.Decimals);
+        return Enumerable.Range(0, count).Select(i => image.ReadElement(values, i)).ToList();
     }
 
     /// <summary>The axis's point count as stored in the bin, or −1 when it cannot be read.</summary>
@@ -245,7 +258,7 @@ public sealed class LiveTableBinding
         AxisPosition? row = Row is { } r ? Read(adx, r, payload, inputs) : null;
         AxisPosition? col = Col is { } c ? Read(adx, c, payload, inputs) : null;
         var cells = CellWeights.Around(row, col, physical.GetLength(0), physical.GetLength(1));
-        return new CursorFix(row, col, cells, CellWeights.Interpolate(physical, cells), inputs, Axes.Any(axis => axis.Source.Approximate));
+        return new CursorFix(row, col, cells, CellWeights.Interpolate(physical, cells), inputs, Axes.Any(axis => axis.Source.Approximate), Use.Evaluate(adx, payload));
     }
 
     private AxisPosition Read(AdxDefinition adx, LiveAxisBinding axis, ReadOnlySpan<byte> payload, List<LiveReading> inputs)
