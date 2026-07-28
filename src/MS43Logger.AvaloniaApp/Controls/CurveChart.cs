@@ -162,7 +162,7 @@ public sealed class CurveChart : Control
             else
             {
                 context.DrawEllipse(halo, null, at, 6, 6);
-                context.DrawEllipse(ThemeBrushes.Get(this, "NowBrush"), null, at, 4, 4);
+                context.DrawEllipse(ThemeBrushes.Get(this, live.IsUnused ? "Ink3Brush" : "NowBrush"), null, at, 4, 4);
             }
         }
     }

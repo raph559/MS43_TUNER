@@ -21,9 +21,10 @@ public sealed class LiveTableBinding
 
     private readonly ValueCodec _codec;
 
-    private LiveTableBinding(XdfTable table, ValueCodec codec, string? reason, LiveAxisBinding? row, LiveAxisBinding? col, bool interpolates)
+    private LiveTableBinding(XdfTable table, ValueCodec codec, MapUseBinding use, string? reason, LiveAxisBinding? row, LiveAxisBinding? col, bool interpolates)
     {
         Table = table;
+        Use = use;
         _codec = codec;
         Reason = reason;
         Row = row;
@@ -49,14 +50,17 @@ public sealed class LiveTableBinding
 
     private IEnumerable<LiveAxisBinding> Axes => new[] { Row, Col }.OfType<LiveAxisBinding>();
 
-    public static LiveTableBinding Resolve(LiveInputMap? map, CalibrationDocument document, XdfTable table)
+    /// <param name="rules">The firmware's map-use rules; without them the cursor says "Selection unknown".</param>
+    public static LiveTableBinding Resolve(LiveInputMap? map, CalibrationDocument document, XdfTable table, MapUseRules? rules = null)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(table);
         var codec = document.Reader.Codec;
-        LiveTableBinding NoInput(string reason) => new(table, codec, reason, null, null, false);
-
         var softwareId = document.Firmware.SoftwareId;
+        var sameFirmware = rules is not null && string.Equals(rules.SoftwareId, softwareId, StringComparison.OrdinalIgnoreCase);
+        var use = MapUseBinding.Resolve(sameFirmware ? rules : null, document.Image, table.Z.Data.Address ?? -1);
+        LiveTableBinding NoInput(string reason) => new(table, codec, use, reason, null, null, false);
+
         if (map is null || !string.Equals(map.SoftwareId, softwareId, StringComparison.OrdinalIgnoreCase))
         {
             return NoInput($"No live input: there is no input map for firmware {softwareId ?? "unknown"}.");
@@ -71,7 +75,7 @@ public sealed class LiveTableBinding
         var catalog = map.FindTable(address);
         if (catalog is null)
         {
-            return ResolveAxisTable(map, document, table, address, NoInput);
+            return ResolveAxisTable(map, document, table, address, use, NoInput);
         }
 
         CatalogAxis? rowAxis = null, colAxis = null;
@@ -112,11 +116,11 @@ public sealed class LiveTableBinding
             return NoInput(reason!);
         }
 
-        return new LiveTableBinding(table, codec, null, row, col, catalog.Interpolates);
+        return new LiveTableBinding(table, codec, use, null, row, col, catalog.Interpolates);
     }
 
     /// <summary>An axis table is not read as data by the ECU; it gets a cursor when every table using it searches it with the same input.</summary>
-    private static LiveTableBinding ResolveAxisTable(LiveInputMap map, CalibrationDocument document, XdfTable table, long address, Func<string, LiveTableBinding> noInput)
+    private static LiveTableBinding ResolveAxisTable(LiveInputMap map, CalibrationDocument document, XdfTable table, long address, MapUseBinding use, Func<string, LiveTableBinding> noInput)
     {
         var data = table.Z.Data;
         var countAddress = address - data.ElementBytes;
@@ -142,7 +146,7 @@ public sealed class LiveTableBinding
         var binding = Bind(map, document.Image, axis, dimension, (table.Z.Math, table.Z.Units, table.Z.DecimalPlaces), out var reason);
         return binding is null
             ? noInput(reason!)
-            : new LiveTableBinding(table, document.Reader.Codec, null, rows ? binding : null, rows ? null : binding, true);
+            : new LiveTableBinding(table, document.Reader.Codec, use, null, rows ? binding : null, rows ? null : binding, true);
     }
 
     private static LiveAxisBinding? Bind(LiveInputMap map, BinImage image, CatalogAxis axis, string dimension, (XdfMath Math, string Units, int? Decimals) display, out string? reason)
