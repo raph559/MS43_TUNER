@@ -20,11 +20,18 @@ internal static class LiveFeed
 {
     public static readonly AdxDefinition Ms43x = BundledDefinitions.Load("ms43x");
 
-    public static void Push(ShellViewModel shell, params (string Channel, long Raw)[] values) => Push(shell, Ms43x, values);
+    /// <summary>The engine in part load (frame byte 0 = 0x04), so the ignition part-load map is in use.</summary>
+    public static readonly (int Offset, byte Value)[] PartLoad = { (0x00, 0x04) };
 
-    public static void Push(ShellViewModel shell, AdxDefinition definition, params (string Channel, long Raw)[] values)
+    public static void Push(ShellViewModel shell, params (string Channel, long Raw)[] values) => Push(shell, Ms43x, PartLoad, values);
+
+    public static void Push(ShellViewModel shell, AdxDefinition definition, params (string Channel, long Raw)[] values) => Push(shell, definition, PartLoad, values);
+
+    public static void Push(ShellViewModel shell, (int Offset, byte Value)[] bytes, params (string Channel, long Raw)[] values) => Push(shell, Ms43x, bytes, values);
+
+    public static void Push(ShellViewModel shell, AdxDefinition definition, (int Offset, byte Value)[] bytes, params (string Channel, long Raw)[] values)
     {
-        var payload = LivePayloads.Build(Ms43x, values);
+        var payload = LivePayloads.Build(Ms43x, bytes, values);
         shell.Live.IsConnected = true;
         shell.Live.CurrentDefinition = definition;
         shell.Live.ShowSample(new LiveSample(DateTimeOffset.UtcNow, 0, Ms43x.DecodePayload(payload), payload));
@@ -135,6 +142,110 @@ public class LiveCursorTests
         LiveFeed.Push(shell, ("N", 2500), ("MAFTI", 5000));
         cursor.Tick();
         Assert.Single(shell.Tune.Editor!.Live!.Trail);
+    }
+
+    [AvaloniaFact]
+    public async Task UseShowsNextToTheReadout()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, _) = await LiveFeed.OpenAsync();
+        var cursor = shell.Tune.LiveCursor;
+        Assert.Null(cursor.Use);
+
+        LiveFeed.Push(shell, new (int, byte)[] { (0x00, 0x04), (0x40, 71) }, ("N", 2480), ("MAFIGA", 1415));
+        cursor.Tick();
+        Assert.Equal("RON98 72 % · RON91 28 %", cursor.Use);
+        Assert.False(cursor.UseIsDim);
+        Assert.False(shell.Tune.Editor!.Live!.IsUnused);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        var label = Find.Named<TextBlock>(window, "LiveUse");
+        Assert.Equal("RON98 72 % · RON91 28 %", label.Text);
+        Assert.DoesNotContain("dim", label.Classes);
+
+        LiveFeed.Push(shell, new (int, byte)[] { (0x00, 0x02) }, ("N", 800), ("MAFIGA", 778));
+        cursor.Tick();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.Equal("Not in use", cursor.Use);
+        Assert.True(cursor.UseIsDim);
+        Assert.True(shell.Tune.Editor.Live!.IsUnused);
+        Assert.Contains("dim", label.Classes);
+
+        LiveFeed.Push(shell, new (int, byte)[] { (0x00, 0x06) }, ("N", 3000), ("MAFIGA", 9000));
+        cursor.Tick();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.Equal("Selection unknown", cursor.Use);
+        Assert.False(cursor.UseIsDim);
+        Assert.Contains("Full-load enrichment", ToolTip.GetTip(label) as string);
+
+        cursor.Clear();
+        Assert.Null(cursor.Use);
+    }
+
+    [AvaloniaFact]
+    public async Task UseGoesDimWhenStale()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (_, shell, time) = await LiveFeed.OpenAsync();
+        var cursor = shell.Tune.LiveCursor;
+        LiveFeed.Push(shell, ("N", 2480), ("MAFIGA", 1415));
+        cursor.Tick();
+        Assert.Equal("In use", cursor.Use);
+        Assert.False(cursor.UseIsDim);
+
+        time.Advance(TimeSpan.FromSeconds(1.1));
+        cursor.Tick();
+        Assert.Equal("In use", cursor.Use);
+        Assert.True(cursor.UseIsDim);
+    }
+
+    [AvaloniaFact]
+    public async Task SwitchingFlexFuelOnWhileLoggingMakesTheBlendUnknown()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (_, shell, _) = await LiveFeed.OpenAsync();
+        var cursor = shell.Tune.LiveCursor;
+        var sample = new (int, byte)[] { (0x00, 0x04), (0x40, 71) };
+        LiveFeed.Push(shell, sample, ("N", 2480), ("MAFIGA", 1415));
+        cursor.Tick();
+        Assert.Equal("RON98 72 % · RON91 28 %", cursor.Use);
+
+        var document = shell.Tune.Document!;
+        document.Image.WriteElement(new XdfData(0x70DF8, 8, false, true, 1, 1, null), 0, 1);
+        document.RaiseChanged();
+        LiveFeed.Push(shell, sample, ("N", 2480), ("MAFIGA", 1415));
+        cursor.Tick();
+
+        Assert.Equal("Selection unknown", cursor.Use);
+        Assert.Contains("flex fuel", cursor.UseDetail);
+        Assert.NotNull(shell.Tune.Editor!.Live);
+    }
+
+    [AvaloniaFact]
+    public async Task TableWithoutRuleSaysSelectionUnknown()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (_, shell, _) = await LiveFeed.OpenAsync("id_t_tco_puc_deacc__tco");
+        var cursor = shell.Tune.LiveCursor;
+        LiveFeed.Push(shell, ("TCO", 124));
+        cursor.Tick();
+        Assert.NotNull(shell.Tune.Editor!.Live);
+        Assert.Equal("Selection unknown", cursor.Use);
     }
 
     [AvaloniaFact]
