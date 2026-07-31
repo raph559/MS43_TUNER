@@ -191,4 +191,43 @@ public class MapUseTests
         Assert.Equal("Not in use", Text("ip_fac_ivvt_ch__n__maf_ivvt", (Status1, 0x08)));
         Assert.Equal("Possibly in use", Text("ip_fac_ivvt_ch__n__maf_ivvt", (Status1, 0x0A)));
     }
+
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void FlexFuelOnMakesBlendsUnknown()
+    {
+        var image = Car().Image.Clone();
+        image.WriteElement(new XdfData(0x70DF8, 8, false, true, 1, 1, null), 0, 1);
+
+        var use = Use(image, "ip_iga_ron98_pl__n__maf", (State, 0x04), (Octane, 71));
+        Assert.Equal("Selection unknown", use.Text);
+        Assert.Equal(MapUseState.Unknown, use.State);
+        Assert.Contains("flex fuel", use.Detail);
+        Assert.Equal("Not in use", Use(image, "ip_iga_ron98_pl__n__maf", (State, 0x02)).Text);
+        Assert.Equal("In use", Use(image, "ip_map_ve_3__map__n", (Index, 0x03)).Text);
+    }
+
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void AnE85FactorOutsideTheBlendIsUnknown()
+    {
+        var image = Car().Image.Clone();
+        image.WriteElement(new XdfData(0x70A11, 8, false, true, 1, 1, null), 0, 0x70);
+
+        Assert.Equal("Selection unknown", Use(image, "ip_iga_ron98_pl__n__maf", (State, 0x04)).Text);
+    }
+
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void NoRuleSaysSelectionUnknown()
+    {
+        var image = Car().Image;
+        var plain = Use(image, "id_t_tco_puc_deacc__tco", (State, 0x04));
+        Assert.Equal("Selection unknown", plain.Text);
+        Assert.Equal(MapUseState.Unknown, plain.State);
+        Assert.Contains("No rule", plain.Detail);
+
+        var leftOut = Use(image, "ip_iga_aj_ron98__n__maf", (State, 0x04));
+        Assert.Equal("Selection unknown", leftOut.Text);
+        Assert.Contains("FD18.15", leftOut.Detail);
+
+        Assert.Equal("Selection unknown", MapUseBinding.Resolve(null, image, 0x77315).Evaluate(Ms43x, new byte[73]).Text);
+    }
 }
