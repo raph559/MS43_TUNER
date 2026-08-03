@@ -41,6 +41,30 @@ public sealed class CompareTests : IDisposable
     private static IEnumerable<string> Rows(CompareViewModel compare) =>
         compare.Entries.OfType<CompareRow>().Select(row => row.Difference.Item.Title);
 
+    // Same crash as the Tune rail's category headers: selecting a row rebuilds the list inside the ListBox's own selection change.
+    [AvaloniaFact]
+    public async Task ClickingRowsAndTheBytesRowInTheListDoesNotCrash()
+    {
+        if (!Available)
+        {
+            return;
+        }
+
+        var (window, _, compare) = await Open();
+        var list = Find.Named<ListBox>(window, "DiffList");
+
+        foreach (var title in Rows(compare).Take(12).ToList())
+        {
+            list.SelectedItem = compare.Entries.OfType<CompareRow>().Single(row => row.Difference.Item.Title == title);
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Assert.Equal(title, compare.Selected?.Item.Title);
+        }
+
+        list.SelectedItem = compare.Entries.OfType<CompareBytesRow>().Single();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.True(compare.ShowsBytes);
+    }
+
     [AvaloniaFact]
     public async Task CompareTabListsDifferencesGroupedByCategory()
     {

@@ -192,6 +192,37 @@
         <Setter Property="Height" Value="32" />
         <Setter Property="Padding" Value="0" />
     </Style>
+    <!-- Window buttons (they replace the system title bar): Windows' 46 px caption cells, square and outline-free, so they
+         read as the window's own controls and not as app actions. Close turns red on hover, the convention people look for. -->
+    <Style Selector="Button.caption">
+        <Setter Property="Width" Value="46" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="0" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+        <Setter Property="Cursor" Value="Arrow" />
+    </Style>
+    <Style Selector="Button.caption:pointerover">
+        <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+    </Style>
+    <Style Selector="Button.caption.close:pointerover">
+        <Setter Property="Background" Value="{DynamicResource CaptionCloseBrush}" />
+        <Setter Property="Foreground" Value="#FFFFFF" />
+    </Style>
+    <Style Selector="Button.caption.close:pointerover /template/ Border#PART_Overlay">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.caption.close:pressed">
+        <Setter Property="Background" Value="{DynamicResource CaptionClosePressedBrush}" />
+        <Setter Property="Foreground" Value="#FFFFFF" />
+    </Style>
+    <Style Selector="Button.caption.close:pressed /template/ Border#PART_Overlay">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+
     <!-- Tool group: one Edge outline around several text buttons, with hairline dividers. -->
     <Style Selector="Border.toolgroup">
         <Setter Property="BorderBrush" Value="{DynamicResource EdgeBrush}" />

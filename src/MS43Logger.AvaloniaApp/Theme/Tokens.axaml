@@ -36,6 +36,9 @@
             <SolidColorBrush x:Key="NowTextBrush" Color="#B4470A" />
             <Color x:Key="WarnColor">#B42318</Color>
             <SolidColorBrush x:Key="WarnBrush" Color="#B42318" />
+            <!-- Close-button hover: Day's warn red in both themes, so its white glyph stays at 6.6:1. -->
+            <SolidColorBrush x:Key="CaptionCloseBrush" Color="#B42318" />
+            <SolidColorBrush x:Key="CaptionClosePressedBrush" Color="#8F1C13" />
             <Color x:Key="Map1Color">#CCF1EA</Color>
             <SolidColorBrush x:Key="Map1Brush" Color="#CCF1EA" />
             <Color x:Key="Map2Color">#9EDFE0</Color>
@@ -159,6 +162,8 @@
             <SolidColorBrush x:Key="NowTextBrush" Color="#FF7A1A" />
             <Color x:Key="WarnColor">#FF6259</Color>
             <SolidColorBrush x:Key="WarnBrush" Color="#FF6259" />
+            <SolidColorBrush x:Key="CaptionCloseBrush" Color="#B42318" />
+            <SolidColorBrush x:Key="CaptionClosePressedBrush" Color="#8F1C13" />
             <Color x:Key="Map1Color">#02423A</Color>
             <SolidColorBrush x:Key="Map1Brush" Color="#02423A" />
             <Color x:Key="Map2Color">#005C5E</Color>

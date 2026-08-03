@@ -20,7 +20,7 @@ internal static class GateClickThrough
     public static readonly string[] ShellControls =
     [
         "TabLive", "TabTune", "TabCompare", "FileMenuButton", "SaveButton", "ConnectionButton", "ConnectButton", "SettingsButton",
-        "NightButton", "DayButton", "ReadoutsTiles", "ReadoutsDials", "RescanButton",
+        "NightButton", "DayButton", "ReadoutsTiles", "ReadoutsDials", "RescanButton", "MinimizeButton", "MaximizeButton", "CloseButton",
     ];
 
     public static readonly (string Screen, Func<bool, Task<GateClicks?>> Run)[] Screens =
@@ -86,6 +86,12 @@ internal static class GateClickThrough
         Theme(shell, night);
         c.Press("ReadoutsDials", "shows the band as dials and saves it", () => shell.IsDials && shell.Tune.Settings.Readouts == ReadoutsMode.Dials);
         c.Press("ReadoutsTiles", "shows the band as tiles and saves it", () => shell.IsTiles && shell.Tune.Settings.Readouts == ReadoutsMode.Tiles);
+        c.Press("MinimizeButton", "minimizes the window", () => window.WindowState == WindowState.Minimized);
+        window.WindowState = WindowState.Normal;
+        c.Press("MaximizeButton", "maximizes the window, then restores it", () => window.WindowState == WindowState.Maximized);
+        GateClicks.Activate(c.Named<Button>("MaximizeButton"));
+        Assert.Equal(WindowState.Normal, window.WindowState);
+        c.Note(c.Named<Button>("CloseButton"), "closes the window through the unsaved-edits prompt; pressed in TitleBarTests.CloseCloses");
         c.Note(c.Named<Button>("SaveButton"), "hidden without a bin; pressed in the tune script");
         c.Audit(window, IsShell);
 

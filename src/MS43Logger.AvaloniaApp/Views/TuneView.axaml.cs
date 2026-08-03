@@ -79,15 +79,21 @@ public partial class TuneView : UserControl
             return;
         }
 
-        switch (list.SelectedItem)
+        // Both actions rebuild the rail. Rebuilding it inside the ListBox's own selection change made the ListBox read
+        // its selection from the new, shorter list and crash, so the action runs once the change has finished.
+        var entry = list.SelectedItem;
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
-            case RailItem item:
-                tune.SelectedItem = item.Item;
-                break;
-            case RailCategory category:
-                tune.ToggleCategory(category.Name);
-                break;
-        }
+            switch (entry)
+            {
+                case RailItem item:
+                    tune.SelectedItem = item.Item;
+                    break;
+                case RailCategory category:
+                    tune.ToggleCategory(category.Name);
+                    break;
+            }
+        });
     }
 
     private void Tool_Click(object? sender, RoutedEventArgs e)
