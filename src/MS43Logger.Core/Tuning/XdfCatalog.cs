@@ -13,6 +13,15 @@ public enum ItemKind
     Flag,
 }
 
+/// <summary>How the rail orders items: by title, by address in the bin, by kind (maps first), or by element count.</summary>
+public enum ItemSort
+{
+    Name,
+    Address,
+    Kind,
+    Size,
+}
+
 /// <summary>Browsing helpers over an XDF: item kinds, switch choices, categories and search.</summary>
 public sealed partial class XdfCatalog
 {
@@ -21,6 +30,7 @@ public sealed partial class XdfCatalog
     private readonly XdfDefinition _xdf;
     private readonly List<XdfItem> _all;
     private readonly Dictionary<XdfConstant, IReadOnlyList<(long Value, string Label)>?> _choices = new();
+    private readonly Dictionary<XdfItem, string> _haystacks = new();
 
     public XdfCatalog(XdfDefinition xdf)
     {
@@ -55,12 +65,59 @@ public sealed partial class XdfCatalog
         return choices;
     }
 
-    public IReadOnlyList<(string Category, int Count)> Categories() =>
-        _all.SelectMany(CategoryNames)
-            .GroupBy(name => name)
-            .Select(group => (group.Key, group.Count()))
-            .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+    public IReadOnlyList<(string Category, int Count)> Categories() => Categories(ItemSort.Name, descending: false);
+
+    /// <summary>Categories by name, or by how many items they hold for <see cref="ItemSort.Size"/>; address and kind keep them by name.</summary>
+    public IReadOnlyList<(string Category, int Count)> Categories(ItemSort sort, bool descending)
+    {
+        var all = _all.SelectMany(CategoryNames).GroupBy(name => name).Select(group => (Category: group.Key, Count: group.Count()));
+        var ordered = sort == ItemSort.Size
+            ? Order(all, pair => pair.Count, descending).ThenBy(pair => pair.Category, StringComparer.OrdinalIgnoreCase)
+            : descending
+                ? all.OrderByDescending(pair => pair.Category, StringComparer.OrdinalIgnoreCase)
+                : all.OrderBy(pair => pair.Category, StringComparer.OrdinalIgnoreCase);
+        return ordered.Select(pair => (pair.Category, pair.Count)).ToList();
+    }
+
+    /// <summary>Orders items by <paramref name="sort"/>; ties, and items without an address, fall back to the title.</summary>
+    public IReadOnlyList<XdfItem> Sort(IEnumerable<XdfItem> items, ItemSort sort, bool descending)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        var ordered = sort switch
+        {
+            ItemSort.Address => Order(items, item => Address(item) ?? (descending ? long.MinValue : long.MaxValue), descending),
+            ItemSort.Kind => Order(items, item => (int)Kind(item), descending),
+            ItemSort.Size => Order(items, Size, descending),
+            _ => descending
+                ? items.OrderByDescending(item => item.Title, StringComparer.OrdinalIgnoreCase)
+                : items.OrderBy(item => item.Title, StringComparer.OrdinalIgnoreCase),
+        };
+        return (sort == ItemSort.Name ? ordered : ordered.ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase)).ToList();
+    }
+
+    /// <summary>Where the item's data starts in the bin (base offset included), or null when the XDF gives none.</summary>
+    public static long? Address(XdfItem item) => item switch
+    {
+        XdfTable table => table.Z.Data.Address,
+        XdfConstant constant => constant.Data.Address,
+        XdfFlag flag => flag.Data.Address,
+        _ => null,
+    };
+
+    /// <summary>How many values the item holds: rows × columns for a table, 1 for a value or flag.</summary>
+    public static int Size(XdfItem item) => item is XdfTable table ? table.Z.Data.Count : 1;
+
+    /// <summary>What a category holds, for its tooltip: "11 items: 6 maps, 3 curves, 2 values" (XDF categories have no description).</summary>
+    public string Summary(string category)
+    {
+        var items = InCategory(category);
+        var kinds = items.GroupBy(Kind).OrderBy(group => group.Key)
+            .Select(group => $"{group.Count()} {group.Key.ToString().ToLowerInvariant()}{(group.Count() == 1 ? "" : "s")}");
+        return $"{items.Count} item{(items.Count == 1 ? "" : "s")}: {string.Join(", ", kinds)}";
+    }
+
+    private static IOrderedEnumerable<T> Order<T, TKey>(IEnumerable<T> items, Func<T, TKey> key, bool descending) =>
+        descending ? items.OrderByDescending(key) : items.OrderBy(key);
 
     public IReadOnlyList<XdfItem> InCategory(string category) =>
         _all.Where(item => CategoryNames(item).Contains(category)).OrderBy(item => item.Title, StringComparer.OrdinalIgnoreCase).ToList();
@@ -71,7 +128,11 @@ public sealed partial class XdfCatalog
         return _xdf.Tables.Where(table => table.X.LinkedTableId == axis.UniqueId || table.Y.LinkedTableId == axis.UniqueId).ToList();
     }
 
-    /// <summary>Title prefix matches first, then title matches, then description matches; case-insensitive.</summary>
+    /// <summary>
+    /// Every word of the query must appear somewhere in the item: its title, description, categories, units or address
+    /// ("0x77315" or "77315"). Case-insensitive. Best matches first: the title starting with the query, then the title
+    /// containing it, then every word in the title, then the rest.
+    /// </summary>
     public IReadOnlyList<XdfItem> Search(string text, int max = 200)
     {
         var query = (text ?? string.Empty).Trim();
@@ -80,18 +141,52 @@ public sealed partial class XdfCatalog
             return Array.Empty<XdfItem>();
         }
 
+        var words = Words(query);
+        bool HasAll(string where) => words.All(word => where.Contains(word, StringComparison.OrdinalIgnoreCase));
+
         int Rank(XdfItem item) =>
             item.Title.StartsWith(query, StringComparison.OrdinalIgnoreCase) ? 0 :
             item.Title.Contains(query, StringComparison.OrdinalIgnoreCase) ? 1 :
-            item.Description.Contains(query, StringComparison.OrdinalIgnoreCase) ? 2 : 3;
+            HasAll(item.Title) ? 2 :
+            HasAll(Haystack(item)) ? 3 : 4;
 
         return _all.Select(item => (Item: item, Rank: Rank(item)))
-            .Where(pair => pair.Rank < 3)
+            .Where(pair => pair.Rank < 4)
             .OrderBy(pair => pair.Rank)
             .ThenBy(pair => pair.Item.Title, StringComparer.OrdinalIgnoreCase)
             .Take(max)
             .Select(pair => pair.Item)
             .ToList();
+    }
+
+    /// <summary>True when every word of <paramref name="query"/> is somewhere in the item, as <see cref="Search"/> finds it; an empty query matches all.</summary>
+    public bool Matches(XdfItem item, string query)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        var text = Haystack(item);
+        return Words(query).All(word => text.Contains(word, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>The words of a search, split on white space.</summary>
+    public static string[] Words(string? query) => (query ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+
+    // Everything a search can find an item by, joined; built once per item.
+    private string Haystack(XdfItem item)
+    {
+        if (!_haystacks.TryGetValue(item, out var text))
+        {
+            var units = item switch
+            {
+                XdfTable table => new[] { table.Z.Units, table.X.Units, table.Y.Units },
+                XdfConstant constant => new[] { constant.Units },
+                _ => Array.Empty<string>(),
+            };
+            var address = Address(item) is long at ? $"0x{at:X} {at:X}" : string.Empty;
+            text = string.Join(" ", new[] { item.Title, item.Description, address }.Concat(units).Concat(CategoryNames(item)));
+            _haystacks[item] = text;
+        }
+
+        return text;
     }
 
     private IEnumerable<string> CategoryNames(XdfItem item)

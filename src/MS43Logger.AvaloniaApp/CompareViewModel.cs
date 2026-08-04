@@ -421,10 +421,9 @@ public sealed class CompareViewModel : ViewModelBase
     private IEnumerable<ItemDifference> Visible()
     {
         var kinds = KindFilters.Single(filter => filter.Key == Kind).Kinds;
-        var query = SearchText.Trim();
-        return Result?.Items.Where(item => kinds.Contains(item.Kind) && (query.Length == 0
-                   || item.Item.Title.Contains(query, StringComparison.OrdinalIgnoreCase)
-                   || item.Item.Description.Contains(query, StringComparison.OrdinalIgnoreCase)))
+        // The same search as the Tune rail: every word anywhere in the item (title, description, category, units, address).
+        var catalog = _tune.Catalog;
+        return Result?.Items.Where(item => kinds.Contains(item.Kind) && (catalog?.Matches(item.Item, SearchText) ?? true))
                ?? Enumerable.Empty<ItemDifference>();
     }
 
