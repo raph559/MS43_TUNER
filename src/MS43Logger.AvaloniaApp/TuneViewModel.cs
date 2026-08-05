@@ -12,7 +12,8 @@ public abstract record RailEntry;
 
 public sealed record RailGroup(string Title) : RailEntry;
 
-public sealed record RailCategory(string Name, int Count, bool IsExpanded) : RailEntry;
+/// <param name="Summary">What the category holds, for its tooltip (XDF categories carry no description).</param>
+public sealed record RailCategory(string Name, int Count, bool IsExpanded, string Summary = "") : RailEntry;
 
 /// <summary>One inspector row: a label and a value, with an optional second line; <see cref="TextIsId"/> sets the value as an id.</summary>
 public sealed record Fact(string Label, string Text, string? Detail = null, bool TextIsId = false);
@@ -33,9 +34,14 @@ public enum SaveChoice
     Cancel,
 }
 
-public sealed record RailItem(XdfItem Item, ItemKind Kind, bool IsPinned, bool IsModified, bool IsCurrent, bool IsIndented, bool IsDifferent = false) : RailEntry
+/// <param name="Detail">The tooltip's facts line: kind, size, units and address ("Map, 20 × 16, °CRK, at 0x77315").</param>
+public sealed record RailItem(XdfItem Item, ItemKind Kind, bool IsPinned, bool IsModified, bool IsCurrent, bool IsIndented, bool IsDifferent = false, string Detail = "") : RailEntry
 {
     public string Title => Item.Title;
+
+    public string Description => Item.Description;
+
+    public bool HasDescription => !string.IsNullOrWhiteSpace(Item.Description);
 }
 
 /// <summary>The Tune screen: the open bin and XDF, the map rail, and the selected item.</summary>
@@ -272,7 +278,9 @@ public sealed class TuneViewModel : ViewModelBase
     }
 
     /// <summary>The surface's line: how to turn it, then what it leaves out.</summary>
-    public string SurfaceHint => SurfaceNote is { } note ? "Drag to turn, or use the arrow keys. " + note : "Drag to turn, or use the arrow keys.";
+    public string SurfaceHint => SurfaceNote is { } note ? SurfaceHelp + " " + note : SurfaceHelp;
+
+    private const string SurfaceHelp = "Drag to turn, Shift-drag to move, wheel to zoom. Home resets.";
 
     /// <summary>Asks whether to save unsaved edits; set by the window. Without it, unsaved edits are never dropped.</summary>
     public Func<string, Task<SaveChoice>>? AskToSave { get; set; }
@@ -566,6 +574,111 @@ public sealed class TuneViewModel : ViewModelBase
         RebuildRail();
     }
 
+    /// <summary>How the rail orders categories and items. Pinned and Recent keep their own order; search keeps best matches first.</summary>
+    public ItemSort Sort => _settings.RailSort;
+
+    public bool SortDescending => _settings.RailSortDescending;
+
+    public bool SortIsName => Sort == ItemSort.Name;
+
+    public bool SortIsAddress => Sort == ItemSort.Address;
+
+    public bool SortIsKind => Sort == ItemSort.Kind;
+
+    public bool SortIsSize => Sort == ItemSort.Size;
+
+    /// <summary>The sort button's tooltip, in the words of the chosen order.</summary>
+    public string SortTip => "Sorted by " + (Sort, SortDescending) switch
+    {
+        (ItemSort.Address, false) => "address, lowest first",
+        (ItemSort.Address, true) => "address, highest first",
+        (ItemSort.Kind, false) => "kind, maps first",
+        (ItemSort.Kind, true) => "kind, flags first",
+        (ItemSort.Size, false) => "size, smallest first",
+        (ItemSort.Size, true) => "size, largest first",
+        (_, true) => "name, Z to A",
+        _ => "name, A to Z",
+    };
+
+    public void SetSort(ItemSort sort, bool descending)
+    {
+        if (_settings.RailSort == sort && _settings.RailSortDescending == descending)
+        {
+            return;
+        }
+
+        (_settings.RailSort, _settings.RailSortDescending) = (sort, descending);
+        _settings.Save();
+        foreach (var name in new[] { nameof(Sort), nameof(SortDescending), nameof(SortIsName), nameof(SortIsAddress), nameof(SortIsKind), nameof(SortIsSize), nameof(SortTip) })
+        {
+            OnPropertyChanged(name);
+        }
+
+        RebuildRail();
+    }
+
+    // "Map, 20 × 16, °CRK, at 0x77315": what the item is, how big, in what, and where.
+    private static string Detail(XdfItem item, ItemKind kind)
+    {
+        var parts = new List<string> { kind.ToString() };
+        if (item is XdfTable table)
+        {
+            parts.Add(table.Z.Data.Cols > 1 && table.Z.Data.Rows > 1 ? $"{table.Z.Data.Rows} × {table.Z.Data.Cols}" : $"{table.Z.Data.Count} points");
+        }
+
+        var units = item switch
+        {
+            XdfTable table2 => table2.Z.Units,
+            XdfConstant constant => constant.Units,
+            _ => string.Empty,
+        };
+        if (!string.IsNullOrWhiteSpace(units) && units != "-")
+        {
+            parts.Add(units);
+        }
+
+        if (XdfCatalog.Address(item) is long address)
+        {
+            parts.Add($"at 0x{address:X}");
+        }
+
+        return string.Join(", ", parts);
+    }
+
+    public const double RailMinWidth = 200;
+
+    public const double RailMaxWidth = 480;
+
+    /// <summary>The rail's width as the user dragged it, or null for the layout's own (256 px, 224 below 1280).</summary>
+    public double? RailWidth => _settings.RailWidth;
+
+    /// <summary>True while the rail is folded to its strip (Ctrl B). Remembered between runs.</summary>
+    public bool RailCollapsed => _settings.RailCollapsed;
+
+    public void SetRailCollapsed(bool collapsed)
+    {
+        if (_settings.RailCollapsed == collapsed)
+        {
+            return;
+        }
+
+        _settings.RailCollapsed = collapsed;
+        _settings.Save();
+        OnPropertyChanged(nameof(RailCollapsed));
+    }
+
+    /// <summary>Sets the rail's width, kept between <see cref="RailMinWidth"/> and <see cref="RailMaxWidth"/>; null goes back to the default.</summary>
+    public void SetRailWidth(double? width, bool save)
+    {
+        _settings.RailWidth = width is double wanted ? Math.Clamp(Math.Round(wanted), RailMinWidth, RailMaxWidth) : null;
+        if (save)
+        {
+            _settings.Save();
+        }
+
+        OnPropertyChanged(nameof(RailWidth));
+    }
+
     public void ToggleCategory(string name)
     {
         if (!_expanded.Remove(name))
@@ -837,7 +950,9 @@ public sealed class TuneViewModel : ViewModelBase
         var modified = document.ModifiedItems().ToHashSet();
         var differs = CompareItems ?? new HashSet<XdfItem>();
         RailItem Entry(XdfItem item, bool indented) =>
-            new(item, catalog.Kind(item), _settings.IsPinned(item.Title), modified.Contains(item), ReferenceEquals(item, SelectedItem), indented, differs.Contains(item));
+            new(item, catalog.Kind(item), _settings.IsPinned(item.Title), modified.Contains(item), ReferenceEquals(item, SelectedItem), indented, differs.Contains(item),
+                Detail(item, catalog.Kind(item)));
+        IReadOnlyList<XdfItem> Sorted(IEnumerable<XdfItem> items) => catalog.Sort(items, Sort, SortDescending);
 
         if (SearchText.Trim().Length > 0)
         {
@@ -851,7 +966,7 @@ public sealed class TuneViewModel : ViewModelBase
 
         if (DiffersOnly)
         {
-            var listed = differs.Where(item => !ModifiedOnly || modified.Contains(item)).OrderBy(item => item.Title, StringComparer.OrdinalIgnoreCase).ToList();
+            var listed = Sorted(differs.Where(item => !ModifiedOnly || modified.Contains(item))).ToList();
             Rail.Add(new RailGroup(listed.Count == 0 ? $"Nothing differs from {CompareFileB}" : $"Differs from {CompareFileB}"));
             listed.ForEach(item => Rail.Add(Entry(item, false)));
             return;
@@ -860,7 +975,7 @@ public sealed class TuneViewModel : ViewModelBase
         if (ModifiedOnly)
         {
             Rail.Add(new RailGroup(modified.Count == 0 ? "No changes since the last save" : "Changed since the last save"));
-            foreach (var item in modified)
+            foreach (var item in Sorted(modified))
             {
                 Rail.Add(Entry(item, false));
             }
@@ -883,13 +998,13 @@ public sealed class TuneViewModel : ViewModelBase
         }
 
         Rail.Add(new RailGroup("Categories"));
-        foreach (var (name, count) in catalog.Categories())
+        foreach (var (name, count) in catalog.Categories(Sort, SortDescending))
         {
             var expanded = _expanded.Contains(name);
-            Rail.Add(new RailCategory(name, count, expanded));
+            Rail.Add(new RailCategory(name, count, expanded, catalog.Summary(name)));
             if (expanded)
             {
-                foreach (var item in catalog.InCategory(name))
+                foreach (var item in Sorted(catalog.InCategory(name)))
                 {
                     Rail.Add(Entry(item, true));
                 }

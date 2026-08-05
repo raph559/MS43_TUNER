@@ -1044,12 +1044,14 @@ public class MainWindowViewModel : INotifyPropertyChanged
         PinnedValues.Clear();
         OtherValues.Clear();
         IEnumerable<DecodedValueViewModel> filtered = _allLiveValues;
-        if (!string.IsNullOrWhiteSpace(SearchText))
+        // Every word somewhere in the channel's ID, name or units, as the Tune rail searches its items.
+        var words = MS43Logger.Core.Tuning.XdfCatalog.Words(SearchText);
+        if (words.Length > 0)
         {
-            filtered = filtered.Where(value =>
-                value.Id.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
-                value.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
-                value.Units.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
+            filtered = filtered.Where(value => words.All(word =>
+                value.Id.Contains(word, StringComparison.OrdinalIgnoreCase) ||
+                value.Title.Contains(word, StringComparison.OrdinalIgnoreCase) ||
+                value.Units.Contains(word, StringComparison.OrdinalIgnoreCase)));
         }
 
         if (ShowPinnedOnly)
