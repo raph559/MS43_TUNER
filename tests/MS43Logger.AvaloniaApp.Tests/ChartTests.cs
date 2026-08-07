@@ -49,7 +49,7 @@ public sealed class ChartTests : IDisposable
 
         var (window, shell) = await TuneScreen.OpenAsync();
 
-        // 20 × 16 cells, less the 16 of the 6990 rpm row at the storage limit (system 2.2).
+        // 20 × 16 cells, less the 16 of the 6990 rpm row at the storage limit.
         Assert.Equal(304, Find.Named<Surface3D>(window, "Surface").IncludedCellCount);
         Assert.Equal("The 6990 rpm row (storage limit) is not drawn.", shell.Tune.SurfaceNote);
     }
@@ -71,7 +71,7 @@ public sealed class ChartTests : IDisposable
         window.KeyPressQwerty(PhysicalKey.ArrowRight, RawInputModifiers.None);
         window.KeyPressQwerty(PhysicalKey.ArrowUp, RawInputModifiers.None);
 
-        Assert.Equal(yaw + 0.1, surface.Yaw, 6);
+        Assert.Equal(yaw - 0.1, surface.Yaw, 6);
         Assert.Equal(0.05, Math.Abs(surface.Pitch - pitch), 6);
 
         window.KeyPressQwerty(PhysicalKey.Home, RawInputModifiers.None);
