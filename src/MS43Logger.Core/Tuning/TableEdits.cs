@@ -28,6 +28,17 @@ public readonly record struct CellRange
     public bool Contains(int row, int col) => row >= Row0 && row <= Row1 && col >= Col0 && col <= Col1;
 }
 
+/// <summary>
+/// Which way Interpolate and Smooth work, as in TunerPro: X along each row (across the columns), Y along each column (across
+/// the rows), XY both at once.
+/// </summary>
+public enum EditAxis
+{
+    XY,
+    X,
+    Y,
+}
+
 public sealed record CellChange(int Row, int Col, long OldRaw, long NewRaw);
 
 /// <summary>Raw changes for one item, computed but not yet applied.</summary>
@@ -102,10 +113,18 @@ public static class TableEdits
         var values = Read(d, t);
         var (min, max) = RawRange(t.Z.Data);
         var changes = new List<CellChange>();
+        var codec = d.Reader.Codec;
+
+        // A step moves the value as it is shown: + raises it. Where the equation falls as the raw count rises (the AFR
+        // target's (1 - (k X - 0.5)) Y), that is a step down in raw.
+        bool Rises(long raw) => raw < max
+            ? codec.ToPhysical(t.Z.Math, raw + 1) >= codec.ToPhysical(t.Z.Math, raw)
+            : codec.ToPhysical(t.Z.Math, raw - 1) <= codec.ToPhysical(t.Z.Math, raw);
+
         ForEach(values, r, (row, col) =>
         {
             var old = values.Raw[row, col];
-            var raw = Math.Clamp(old + rawSteps, min, max);
+            var raw = Math.Clamp(old + (Rises(old) ? rawSteps : -rawSteps), min, max);
             if (raw != old)
             {
                 changes.Add(new CellChange(row, col, old, raw));
@@ -157,6 +176,34 @@ public static class TableEdits
     /// Writes <paramref name="source"/>'s raw values for <paramref name="item"/> into the document: every differing cell of a
     /// table (an axis copy that would make the axis go down is refused), a value, or a flag's own bit.
     /// </summary>
+    /// <summary>Writes <paramref name="source"/>'s raw values into the cells of <paramref name="range"/> only (Tune's Copy from B).</summary>
+    public static EditPlan CopyFrom(CalibrationDocument d, XdfTable table, CellRange range, BinImage source)
+    {
+        ArgumentNullException.ThrowIfNull(d);
+        ArgumentNullException.ThrowIfNull(table);
+        ArgumentNullException.ThrowIfNull(source);
+        var values = Read(d, table);
+        var changes = new List<CellChange>();
+        ForEach(values, range, (row, col) =>
+        {
+            var raw = source.ReadElement(table.Z.Data, row * values.Cols + col);
+            if (raw != values.Raw[row, col])
+            {
+                changes.Add(new CellChange(row, col, values.Raw[row, col], raw));
+            }
+        });
+        var plan = Finish(d, table, values, changes);
+        if (changes.Count == 0)
+        {
+            return plan;
+        }
+
+        // Cells copied onto other breakpoints mean something else: say so.
+        var moved = BinComparer.CompareTable(d.Xdf, d.Image, source, table).Axes
+            .Select(axis => $"'{table.Title}': its {axis.Direction} axis{(axis.A.Name is { } name ? $" ({name})" : string.Empty)} still differs from the source, so the copied cells now sit on A's breakpoints.");
+        return plan with { Warnings = plan.Warnings.Concat(moved).ToList() };
+    }
+
     public static EditPlan CopyFrom(CalibrationDocument d, XdfItem item, BinImage source)
     {
         ArgumentNullException.ThrowIfNull(d);
@@ -165,26 +212,8 @@ public static class TableEdits
         switch (item)
         {
             case XdfTable table:
-                var values = Read(d, table);
-                var changes = new List<CellChange>();
-                ForEach(values, new CellRange(0, 0, values.Rows - 1, values.Cols - 1), (row, col) =>
-                {
-                    var raw = source.ReadElement(table.Z.Data, row * values.Cols + col);
-                    if (raw != values.Raw[row, col])
-                    {
-                        changes.Add(new CellChange(row, col, values.Raw[row, col], raw));
-                    }
-                });
-                var plan = Finish(d, table, values, changes);
-                if (changes.Count == 0)
-                {
-                    return plan;
-                }
-
-                // Cells copied onto other breakpoints mean something else: say so.
-                var moved = BinComparer.CompareTable(d.Xdf, d.Image, source, table).Axes
-                    .Select(axis => $"'{table.Title}': its {axis.Direction} axis{(axis.A.Name is { } name ? $" ({name})" : string.Empty)} still differs from the source, so the copied cells now sit on A's breakpoints.");
-                return plan with { Warnings = plan.Warnings.Concat(moved).ToList() };
+                var size = Read(d, table);
+                return CopyFrom(d, table, new CellRange(0, 0, size.Rows - 1, size.Cols - 1), source);
             case XdfConstant constant:
                 EnsureEditable(constant.Title, constant.Data);
                 return SetConstantRaw(d, constant, source.ReadElement(constant.Data, 0));

@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using MS43Logger.Core.Tuning;
 
 namespace MS43Logger.AvaloniaApp;
@@ -17,12 +18,16 @@ public sealed record CompareRow(ItemDifference Difference, bool IsCurrent) : Com
 {
     public string Title => Difference.Item.Title;
 
+    public string Description => Difference.Item.Description;
+
+    public bool HasDescription => !string.IsNullOrWhiteSpace(Difference.Item.Description);
+
+    public string Detail => $"{Difference.Category}, {Difference.Kind.ToString().ToLowerInvariant()}";
+
     /// <summary>"12 of 320" for tables, "4512 → 3520" for values, switches and flags.</summary>
     public string Summary => Difference.Item is XdfTable
         ? $"{Difference.ChangedCells} of {Difference.Cells}"
         : $"{Difference.ValueA} → {Difference.ValueB}";
-
-    public string Detail => $"{Difference.Category}, {Difference.Kind.ToString().ToLowerInvariant()}";
 
     public string Units => CompareViewModel.UnitsOf(Difference.Item);
 }
