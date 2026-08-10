@@ -165,7 +165,7 @@ public sealed class MapGrid : Control
         var values = editor.Values;
         var z = values.Table.Z;
         var physical = values.Physical[row, col];
-        return editor.IsDelta ? BinComparer.FormatDelta(physical, values.Raw[row, col], z, editor.ShowRaw)
+        return editor.IsDelta ? BinComparer.FormatDelta(physical, values.Raw[row, col], z, editor.ShowRaw ? DeltaMode.Raw : editor.DeltaMode)
             : editor.ShowRaw ? values.Raw[row, col].ToString(CultureInfo.InvariantCulture)
             : ValueCodec.Format(physical, values.Raw[row, col], z.DecimalPlaces, z.OutputType, z.Data.ElementBits);
     }
@@ -372,6 +372,13 @@ public sealed class MapGrid : Control
                 if (editor.ChangedCells.Contains((r, c)))
                 {
                     Mark(context, editor.Mark, bounds, text);
+                }
+
+                // Differs from B (Tune's compare mode): the ring in the top-left corner, so a cell both changed and differing
+                // shows both.
+                if (editor.DiffersCells.Contains((r, c)))
+                {
+                    context.DrawEllipse(null, new Pen(new SolidColorBrush(text), 1.5), new Point(bounds.Left + 5, bounds.Top + 5), 2.25, 2.25);
                 }
             }
         }

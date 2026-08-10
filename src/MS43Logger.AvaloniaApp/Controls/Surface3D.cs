@@ -65,6 +65,25 @@ public sealed class Surface3D : Control
 
     public string? InfoText { get => _infoText; private set => SetAndRaise(InfoTextProperty, ref _infoText, value); }
 
+    // The selection, or, during a Ctrl-drag, how much it would change and where it would end.
+    private void UpdateInfo()
+    {
+        if (Editor is not { } editor)
+        {
+            InfoText = null;
+            return;
+        }
+
+        if (_dragEdits && _pendingSteps != 0)
+        {
+            InfoText = editor.PreviewStep(_pendingSteps);
+            return;
+        }
+
+        var where = editor.SelectionText;
+        InfoText = where.Length == 0 ? null : editor.SelectionValuesText is { } values ? $"{where}, {values}" : where;
+    }
+
     public const double MinZoom = 0.5;
     public const double MaxZoom = 4;
 
@@ -248,6 +267,7 @@ public sealed class Surface3D : Control
                 editor.PropertyChanged += OnEditorChanged;
             }
 
+            UpdateInfo();
             InvalidateVisual();
         }
     }
@@ -255,6 +275,26 @@ public sealed class Surface3D : Control
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
+        // Esc drops a Ctrl-drag under way: nothing is written.
+        if (e.Key == Key.Escape && _dragEdits)
+        {
+            _pendingSteps = 0;
+            _dragEdits = false;
+            UpdateInfo();
+            e.Handled = true;
+            InvalidateVisual();
+            return;
+        }
+
+        // + and - step the selection; with Ctrl they zoom (as in a browser). Without a selection they zoom too.
+        var zoomKey = e.KeyModifiers.HasFlag(KeyModifiers.Control) || Editor?.Selection is null;
+        if (e.Key is Key.OemPlus or Key.Add or Key.OemMinus or Key.Subtract && !zoomKey)
+        {
+            Step(e.Key is Key.OemPlus or Key.Add ? 1 : -1);
+            e.Handled = true;
+            return;
+        }
+
         // Left and Right turn the near side that way, as a drag would; Up and Down tip it.
         switch (e.Key)
         {
@@ -320,7 +360,22 @@ public sealed class Surface3D : Control
         if (_dragFrom is Point from)
         {
             var moved = e.GetPosition(this) - from;
-            if (_dragMoves)
+            _dragTravelled |= Math.Abs(moved.X) > ClickSlop || Math.Abs(moved.Y) > ClickSlop;
+            if (_dragEdits)
+            {
+                // Up raises: one step for every PixelsPerStep, applied on release.
+                var steps = (int)Math.Round(-moved.Y / PixelsPerStep);
+                if (steps != _pendingSteps)
+                {
+                    _pendingSteps = steps;
+                    UpdateInfo();
+                }
+            }
+            else if (!_dragTravelled)
+            {
+                return;
+            }
+            else if (_dragMoves)
             {
                 _pan = _dragStart.Pan + moved;
             }
@@ -334,11 +389,31 @@ public sealed class Surface3D : Control
         }
     }
 
+    // A press that did not travel is a click: it picks the point under it (Shift: a range from the active cell). A Ctrl-drag
+    // writes its steps now, as one edit.
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
+        var at = e.GetPosition(this);
+        var clicked = _dragFrom is not null && !_dragTravelled && !_dragEdits && e.InitialPressMouseButton == MouseButton.Left;
+        if (_dragEdits)
+        {
+            Step(_pendingSteps);
+        }
+
         _dragFrom = null;
+        _dragEdits = false;
+        _pendingSteps = 0;
         e.Pointer.Capture(null);
+        UpdateInfo();
+        if (clicked && Editor is { } editor && Pick(at) is (int row, int col))
+        {
+            editor.Selection = e.KeyModifiers.HasFlag(KeyModifiers.Shift) && editor.Selection is not null
+                ? new CellRange(editor.ActiveCell.Row, editor.ActiveCell.Col, row, col)
+                : new CellRange(row, col, row, col);
+        }
+
+        InvalidateVisual();
     }
 
     public override void Render(DrawingContext context)
@@ -409,8 +484,9 @@ public sealed class Surface3D : Control
 
         var font = new Typeface(ThemeBrushes.Font(this, "UiFont"));
         var ink3 = ThemeBrushes.Get(this, "Ink3Brush");
-        Label(context, values.Y.Units.Length > 0 ? values.Y.Units : "rows", font, ink3, P(-0.14, 0.5, 0).Point);
-        Label(context, values.X.Units.Length > 0 ? values.X.Units : "columns", font, ink3, P(0.5, 1.13, 0).Point);
+        DrawScales(context, editor, values, range, font, ink3, P);
+
+        DrawSelection(context, editor, values, pane, font);
 
         if (editor.Live is { } live)
         {
@@ -432,10 +508,113 @@ public sealed class Surface3D : Control
         }
     }
 
+    // The selected cells' points: an Ink1 ring with a Pane halo, as the grid frames them. During a Ctrl-drag a line rises (or
+    // falls) from the first one with the step count, so the edit can be seen before it is written.
+    private void DrawSelection(DrawingContext context, TableEditorViewModel editor, TableValues values, Color pane, Typeface font)
+    {
+        if (editor.Selection is not CellRange selection)
+        {
+            return;
+        }
+
+        var ink1 = ThemeBrushes.Get(this, "Ink1Brush");
+        var halo = new Pen(new SolidColorBrush(pane), 4);
+        var ring = new Pen(ink1, 1.5);
+        Point? first = null;
+        for (var r = selection.Row0; r <= selection.Row1; r++)
+        {
+            for (var c = selection.Col0; c <= selection.Col1; c++)
+            {
+                if (PointOf(r, c) is Point at)
+                {
+                    first ??= at;
+                    context.DrawEllipse(null, halo, at, 3.5, 3.5);
+                    context.DrawEllipse(null, ring, at, 3.5, 3.5);
+                }
+            }
+        }
+
+        // The active point carries its value, so a click on the surface says what is there.
+        if (PointOf(editor.ActiveCell.Row, editor.ActiveCell.Col) is Point active && !(_dragEdits && _pendingSteps != 0))
+        {
+            var value = new FormattedText(WithUnits(editor.CellTextOf(values.Physical[editor.ActiveCell.Row, editor.ActiveCell.Col]), editor.Units),
+                CultureInfo.InvariantCulture, FlowDirection.LeftToRight, font, 12, ink1);
+            value.SetFontFeatures(MS43Logger.AvaloniaApp.Theme.Typography.Tabular);
+            var box = new Rect(active.X + 8, active.Y - value.Height - 6, value.Width + 8, value.Height + 4);
+            context.DrawRectangle(new SolidColorBrush(pane), new Pen(ThemeBrushes.Get(this, "HairlineBrush"), 1), box, 4, 4);
+            context.DrawText(value, box.TopLeft + new Vector(4, 2));
+        }
+
+        if (_dragEdits && _pendingSteps != 0 && first is Point from)
+        {
+            var to = from + new Vector(0, -_pendingSteps * PixelsPerStep);
+            context.DrawLine(new Pen(ink1, 1.5), from, to);
+            var text = new FormattedText(InfoText ?? $"{_pendingSteps} steps",
+                CultureInfo.InvariantCulture, FlowDirection.LeftToRight, font, 12, ink1);
+            context.DrawRectangle(new SolidColorBrush(pane), null, new Rect(to.X + 6, to.Y - text.Height / 2 - 2, text.Width + 8, text.Height + 4), 4, 4);
+            context.DrawText(text, new Point(to.X + 10, to.Y - text.Height / 2));
+        }
+    }
+
     /// <summary>The scale texts drawn last: breakpoint values, height values and units.</summary>
     public IReadOnlyList<string> ScaleLabels => _scaleLabels;
 
     private readonly List<string> _scaleLabels = new();
+
+    // Breakpoint values along the two floor edges nearest the viewer, with their units further out, and a height scale
+    // (bottom, middle and top of the colour range, then the units) up the corner furthest back. Labels thin out to what
+    // fits: at least 40 px between two values along an edge.
+    private void DrawScales(DrawingContext context, TableEditorViewModel editor, TableValues values, MapColourRange range, Typeface font, IBrush brush,
+        Func<double, double, double, (Point Point, double Depth)> P)
+    {
+        _scaleLabels.Clear();
+        _labelBoxes.Clear();
+        var compact = Bounds.Height < SurfaceMath.CompactHeight;
+        var near = values.Rows > 1 && P(0.5, 1, 0).Depth > P(0.5, 0, 0).Depth ? 1.0 : 0.0;
+        var side = P(1, 0.5, 0).Depth > P(0, 0.5, 0).Depth ? 1.0 : 0.0;
+        double Out(double edge, double by) => edge == 1 ? 1 + by : -by;
+
+        // Units first, then the height scale, then the axis values: a label that would overlap one already drawn is left out.
+        Label(context, values.X.Units.Length > 0 ? values.X.Units : "columns", font, 12, brush, P(0.5, Out(near, compact ? 0.24 : 0.2), 0).Point);
+        Label(context, values.Y.Units.Length > 0 ? values.Y.Units : "rows", font, 12, brush, P(Out(side, compact ? 0.28 : 0.24), 0.5, 0).Point);
+
+        // The height scale on the floor corner furthest left: on the volume's outer edge, never inside or behind the surface.
+        var back = HeightAxisCorner;
+        var foot = P(back.U, back.W, 0).Point;
+        var head = P(back.U, back.W, 1).Point;
+        context.DrawLine(new Pen(brush, 1), foot, head);
+        var units = values.Table.Z.Units is { Length: > 0 } z && z != "-" ? " " + z : string.Empty;
+
+        // Its labels go to the left, outside the volume (and clear of the small plot's zoom buttons on the right).
+        const int outwards = -1;
+        var decimals = values.Table.Z.DecimalPlaces ?? 1;
+        string Number(double value) => value.ToString("F" + Math.Clamp(decimals, 0, 6), CultureInfo.InvariantCulture);
+        var heights = range.IsConstant ? new[] { (0.5, range.Min) }
+            : compact ? new[] { (1.0, range.Max), (0.0, range.Min) }
+            : new[] { (1.0, range.Max), (0.0, range.Min), (0.5, (range.Min + range.Max) / 2) };
+        // The top value carries the height's units ("39.0 °CRK"): above the plot there may be no room for them.
+        foreach (var (h, value) in heights)
+        {
+            var at = P(back.U, back.W, h).Point;
+            if (Label(context, Number(value) + (h == heights[0].Item1 ? units : string.Empty), font, 11, brush, at + new Vector(outwards * 6, 0), outwards))
+            {
+                context.DrawLine(new Pen(brush, 1), at, at + new Vector(outwards * 4, 0));
+            }
+        }
+
+        var rows = Ticks(values.Rows, compact ? 0 : Point.Distance(P(side, 0, 0).Point, P(side, 1, 0).Point));
+        foreach (var r in rows)
+        {
+            Label(context, editor.RowLabel(r), font, 11, brush, P(Out(side, 0.08), values.Rows > 1 ? (double)r / (values.Rows - 1) : 0.5, 0).Point);
+        }
+
+        var columns = Ticks(values.Cols, compact ? 0 : Point.Distance(P(0, near, 0).Point, P(1, near, 0).Point));
+        foreach (var c in columns)
+        {
+            var text = c < values.X.Labels.Count ? values.X.Labels[c] : string.Empty;
+            Label(context, text, font, 11, brush, P(values.Cols > 1 ? (double)c / (values.Cols - 1) : 0.5, Out(near, 0.07), 0).Point);
+        }
+    }
 
     private readonly List<Rect> _labelBoxes = new();
 
@@ -468,11 +647,38 @@ public sealed class Surface3D : Control
 
     private static byte Shade(byte value, double factor) => (byte)Math.Clamp(Math.Round(value * factor), 0, 255);
 
-    private static void Label(DrawingContext context, string text, Typeface font, IBrush brush, Point at)
+    // A label centred on its point, or beside it: align -1 ends the text at the point, +1 starts it there. One that would
+    // overlap a label already drawn is left out; returns whether it was drawn.
+    private bool Label(DrawingContext context, string text, Typeface font, double size, IBrush brush, Point at, int align = 0)
     {
-        var formatted = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, font, 12, brush);
-        context.DrawText(formatted, new Point(at.X - formatted.Width / 2, at.Y - formatted.Height / 2));
+        if (text.Length == 0)
+        {
+            return false;
+        }
+
+        var formatted = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, font, size, brush);
+        formatted.SetFontFeatures(MS43Logger.AvaloniaApp.Theme.Typography.Tabular);
+        var x = align switch
+        {
+            < 0 => at.X - formatted.Width,
+            > 0 => at.X,
+            _ => at.X - formatted.Width / 2,
+        };
+        var box = new Rect(x, at.Y - formatted.Height / 2, formatted.Width, formatted.Height);
+        if (_labelBoxes.Any(drawn => drawn.Inflate(2).Intersects(box)))
+        {
+            return false;
+        }
+
+        _labelBoxes.Add(box);
+        context.DrawText(formatted, box.TopLeft);
+        _scaleLabels.Add(text);
+        return true;
     }
 
-    private void OnEditorChanged(object? sender, PropertyChangedEventArgs e) => InvalidateVisual();
+    private void OnEditorChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        UpdateInfo();
+        InvalidateVisual();
+    }
 }
