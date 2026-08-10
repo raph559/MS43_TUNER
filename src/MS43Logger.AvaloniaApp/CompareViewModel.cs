@@ -22,7 +22,8 @@ public sealed record CompareRow(ItemDifference Difference, bool IsCurrent) : Com
 
     public bool HasDescription => !string.IsNullOrWhiteSpace(Difference.Item.Description);
 
-    public string Detail => $"{Difference.Category}, {Difference.Kind.ToString().ToLowerInvariant()}";
+    /// <summary>The hover card's facts line, as on the Tune rail: "Map, 20 × 16, °CRK, at 0x77315".</summary>
+    public string Detail => ItemFacts.Line(Difference.Item, Difference.Kind);
 
     /// <summary>"12 of 320" for tables, "4512 → 3520" for values, switches and flags.</summary>
     public string Summary => Difference.Item is XdfTable
@@ -43,7 +44,7 @@ public sealed record KindChip(string Key, string Name, int Count, bool IsOn)
 }
 
 /// <summary>The Compare screen: the open bin (A) against a second bin (B) through A's XDF.</summary>
-public sealed class CompareViewModel : ViewModelBase
+public sealed class CompareViewModel : ViewModelBase, ISidePanel
 {
     private static readonly (string Key, string Name, ItemKind[] Kinds)[] KindFilters =
     [
@@ -227,6 +228,37 @@ public sealed class CompareViewModel : ViewModelBase
 
     public bool IsDeltaView { get => View == "delta"; set { if (value) { View = "delta"; } else { OnPropertyChanged(); } } }
 
+    public AppSettings Settings => _tune.Settings;
+
+    /// <summary>The Compare list's width as dragged, or null for the layout's own (280 px, 224 below 1280).</summary>
+    public double? RailWidth => _tune.Settings.CompareRailWidth;
+
+    /// <summary>True while the Compare list is folded to its strip (Ctrl B). Remembered between runs.</summary>
+    public bool RailCollapsed => _tune.Settings.CompareRailCollapsed;
+
+    public void SetRailWidth(double? width, bool save)
+    {
+        _tune.Settings.CompareRailWidth = width is double wanted ? Math.Clamp(Math.Round(wanted), SidePanel.MinWidth, SidePanel.MaxWidth) : null;
+        if (save)
+        {
+            _tune.Settings.Save();
+        }
+
+        OnPropertyChanged(nameof(RailWidth));
+    }
+
+    public void SetRailCollapsed(bool collapsed)
+    {
+        if (_tune.Settings.CompareRailCollapsed == collapsed)
+        {
+            return;
+        }
+
+        _tune.Settings.CompareRailCollapsed = collapsed;
+        _tune.Settings.Save();
+        OnPropertyChanged(nameof(RailCollapsed));
+    }
+
     public bool IsAView { get => View == "a"; set { if (value) { View = "a"; } else { OnPropertyChanged(); } } }
 
     public bool IsBView { get => View == "b"; set { if (value) { View = "b"; } else { OnPropertyChanged(); } } }
@@ -299,6 +331,12 @@ public sealed class CompareViewModel : ViewModelBase
     }
 
     /// <summary>Opens B; a file that is not a 512 KiB bin is refused and the current B stays.</summary>
+    /// <summary>B's file in full, or null without a B.</summary>
+    public string? PathB { get; private set; }
+
+    /// <summary>Asks before a swap (the window shows the dialog); without it, nothing is swapped.</summary>
+    public Func<string, Task<bool>>? AskToSwap { get; set; }
+
     public bool OpenB(string path)
     {
         try
@@ -306,6 +344,7 @@ public sealed class CompareViewModel : ViewModelBase
             var image = BinImage.Load(path);
             _b = image;
             FileB = Path.GetFileName(path);
+            PathB = Path.GetFullPath(path);
             ErrorMessage = null;
             _tune.Settings.LastCompareBin = Path.GetFullPath(path);
             _tune.Settings.Save();

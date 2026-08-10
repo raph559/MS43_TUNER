@@ -60,28 +60,48 @@ public static class TableEdits
     public static EditPlan Scale(CalibrationDocument d, XdfTable t, CellRange r, double percent) =>
         Map(d, t, r, (v, _, _) => v * (1 + percent / 100));
 
-    public static EditPlan Interpolate(CalibrationDocument d, XdfTable t, CellRange r)
+    /// <summary>
+    /// Fills the selection linearly by cell position, keeping its ends: XY blends the four corners; X fills each row between
+    /// its first and last cell; Y fills each column between its top and bottom cell.
+    /// </summary>
+    public static EditPlan Interpolate(CalibrationDocument d, XdfTable t, CellRange r, EditAxis axis = EditAxis.XY)
     {
         var values = Read(d, t);
         double P(int row, int col) => values.Physical[row, col];
-        return Map(d, t, r, (_, row, col) =>
+        double U(int col) => r.Cols > 1 ? (double)(col - r.Col0) / (r.Cols - 1) : 0;
+        double W(int row) => r.Rows > 1 ? (double)(row - r.Row0) / (r.Rows - 1) : 0;
+        return axis switch
         {
-            var u = r.Cols > 1 ? (double)(col - r.Col0) / (r.Cols - 1) : 0;
-            var w = r.Rows > 1 ? (double)(row - r.Row0) / (r.Rows - 1) : 0;
-            return (P(r.Row0, r.Col0) * (1 - u) + P(r.Row0, r.Col1) * u) * (1 - w) + (P(r.Row1, r.Col0) * (1 - u) + P(r.Row1, r.Col1) * u) * w;
-        }, keepCorners: true);
+            EditAxis.X => Map(d, t, r, (_, row, col) => P(row, r.Col0) * (1 - U(col)) + P(row, r.Col1) * U(col),
+                keep: (_, col) => col == r.Col0 || col == r.Col1),
+            EditAxis.Y => Map(d, t, r, (_, row, col) => P(r.Row0, col) * (1 - W(row)) + P(r.Row1, col) * W(row),
+                keep: (row, _) => row == r.Row0 || row == r.Row1),
+            _ => Map(d, t, r, (_, row, col) =>
+                {
+                    var u = U(col);
+                    var w = W(row);
+                    return (P(r.Row0, r.Col0) * (1 - u) + P(r.Row0, r.Col1) * u) * (1 - w) + (P(r.Row1, r.Col0) * (1 - u) + P(r.Row1, r.Col1) * u) * w;
+                },
+                keep: (row, col) => (row == r.Row0 || row == r.Row1) && (col == r.Col0 || col == r.Col1)),
+        };
     }
 
-    public static EditPlan Smooth(CalibrationDocument d, XdfTable t, CellRange r)
+    /// <summary>
+    /// Averages each selected cell with its neighbours as they were before the edit (cells outside the selection count too):
+    /// XY the 3 × 3 block, X the cells left and right, Y the cells above and below.
+    /// </summary>
+    public static EditPlan Smooth(CalibrationDocument d, XdfTable t, CellRange r, EditAxis axis = EditAxis.XY)
     {
         var values = Read(d, t);
+        var rows = axis == EditAxis.X ? 0 : 1;
+        var cols = axis == EditAxis.Y ? 0 : 1;
         return Map(d, t, r, (_, row, col) =>
         {
             double sum = 0;
             var count = 0;
-            for (var i = row - 1; i <= row + 1; i++)
+            for (var i = row - rows; i <= row + rows; i++)
             {
-                for (var j = col - 1; j <= col + 1; j++)
+                for (var j = col - cols; j <= col + cols; j++)
                 {
                     if (i >= 0 && i < values.Rows && j >= 0 && j < values.Cols && double.IsFinite(values.Physical[i, j]))
                     {
@@ -236,7 +256,7 @@ public static class TableEdits
                table.CategoryIds.Any(id => xdf.Categories.TryGetValue(id, out var name) && name == "Axis");
     }
 
-    private static EditPlan Map(CalibrationDocument d, XdfTable t, CellRange r, Func<double, int, int, double> target, bool keepCorners = false)
+    private static EditPlan Map(CalibrationDocument d, XdfTable t, CellRange r, Func<double, int, int, double> target, Func<int, int, bool>? keep = null)
     {
         var values = Read(d, t);
         if (r.Row0 < 0 || r.Col0 < 0 || r.Row1 >= values.Rows || r.Col1 >= values.Cols)
@@ -248,7 +268,7 @@ public static class TableEdits
         var limits = new List<string>();
         ForEach(values, r, (row, col) =>
         {
-            if (keepCorners && (row == r.Row0 || row == r.Row1) && (col == r.Col0 || col == r.Col1))
+            if (keep?.Invoke(row, col) == true)
             {
                 return;
             }
