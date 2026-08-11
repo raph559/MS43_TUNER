@@ -54,8 +54,9 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
         _document.Changed += OnDocumentChanged;
     }
 
-    private TableEditorViewModel(TableValues values, IReadOnlySet<(int Row, int Col)> marked, bool isDelta, CellMark mark)
+    private TableEditorViewModel(TableValues values, IReadOnlySet<(int Row, int Col)> marked, bool isDelta, CellMark mark, DeltaMode deltaMode)
     {
+        DeltaMode = deltaMode;
         Table = values.Table;
         _values = values;
         _colourRange = MapColourRange.Compute(values);
@@ -65,8 +66,9 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>A read-only grid of fixed values (a comparison's A, B or B − A); <paramref name="marked"/> get the changed-cell dot.</summary>
-    public static TableEditorViewModel Snapshot(TableValues values, IReadOnlySet<(int Row, int Col)> marked, bool isDelta = false, CellMark mark = CellMark.Changed) =>
-        new(values ?? throw new ArgumentNullException(nameof(values)), marked ?? throw new ArgumentNullException(nameof(marked)), isDelta, mark);
+    public static TableEditorViewModel Snapshot(TableValues values, IReadOnlySet<(int Row, int Col)> marked, bool isDelta = false, CellMark mark = CellMark.Changed,
+        DeltaMode deltaMode = DeltaMode.Units) =>
+        new(values ?? throw new ArgumentNullException(nameof(values)), marked ?? throw new ArgumentNullException(nameof(marked)), isDelta, mark, deltaMode);
 
     /// <summary>How a B − A grid's cells read (its values are already in that measure): units, counts or percent.</summary>
     public DeltaMode DeltaMode { get; }
