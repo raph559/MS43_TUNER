@@ -1,3 +1,4 @@
+using System;
 using System.ComponentModel;
 using System.Linq;
 using Avalonia;
@@ -103,6 +104,53 @@ public partial class MainWindow : Window
 
     /// <summary>Three 46 px window buttons plus the 8 px before them: the header's right padding.</summary>
     private const double WindowButtonsWidth = 146;
+
+    // The theme cross-fade (system 10.3): the window as it looks now is laid over it, the theme changes underneath, and the
+    // picture fades out in 280 ms. Without Windows' animation effects the theme simply changes.
+    private void CaptureTheme()
+    {
+        if (!MotionSettings.AnimationsEnabled || !IsVisible || RootGrid.Bounds.Width < 1 || RootGrid.Bounds.Height < 1)
+        {
+            return;
+        }
+
+        var scale = RenderScaling;
+        var size = new PixelSize(Math.Max(1, (int)(RootGrid.Bounds.Width * scale)), Math.Max(1, (int)(RootGrid.Bounds.Height * scale)));
+        var picture = new Avalonia.Media.Imaging.RenderTargetBitmap(size, new Vector(96 * scale, 96 * scale));
+        picture.Render(RootGrid);
+        (ThemeFade.Source as IDisposable)?.Dispose();
+        ThemeFade.Source = picture;
+        ThemeFade.Opacity = 1;
+        ThemeFade.IsVisible = true;
+    }
+
+    private async void FadeTheme()
+    {
+        if (ThemeFade.Source is not { } picture || !ThemeFade.IsVisible)
+        {
+            return;
+        }
+
+        var fade = new Avalonia.Animation.Animation
+        {
+            Duration = TimeSpan.FromMilliseconds(280),
+            Easing = new Avalonia.Animation.Easings.CubicEaseOut(),
+            Children =
+            {
+                new Avalonia.Animation.KeyFrame { Cue = new Avalonia.Animation.Cue(0), Setters = { new Avalonia.Styling.Setter(OpacityProperty, 1d) } },
+                new Avalonia.Animation.KeyFrame { Cue = new Avalonia.Animation.Cue(1), Setters = { new Avalonia.Styling.Setter(OpacityProperty, 0d) } },
+            },
+        };
+        await fade.RunAsync(ThemeFade);
+
+        // A second switch during the fade puts its own picture there; only the picture this fade started with is dropped.
+        if (ReferenceEquals(ThemeFade.Source, picture))
+        {
+            ThemeFade.IsVisible = false;
+            ThemeFade.Source = null;
+            (picture as IDisposable)?.Dispose();
+        }
+    }
 
     private void Minimize_Click(object? sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
 

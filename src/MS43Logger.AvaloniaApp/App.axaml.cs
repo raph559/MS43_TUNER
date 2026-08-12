@@ -57,6 +57,11 @@ public partial class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
+    /// <summary>Raised just before and just after the theme changes, so a window can cross-fade from the old look to the new.</summary>
+    public static event Action? ThemeChanging;
+
+    public static event Action? ThemeChanged;
+
     /// <summary>Night and Day fix the theme; Follow Windows tracks the Windows app theme while the app runs.</summary>
     public static void SetTheme(ThemeMode mode)
     {
@@ -65,11 +70,19 @@ public partial class App : Application
             return;
         }
 
-        app.RequestedThemeVariant = mode switch
+        var variant = mode switch
         {
             ThemeMode.Day => ThemeVariant.Light,
             ThemeMode.FollowWindows => ThemeVariant.Default,
             _ => ThemeVariant.Dark,
         };
+        if (app.RequestedThemeVariant == variant)
+        {
+            return;
+        }
+
+        ThemeChanging?.Invoke();
+        app.RequestedThemeVariant = variant;
+        ThemeChanged?.Invoke();
     }
 }
