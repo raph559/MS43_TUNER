@@ -8,17 +8,13 @@ namespace MS43Logger.AvaloniaApp.Views;
 
 public partial class TuneView : UserControl
 {
-    private const double RailCollapsedWidth = 48;
-    private const double RailKeyStep = 16;
-    private TuneViewModel? _watched;
-    private double? _dragFrom;
-    private double _dragWidth;
-    private bool _dragMoved;
+    private readonly RailSizer _rail;
 
     public TuneView()
     {
         InitializeComponent();
-        DataContextChanged += (_, _) => Watch(DataContext as TuneViewModel);
+        _rail = new RailSizer(RailHost, RailResizeHandle, SearchBox);
+        DataContextChanged += (_, _) => _rail.Watch(DataContext as TuneViewModel);
 
         // The slider asks; the value editor writes, one undo step per step, jump or released drag (system 5.14).
         var slider = this.FindControl<ValueSlider>("ValueSlider")!;
@@ -44,54 +40,6 @@ public partial class TuneView : UserControl
 
     public void FocusSearch() => this.FindControl<TextBox>("SearchBox")?.Focus();
 
-    private void Watch(TuneViewModel? tune)
-    {
-        if (_watched is not null)
-        {
-            _watched.PropertyChanged -= OnTuneChanged;
-        }
-
-        _watched = tune;
-        if (tune is not null)
-        {
-            tune.PropertyChanged += OnTuneChanged;
-        }
-
-        ApplyRailWidth();
-    }
-
-    private void OnTuneChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(TuneViewModel.RailCollapsed))
-        {
-            // Only showing and hiding the rail slides (Motion.axaml); a drag follows the pointer exactly.
-            RailHost.Classes.Add("toggling");
-            ApplyRailWidth();
-            Avalonia.Threading.DispatcherTimer.RunOnce(() => RailHost.Classes.Remove("toggling"), System.TimeSpan.FromMilliseconds(250));
-        }
-        else if (e.PropertyName == nameof(TuneViewModel.RailWidth))
-        {
-            ApplyRailWidth();
-        }
-    }
-
-    // Collapsed: the strip. A width the user chose: that width at every window size. Otherwise the styles' 256 or 224.
-    private void ApplyRailWidth()
-    {
-        if (_watched is { RailCollapsed: true })
-        {
-            RailHost.Width = RailCollapsedWidth;
-        }
-        else if (_watched?.RailWidth is double width)
-        {
-            RailHost.Width = width;
-        }
-        else
-        {
-            RailHost.ClearValue(WidthProperty);
-        }
-    }
-
     private void SurfaceZoomIn_Click(object? sender, RoutedEventArgs e) => Surface.ZoomBy(1.2);
 
     private void SurfaceZoomOut_Click(object? sender, RoutedEventArgs e) => Surface.ZoomBy(1 / 1.2);
@@ -99,12 +47,12 @@ public partial class TuneView : UserControl
     // The large view opens in the window's dialog layer on the small plot's view; whatever is done there stays there.
     private void SurfaceEnlarge_Click(object? sender, RoutedEventArgs e)
     {
-        if (ViewModel is not { Editor: { } editor, SelectedItem: { } item } || TopLevel.GetTopLevel(this) is not MainWindow window)
+        if (ViewModel is not { Editor: { } editor, SelectedItem: { } item } tune || TopLevel.GetTopLevel(this) is not MainWindow window)
         {
             return;
         }
 
-        _ = window.Dialogs.ShowAsync(new SurfaceDialog(editor, item.Title, Surface, window.ClientSize));
+        _ = window.Dialogs.ShowAsync(new SurfaceDialog(tune, editor, item.Title, Surface, window.ClientSize));
     }
 
     private void SortKey_Click(object? sender, RoutedEventArgs e)
@@ -123,6 +71,8 @@ public partial class TuneView : UserControl
         }
     }
 
+    private void CopyFromB_Click(object? sender, RoutedEventArgs e) => ViewModel?.CopyFromB();
+
     private void RailCollapse_Click(object? sender, RoutedEventArgs e) => ViewModel?.SetRailCollapsed(true);
 
     private void RailExpand_Click(object? sender, RoutedEventArgs e) => ViewModel?.SetRailCollapsed(false);
@@ -130,71 +80,7 @@ public partial class TuneView : UserControl
     private void RailSearch_Click(object? sender, RoutedEventArgs e) => OpenRailOnSearch();
 
     /// <summary>Shows the rail if it is collapsed, then puts the keyboard in its search field (Ctrl K).</summary>
-    public void OpenRailOnSearch()
-    {
-        ViewModel?.SetRailCollapsed(false);
-        Avalonia.Threading.Dispatcher.UIThread.Post(() => SearchBox.Focus(Avalonia.Input.NavigationMethod.Tab), Avalonia.Threading.DispatcherPriority.Loaded);
-    }
-
-    private void RailResize_PointerPressed(object? sender, Avalonia.Input.PointerPressedEventArgs e)
-    {
-        if (ViewModel is not { } tune || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-        {
-            return;
-        }
-
-        if (e.ClickCount == 2)
-        {
-            tune.SetRailWidth(null, save: true);
-        }
-        else
-        {
-            _dragFrom = e.GetPosition(this).X;
-            _dragWidth = RailHost.Bounds.Width;
-            _dragMoved = false;
-            e.Pointer.Capture(RailResizeHandle);
-        }
-
-        e.Handled = true;
-    }
-
-    private void RailResize_PointerMoved(object? sender, Avalonia.Input.PointerEventArgs e)
-    {
-        if (_dragFrom is not double from || ViewModel is not { } tune)
-        {
-            return;
-        }
-
-        _dragMoved = true;
-        tune.SetRailWidth(_dragWidth + e.GetPosition(this).X - from, save: false);
-    }
-
-    // A press without a move leaves the width as it was: only a real drag makes it the user's own.
-    private void RailResize_PointerReleased(object? sender, Avalonia.Input.PointerReleasedEventArgs e)
-    {
-        if (_dragFrom is null || ViewModel is not { } tune)
-        {
-            return;
-        }
-
-        _dragFrom = null;
-        e.Pointer.Capture(null);
-        if (_dragMoved)
-        {
-            tune.SetRailWidth(tune.RailWidth, save: true);
-        }
-    }
-
-    private void RailResize_KeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
-    {
-        if (ViewModel is not { } tune || e.Key is not (Avalonia.Input.Key.Left or Avalonia.Input.Key.Right))
-        {
-            return;
-        }
-
-        tune.SetRailWidth(RailHost.Bounds.Width + (e.Key == Avalonia.Input.Key.Right ? RailKeyStep : -RailKeyStep), save: true);
-        e.Handled = true;
-    }
+    public void OpenRailOnSearch() => _rail.OpenOnSearch();
 
     private async void OpenBin_Click(object? sender, RoutedEventArgs e) => await OpenBinAsync();
 

@@ -1,0 +1,15 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="MS43Logger.AvaloniaApp.Views.ConfirmActionDialog"
+             Width="440">
+    <!-- Asks before an action that changes what is open (system 5.9): the question as the title, what follows in UI 13
+         Ink2, then Cancel and the action, primary last. The dialog host gives Esc to Cancel and Enter to the action. -->
+    <StackPanel Spacing="8">
+        <TextBlock Name="MessageText" Classes="title" TextWrapping="Wrap" />
+        <TextBlock Name="DetailText" Classes="body" Foreground="{DynamicResource Ink2Brush}" TextWrapping="Wrap" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">
+            <Button Name="ConfirmCancelButton" Content="Cancel" Click="Cancel_Click" />
+            <Button Name="ConfirmActionButton" Classes="primary" Click="Action_Click" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>
