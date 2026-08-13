@@ -32,6 +32,9 @@ public partial class MainWindow : Window
             _ = Dialogs.ShowAsync(new ConnectionLogView(shell.Live.Banner, shell.Live.ConnectionLog ?? string.Empty));
 
         // The save prompt reads the Saving settings as it opens; Esc, or another dialog taking its place, cancels.
+        shell.Compare.AskToSwap = async message => await Dialogs.ShowAsync(new ConfirmActionDialog(message,
+            "Tune's undo history starts again with the new A. Unsaved changes to A are asked about first.", "Swap")) is true;
+
         shell.Tune.AskToSave = async message =>
         {
             var settings = shell.Tune.Settings;
@@ -40,6 +43,13 @@ public partial class MainWindow : Window
         };
 
         UpdateWindowButtons();
+        App.ThemeChanging += CaptureTheme;
+        App.ThemeChanged += FadeTheme;
+        Closed += (_, _) =>
+        {
+            App.ThemeChanging -= CaptureTheme;
+            App.ThemeChanged -= FadeTheme;
+        };
         Closing += OnClosing;
         AddHandler(KeyDownEvent, OnShortcut, RoutingStrategies.Tunnel);
         shell.Live.PropertyChanged += OnLiveChanged;
@@ -240,8 +250,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Nothing acts behind an open dialog: the shortcuts belong to the screen it covers.
-        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control) || Dialogs.IsOpen)
+        // Nothing acts behind an open dialog: the shortcuts belong to the screen it covers. The enlarged surface edits the map,
+        // so Undo and Redo reach through it.
+        var surfaceOpen = Dialogs.IsOpen && Dialogs.Content is SurfaceDialog;
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control) || (Dialogs.IsOpen && !(surfaceOpen && e.Key is Key.Z or Key.Y)))
         {
             return;
         }
@@ -264,9 +276,17 @@ public partial class MainWindow : Window
                 e.Handled = true;
                 await OpenBinAsync();
                 break;
+            case Key.B when e.KeyModifiers.HasFlag(KeyModifiers.Shift) && Shell.IsTune:
+                e.Handled = true;
+                Shell.Tune.CopyFromB();
+                break;
             case Key.B when Shell.IsTune && Shell.Tune.HasDocument:
                 e.Handled = true;
                 Shell.Tune.SetRailCollapsed(!Shell.Tune.RailCollapsed);
+                break;
+            case Key.B when Shell.IsCompare && Shell.Compare.HasB:
+                e.Handled = true;
+                Shell.Compare.SetRailCollapsed(!Shell.Compare.RailCollapsed);
                 break;
             case Key.OemComma:
                 e.Handled = true;
@@ -278,6 +298,12 @@ public partial class MainWindow : Window
                 if (Shell.IsTune && this.GetVisualDescendants().OfType<TuneView>().FirstOrDefault() is { } tuneView && Shell.Tune.HasDocument)
                 {
                     tuneView.OpenRailOnSearch();
+                    break;
+                }
+
+                if (Shell.IsCompare && this.GetVisualDescendants().OfType<CompareView>().FirstOrDefault() is { } compareView && Shell.Compare.HasB)
+                {
+                    compareView.OpenRailOnSearch();
                     break;
                 }
 
