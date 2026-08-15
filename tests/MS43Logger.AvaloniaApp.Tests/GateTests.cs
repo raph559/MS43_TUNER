@@ -365,7 +365,12 @@ public sealed class GateTests
         Dispatcher.UIThread.RunJobs();
         var compared = window.GetVisualDescendants().OfType<TextBlock>().Where(block => block.Classes.Contains("crow-id") && block.IsEffectivelyVisible).ToList();
         Assert.NotEmpty(compared);
-        Assert.All(compared, block => Assert.Equal(block.Text, ToolTip.GetTip(block)));
+        Assert.All(compared, block =>
+        {
+            var row = block.GetVisualAncestors().OfType<Border>().First(border => border.Classes.Contains("crow"));
+            Assert.NotNull(ToolTip.GetTip(row));
+            Assert.Equal(block.Text, Assert.IsType<CompareRow>(row.DataContext).Title);
+        });
         window.Close();
     }
 
