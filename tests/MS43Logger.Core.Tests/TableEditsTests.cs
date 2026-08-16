@@ -76,6 +76,99 @@ public class TableEditsTests
         }
     }
 
+    // TunerPro's horizontal interpolation: each row of the selection is filled between its first and last cell.
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void InterpolateXFillsEachRowBetweenItsEnds()
+    {
+        var d = Car.Value;
+        var map = Ignition(d);
+        var values = d.Reader.ReadTable(map);
+        var range = new CellRange(3, 1, 6, 5);
+
+        var plan = TableEdits.Interpolate(d, map, range, EditAxis.X);
+
+        Assert.DoesNotContain(plan.Changes, change => change.Col is 1 or 5);
+        for (var r = 3; r <= 6; r++)
+        {
+            for (var c = 2; c <= 4; c++)
+            {
+                var u = (c - 1) / 4.0;
+                var expected = values.Physical[r, 1] * (1 - u) + values.Physical[r, 5] * u;
+                var raw = d.Reader.Codec.ToRaw(map.Z.Math, map.Z.Data, expected);
+                Assert.Equal(raw, plan.Changes.SingleOrDefault(x => x.Row == r && x.Col == c)?.NewRaw ?? values.Raw[r, c]);
+            }
+        }
+    }
+
+    // Vertical: each column of the selection is filled between its top and bottom cell.
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void InterpolateYFillsEachColumnBetweenItsEnds()
+    {
+        var d = Car.Value;
+        var map = Ignition(d);
+        var values = d.Reader.ReadTable(map);
+        var range = new CellRange(2, 3, 7, 6);
+
+        var plan = TableEdits.Interpolate(d, map, range, EditAxis.Y);
+
+        Assert.DoesNotContain(plan.Changes, change => change.Row is 2 or 7);
+        for (var r = 3; r <= 6; r++)
+        {
+            for (var c = 3; c <= 6; c++)
+            {
+                var w = (r - 2) / 5.0;
+                var expected = values.Physical[2, c] * (1 - w) + values.Physical[7, c] * w;
+                var raw = d.Reader.Codec.ToRaw(map.Z.Math, map.Z.Data, expected);
+                Assert.Equal(raw, plan.Changes.SingleOrDefault(x => x.Row == r && x.Col == c)?.NewRaw ?? values.Raw[r, c]);
+            }
+        }
+    }
+
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void InterpolateXYIsTheCornerBlend()
+    {
+        var d = Car.Value;
+        var map = Ignition(d);
+        var range = new CellRange(0, 0, 4, 3);
+
+        Assert.Equal(TableEdits.Interpolate(d, map, range).Changes, TableEdits.Interpolate(d, map, range, EditAxis.XY).Changes);
+    }
+
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void SmoothXAveragesLeftAndRightOnly() => SmoothAlong(EditAxis.X, 0, -1, 0, 1);
+
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void SmoothYAveragesAboveAndBelowOnly() => SmoothAlong(EditAxis.Y, -1, 0, 1, 0);
+
+    private static void SmoothAlong(EditAxis axis, int dr0, int dc0, int dr1, int dc1)
+    {
+        var d = Car.Value;
+        var map = Ignition(d);
+        var values = d.Reader.ReadTable(map);
+
+        var plan = TableEdits.Smooth(d, map, new CellRange(5, 5, 8, 8), axis);
+
+        foreach (var (r, c) in new[] { (5, 5), (6, 7), (8, 8) })
+        {
+            var mean = (values.Physical[r + dr0, c + dc0] + values.Physical[r, c] + values.Physical[r + dr1, c + dc1]) / 3;
+            var raw = d.Reader.Codec.ToRaw(map.Z.Math, map.Z.Data, mean);
+            Assert.Equal(raw, plan.Changes.SingleOrDefault(x => x.Row == r && x.Col == c)?.NewRaw ?? values.Raw[r, c]);
+        }
+    }
+
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void SmoothXOnTheFirstColumnUsesTheOneNeighbour()
+    {
+        var d = Car.Value;
+        var map = Ignition(d);
+        var values = d.Reader.ReadTable(map);
+
+        var plan = TableEdits.Smooth(d, map, new CellRange(4, 0, 4, 0), EditAxis.X);
+
+        var raw = d.Reader.Codec.ToRaw(map.Z.Math, map.Z.Data, (values.Physical[4, 0] + values.Physical[4, 1]) / 2);
+        Assert.Equal(raw, plan.Changes.SingleOrDefault()?.NewRaw ?? values.Raw[4, 0]);
+    }
+
     [RealFileFact(TestData.CarBin, TestData.Xdf)]
     public void SmoothIsThreeByThreeMean()
     {
@@ -113,6 +206,24 @@ public class TableEditsTests
         var d = Car.Value;
 
         Assert.Equal(new CellChange(0, 0, 80, 81), Only(TableEdits.Step(d, Ignition(d), new CellRange(0, 0, 0, 0), 1)));
+    }
+
+    // Reported: on the AFR target, (1 - (0.0039058823 X - 0.5)) Y falls as the raw byte rises, so + lowered the shown AFR.
+    // A step moves the value as it is shown: + always raises it, whichever way the map's equation runs.
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void StepMovesTheShownValueTheWayItWasAsked()
+    {
+        var d = Car.Value;
+        var afr = (XdfTable)d.Xdf.FindByTitle("ip_af_target_e85__maf__n")!;
+        var before = d.Reader.ReadTable(afr).Physical[3, 3];
+        double After(EditPlan plan) => d.Reader.Codec.ToPhysical(afr.Z.Math, Only(plan).NewRaw);
+
+        Assert.True(After(TableEdits.Step(d, afr, new CellRange(3, 3, 3, 3), 1)) > before);
+        Assert.True(After(TableEdits.Step(d, afr, new CellRange(3, 3, 3, 3), -1)) < before);
+
+        var ignition = Ignition(d);
+        var advance = d.Reader.ReadTable(ignition).Physical[3, 3];
+        Assert.True(d.Reader.Codec.ToPhysical(ignition.Z.Math, Only(TableEdits.Step(d, ignition, new CellRange(3, 3, 3, 3), 1)).NewRaw) > advance);
     }
 
     [RealFileFact(TestData.CarBin, TestData.Xdf)]

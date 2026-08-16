@@ -78,7 +78,34 @@ public sealed class TunePaneTests : IDisposable
         Assert.Equal("2 cells changed since the last save", editor.ChangedText);
         var texts = KeyLineTexts(window);
         Assert.Contains("2 cells changed since the last save", texts);
-        Assert.Contains("Undo: Step 2 cells of ip_iga_ron98_pl__n__maf by 1 raw", texts);
+        Assert.Contains("Undo: Step 2 cells of ip_iga_ron98_pl__n__maf up", texts);
+    }
+
+    // The horizontal bar was drawn over the grid's last row.
+    [AvaloniaFact]
+    public async Task TheScrollBarDoesNotCoverTheLastRow()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell) = await TuneScreen.OpenAsync();
+        window.Width = 1024;
+        window.Height = 900;
+        shell.Tune.SetRailWidth(SidePanel.MaxWidth, save: false);
+        Dispatcher.UIThread.RunJobs();
+
+        var grid = Find.Named<MS43Logger.AvaloniaApp.Controls.MapGrid>(window, "MapGrid");
+        var scroller = grid.GetVisualAncestors().OfType<ScrollViewer>().First();
+        Assert.True(scroller.Extent.Width > scroller.Viewport.Width + 1, "the grid should scroll sideways at 1024 px with a wide rail");
+        var bar = scroller.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.ScrollBar>()
+            .Single(scrollBar => scrollBar.TemplatedParent == scroller && scrollBar.Orientation == Avalonia.Layout.Orientation.Horizontal);
+        var gridBottom = grid.TranslatePoint(new Avalonia.Point(0, grid.Bounds.Height - grid.BarRoom), window)!.Value.Y;
+        Assert.Equal(MS43Logger.AvaloniaApp.Controls.MapGrid.ScrollBarRoom, grid.BarRoom);
+        var barTop = bar.TranslatePoint(new Avalonia.Point(0, 0), window)!.Value.Y;
+        Assert.True(barTop >= gridBottom, $"the bar starts at {barTop}, the grid ends at {gridBottom}");
+        Screens.Save(window, "tune-scrollbar-room");
     }
 
     [AvaloniaFact]
@@ -171,7 +198,7 @@ public sealed class TunePaneTests : IDisposable
             return;
         }
 
-        // Ink3 on the pressed overlay is 3.79:1 Night and 4.20:1 Day, under 4.5:1 (system 1.2): the count rises to Ink2.
+        // Ink3 on the pressed overlay is 3.79:1 Night and 4.20:1 Day, under 4.5:1: the count rises to Ink2.
         var (window, _) = await TuneScreen.OpenAsync();
         var row = Find.Named<ListBox>(window, "RailList").GetVisualDescendants().OfType<ListBoxItem>().First(item => item.Content is RailCategory);
         var count = row.GetVisualDescendants().OfType<TextBlock>().Last();
