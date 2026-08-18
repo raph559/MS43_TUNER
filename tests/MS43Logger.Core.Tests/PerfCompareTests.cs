@@ -334,6 +334,64 @@ public class PerfCompareTests
     }
 
     [Fact]
+    public void TablesThatDifferComeFromTheSnapshots()
+    {
+        var xdf = BinComparerTests.Synthetic();
+        var before = BinComparerTests.With(BinComparerTests.Blank(), (0x70100, 10), (0x70201, 1));
+        var after = BinComparerTests.With(before, (0x70101, 14));
+        TuneIdentity TuneOf(BinImage image) => TuneIdentity.From(CalibrationDocument.FromParts(xdf, image, null), 3)!;
+        var outcome = Run(PerfTestSpec.Pull(3), ThirdPull(), Inputs());
+        var a = Saved(outcome, Inputs(), TuneOf(before));
+        var b = Saved(outcome, Inputs(), TuneOf(after));
+
+        var comparison = PerfCompare.Compare(a, b, Inputs(), xdf);
+
+        var table = Assert.Single(comparison.TableDifferences);
+        Assert.Equal("fuel_map", table.Item.Title);
+        Assert.Equal(1, table.ChangedCells);
+        Assert.Equal(7, table.LargestChange);
+        Assert.Empty(PerfCompare.Compare(a, b, Inputs(), xdf: null).TableDifferences);
+        Assert.Empty(PerfCompare.Compare(a, Saved(outcome, Inputs()), Inputs(), xdf).TableDifferences);
+        Assert.Empty(PerfCompare.Compare(a, a, Inputs(), xdf).TableDifferences);
+        Assert.Null(comparison.TablesNote);
+
+        // Through another XDF than the runs were saved with, no table is listed and the note names the XDF they need
+        // (minor review, finding 12).
+        var a2 = Saved(outcome, Inputs(), TuneOf(before) with { XdfTitle = "MS43X001 v1.0" });
+        var b2 = Saved(outcome, Inputs(), TuneOf(after) with { XdfTitle = "MS43X001 v1.0" });
+        var other = PerfCompare.Compare(a2, b2, Inputs(), xdf);
+        Assert.Empty(other.TableDifferences);
+        Assert.Equal("Open the XDF these runs were saved with (MS43X001 v1.0) on Tune to list the tables that differ.", other.TablesNote);
+        var mixed = PerfCompare.Compare(a, b2, Inputs(), xdf);
+        Assert.Empty(mixed.TableDifferences);
+        Assert.Equal("The runs were saved with different XDFs (TEST and MS43X001 v1.0), so their tables are not compared.", mixed.TablesNote);
+    }
+
+    // An empty table list always says why: no XDF open, or a snapshot that cannot be read, never "no table differs" (minor
+    // review, findings 12 and 13).
+    [Fact]
+    public void TablesNoteSaysWhyNoneIsListed()
+    {
+        var xdf = BinComparerTests.Synthetic();
+        var before = BinComparerTests.With(BinComparerTests.Blank(), (0x70100, 10), (0x70201, 1));
+        var after = BinComparerTests.With(before, (0x70101, 14));
+        TuneIdentity TuneOf(BinImage image) => TuneIdentity.From(CalibrationDocument.FromParts(xdf, image, null), 3)!;
+        var outcome = Run(PerfTestSpec.Pull(3), ThirdPull(), Inputs());
+        var a = Saved(outcome, Inputs(), TuneOf(before));
+        var b = Saved(outcome, Inputs(), TuneOf(after));
+
+        Assert.Equal("Open the XDF these runs were saved with (TEST) on Tune to list the tables that differ.",
+            PerfCompare.Compare(a, b, Inputs(), xdf: null).TablesNote);
+        // Equal snapshots differ in no table, with or without the XDF.
+        Assert.Null(PerfCompare.Compare(a, a, Inputs(), xdf: null).TablesNote);
+
+        var damaged = Saved(outcome, Inputs(), TuneOf(after) with { Snapshot = "not a snapshot" });
+        var comparison = PerfCompare.Compare(a, damaged, Inputs(), xdf);
+        Assert.Empty(comparison.TableDifferences);
+        Assert.Equal("A run's calibration snapshot cannot be read, so the tables are not compared.", comparison.TablesNote);
+    }
+
+    [Fact]
     public void NoiseNeedsThreeRuns()
     {
         PerfResult WithPower(double kw, string savedSha256 = "aa", bool cold = false)
@@ -351,5 +409,19 @@ public class PerfCompareTests
         Assert.Equal(1.0, PerfCompare.Noise([WithPower(115), WithPower(200, "bb"), WithPower(116), WithPower(300, cold: true), WithPower(117)],
             "peak-power")!.Value, 9);
         Assert.Null(PerfCompare.Noise([WithPower(115), WithPower(116), WithPower(117, "bb")], "peak-power"));
+    }
+
+    [Fact]
+    public void CompareShowsTheNoiseOfTheSameTune()
+    {
+        var tune = Tune("aa");
+        // Pulls of 5.5, 5.61 and 5.72 s over 2000 to 6400 rpm: a spread of 0.11 s.
+        var runs = new[] { 800, 784.3, 769.2 }.Select(rate => ThirdPullResult(tune: tune, rpmPerSecond: rate)).ToArray();
+
+        var comparison = PerfCompare.Compare(runs[0], runs[1], Inputs(), null, runs);
+
+        Assert.Equal(0.11, comparison.Noise!.Value, 0.01);
+        Assert.Null(PerfCompare.Compare(runs[0], runs[1], Inputs(), null).Noise);
+        Assert.Null(PerfCompare.Compare(runs[0], runs[1], Inputs(), null, runs[..2]).Noise);
     }
 }
