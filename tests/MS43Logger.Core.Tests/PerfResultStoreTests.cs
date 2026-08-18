@@ -357,4 +357,89 @@ public sealed class PerfResultStoreTests : IDisposable
     public void BlankImageHash() =>
         Assert.Equal("07854d2fef297a06ba81685e660c332de36d5d18d546927d30daad6d7fda1541",
             TuneIdentity.Sha256(BinImage.FromBytes(new byte[BinImage.Size])));
+
+    [Fact]
+    public void SnapshotRoundTrips()
+    {
+        var bytes = new byte[BinImage.Size];
+        bytes[0x10] = 0x77;
+        bytes[0x70010] = 0xAB;
+        bytes[0x7FFF0] = 0xCD;
+        var image = BinImage.FromBytes(bytes);
+
+        var snapshot = TuneIdentity.SnapshotOf(image);
+        var restored = TuneIdentity.Restore(snapshot);
+
+        Assert.True(restored.Bytes[0x70000..].SequenceEqual(image.Bytes[0x70000..]));
+        Assert.Equal(0xAB, restored.Bytes[0x70010]);
+        Assert.Equal(0xCD, restored.Bytes[0x7FFF0]);
+        Assert.Equal(0, restored.Bytes[0x10]);
+        // Compressed: a mostly empty calibration is far smaller than its 64 KiB.
+        Assert.True(snapshot.Length < 4096, $"{snapshot.Length} characters");
+        Assert.Throws<InvalidDataException>(() => TuneIdentity.Restore("junk"));
+        Assert.Throws<InvalidDataException>(() => TuneIdentity.Restore("not base64!"));
+    }
+
+    [Fact]
+    public void UnsavedEditsAreNamedButTheSnapshotIsTheSavedImage()
+    {
+        var xdf = BinComparerTests.Synthetic();
+        var document = CalibrationDocument.FromParts(xdf, BinComparerTests.With(BinComparerTests.Blank(), (0x70100, 10)), @"C:\bins\stage1.bin");
+        var saved = TuneIdentity.From(document, 3)!;
+        Assert.Equal(("stage1.bin", @"C:\bins\stage1.bin"), (saved.BinName, saved.BinPath));
+        Assert.Equal(("TEST", "test.xdf"), (saved.XdfTitle, saved.XdfFile));
+        Assert.False(saved.HasUnsavedEdits);
+        Assert.Equal(saved.SavedSha256, saved.WorkingSha256);
+        // The synthetic definition has no rev limiter and no launch control.
+        Assert.Null(saved.RevLimitRpm);
+        Assert.Null(saved.LaunchControl);
+
+        document.Image.WriteElement(((XdfTable)xdf.FindByTitle("fuel_map")!).Z.Data, 0, 30);
+        var edited = TuneIdentity.From(document, 3)!;
+
+        Assert.True(edited.HasUnsavedEdits);
+        Assert.Equal(new[] { "fuel_map" }, edited.ModifiedItems);
+        Assert.Equal(saved.SavedSha256, edited.SavedSha256);
+        Assert.NotEqual(edited.SavedSha256, edited.WorkingSha256);
+        Assert.Equal(saved.Snapshot, edited.Snapshot);
+        Assert.Equal(10, TuneIdentity.Restore(edited.Snapshot).Bytes[0x70100]);
+        Assert.Null(TuneIdentity.From(null, 3));
+    }
+
+    [Fact]
+    public void TuneSurvivesTheRoundTrip()
+    {
+        var document = CalibrationDocument.FromParts(BinComparerTests.Synthetic(), BinComparerTests.Blank(), null);
+        var tune = TuneIdentity.From(document, null)!;
+        var store = Store();
+
+        var loaded = store.Load(store.Save(Result(tune: tune))!)!.Tune!;
+
+        Assert.Null(loaded.BinName);
+        Assert.Equal(tune.SavedSha256, loaded.SavedSha256);
+        Assert.Equal(tune.Snapshot, loaded.Snapshot);
+        Assert.Empty(loaded.ModifiedItems);
+        Assert.Equal(tune.SavedSha256, Assert.Single(store.List()).SavedSha256);
+    }
+
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void CarBinIdentity()
+    {
+        var document = CalibrationDocument.Open(TestData.Find(TestData.CarBin)!, TestData.Find(TestData.Xdf)!);
+
+        var tune = TuneIdentity.From(document, 3)!;
+
+        Assert.Equal("43X001", tune.SoftwareId);
+        Assert.Equal("ca43X001.DAT", tune.CalibrationName);
+        Assert.Equal(TestData.CarBin, tune.BinName);
+        Assert.Equal(TestData.Xdf, tune.XdfFile);
+        Assert.Equal(7104, tune.RevLimitRpm);
+        Assert.True(tune.LaunchControl);
+        Assert.False(tune.HasUnsavedEdits);
+        Assert.Empty(tune.ModifiedItems);
+        Assert.Equal(tune.SavedSha256, tune.WorkingSha256);
+        Assert.Equal(TuneIdentity.Sha256(BinImage.Load(TestData.Find(TestData.CarBin)!)), tune.SavedSha256);
+        Assert.True(TuneIdentity.Restore(tune.Snapshot).Bytes[0x70000..].SequenceEqual(document.Saved.Bytes[0x70000..]));
+        Assert.Null(TuneIdentity.From(document, null)!.RevLimitRpm);
+    }
 }
