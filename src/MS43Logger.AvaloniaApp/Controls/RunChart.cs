@@ -80,6 +80,101 @@ public sealed class RunChart : Control
 
     public double? YMaximum { get => GetValue(YMaximumProperty); set => SetValue(YMaximumProperty, value); }
 
+    /// <summary>The x axis's tick labels as drawn, left to right.</summary>
+    public IReadOnlyList<string> XTickLabels => Layout() is { } chart ? chart.XTicks.Select(tick => ChartScale.Format(tick, chart.XStep)).ToList() : [];
+
+    /// <summary>The y axis's tick labels as drawn, bottom to top.</summary>
+    public IReadOnlyList<string> YTickLabels => Layout() is { } chart ? chart.YTicks.Select(tick => ChartScale.Format(tick, chart.YStep)).ToList() : [];
+
+    /// <summary>The data area: the first and last x ticks sit on its left and right edges, the first and last y ticks on its bottom and top.</summary>
+    public Rect PlotRect => Layout()?.Plot ?? default;
+
+    /// <summary>The legend's labels as drawn, A then B: each trimmed in the middle so the line fits over the plot.</summary>
+    public IReadOnlyList<string> LegendLabels => Layout() is { } chart ? LegendItems(chart.Plot, UiFace(), ThemeBrushes.Get(this, "Ink2Brush")).Select(item => item.Label).ToList() : [];
+
+    /// <summary>Where the legend line is drawn: from its first stroke sample to the end of its last label.</summary>
+    public Rect LegendRect
+    {
+        get
+        {
+            if (Layout() is not { } chart || LegendItems(chart.Plot, UiFace(), ThemeBrushes.Get(this, "Ink2Brush")) is not { Count: > 0 } items)
+            {
+                return default;
+            }
+
+            var start = chart.Plot.Left + 8;
+            return new Rect(start, chart.Plot.Top - 22, items[^1].X + items[^1].Text.Width - start, 16);
+        }
+    }
+
+    public override void Render(DrawingContext context)
+    {
+        var size = Bounds.Size;
+        var pane = ThemeBrushes.Color(this, "PaneBrush");
+        context.DrawRectangle(new SolidColorBrush(pane), new Pen(ThemeBrushes.Get(this, "HairlineBrush"), 1), new RoundedRect(new Rect(size).Deflate(0.5), 8));
+        if (Layout() is not { } chart)
+        {
+            return;
+        }
+
+        var ink1 = ThemeBrushes.Get(this, "Ink1Brush");
+        var ink2 = ThemeBrushes.Get(this, "Ink2Brush");
+        var ink3 = ThemeBrushes.Get(this, "Ink3Brush");
+        var data = new Typeface(ThemeBrushes.Font(this, "DataFont"));
+        var ui = UiFace();
+        var plot = chart.Plot;
+
+        var hairline = new Pen(ThemeBrushes.Get(this, "HairlineBrush"), 1);
+        foreach (var tick in chart.YTicks)
+        {
+            var y = chart.Y(tick);
+            context.DrawLine(hairline, new Point(plot.Left, y), new Point(plot.Right, y));
+            ChartScale.Text(context, ChartScale.Format(tick, chart.YStep), data, ink3, new Point(plot.Left - 6, y), 1, 0.5);
+        }
+
+        foreach (var tick in chart.XTicks)
+        {
+            ChartScale.Text(context, ChartScale.Format(tick, chart.XStep), data, ink3, new Point(chart.X(tick), plot.Bottom + 4), 0.5, 0);
+        }
+
+        // The y axis rises 6 px above the top tick, and its unit sits over it with the baseline 10 px above that tick.
+        var axes = new Pen(ink2, 1.5);
+        context.DrawLine(axes, plot.BottomLeft, plot.TopLeft - new Point(0, 6));
+        context.DrawLine(axes, plot.BottomLeft, plot.BottomRight);
+        ChartScale.Baseline(context, YUnits, ui, ink3, new Point(plot.Left - 6, plot.Top - 10));
+        ChartScale.Text(context, XUnits, ui, ink3, new Point(plot.Right, plot.Bottom + 18), 1, 0);
+
+        var recording = IsLive || IsRunning;
+        var penA = new Pen(recording ? ink2 : ink1, 2, lineJoin: PenLineJoin.Round);
+        var penB = new Pen(ink2, 1.5, new DashStyle([4, 2], 0), lineJoin: PenLineJoin.Round);
+
+        // B behind A, so where they meet the solid run reads on top; a fixed range keeps what runs past it inside the plot.
+        using (context.PushClip(plot.Inflate(2)))
+        {
+            Trace(context, TraceB, penB, chart);
+            Trace(context, TraceA, penA, chart);
+        }
+
+        Legend(context, LegendItems(plot, ui, ink2), penA, penB, plot.Top - 10);
+
+        if (recording && Newest(TraceA) is { } last)
+        {
+            // The newest sample: a round Now dot with a Pane halo; an Ink3 ring once samples stop (as CurveChart).
+            var at = chart.At(last);
+            var halo = new SolidColorBrush(pane);
+            if (IsLive)
+            {
+                context.DrawEllipse(halo, null, at, 6, 6);
+                context.DrawEllipse(ThemeBrushes.Get(this, "NowBrush"), null, at, 4, 4);
+            }
+            else
+            {
+                context.DrawEllipse(null, new Pen(halo, 5), at, 3.25, 3.25);
+                context.DrawEllipse(null, new Pen(ink3, 1.5), at, 3.25, 3.25);
+            }
+        }
+    }
+
     private static bool IsFinite(Point point) => double.IsFinite(point.X) && double.IsFinite(point.Y);
 
     private static Point? Newest(IReadOnlyList<Point>? trace)
@@ -93,6 +188,51 @@ public sealed class RunChart : Control
         }
 
         return null;
+    }
+
+    // A gap in the samples (a NaN) breaks the line rather than bridging it.
+    private static void Trace(DrawingContext context, IReadOnlyList<Point>? trace, Pen pen, Chart chart)
+    {
+        if (trace is null || trace.Count < 2)
+        {
+            return;
+        }
+
+        var line = new StreamGeometry();
+        using (var g = line.Open())
+        {
+            var open = false;
+            foreach (var point in trace)
+            {
+                if (!IsFinite(point))
+                {
+                    if (open)
+                    {
+                        g.EndFigure(false);
+                        open = false;
+                    }
+
+                    continue;
+                }
+
+                if (!open)
+                {
+                    g.BeginFigure(chart.At(point), false);
+                    open = true;
+                }
+                else
+                {
+                    g.LineTo(chart.At(point));
+                }
+            }
+
+            if (open)
+            {
+                g.EndFigure(false);
+            }
+        }
+
+        context.DrawGeometry(null, pen, line);
     }
 
     // One line in UI 12 Ink2 on the units' baseline: for each named run, a 16 px sample of its stroke at mid x-height,
@@ -188,5 +328,9 @@ public sealed class RunChart : Control
         IReadOnlyList<double> XTicks, IReadOnlyList<double> YTicks)
     {
         public double X(double value) => Plot.Left + (value - XMin) / (XMax - XMin) * Plot.Width;
+
+        public double Y(double value) => Plot.Bottom - (value - YMin) / (YMax - YMin) * Plot.Height;
+
+        public Point At(Point value) => new(X(value.X), Y(value.Y));
     }
 }
