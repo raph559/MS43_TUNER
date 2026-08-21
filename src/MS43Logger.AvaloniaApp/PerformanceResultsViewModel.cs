@@ -125,6 +125,58 @@ public sealed class PerformanceComparisonViewModel : ViewModelBase
     private ComparisonMetric _metric;
     private int _version;
 
+    internal PerformanceComparisonViewModel(PerfResult a, PerfResult b, PerfComparison comparison)
+    {
+        _comparison = comparison;
+        LabelA = $"A: {a.Name}";
+        LabelB = $"B: {b.Name}";
+        _metric = a.Spec.Kind switch
+        {
+            PerfTestKind.Pull => ComparisonMetric.Power,
+            PerfTestKind.KnockCheck => ComparisonMetric.Knock,
+            _ => ComparisonMetric.Rpm,
+        };
+
+        // Two gears or two tests take different times for the same marks: those are named, not subtracted (minor review,
+        // finding 26). The rpm of a peak goes beside each run's peak, not in a row of its own (finding 69).
+        var timesApart = comparison.Mismatches.Any(mismatch => mismatch.Code is "gear" or "test");
+        Deltas = comparison.Deltas.Where(delta => (delta.A is not null || delta.B is not null) && !ResultText.IsCompanion(delta.Key))
+            .Select(delta => new DeltaRow(delta.Key, delta.Label,
+                NumberFormat.Format(delta.A, delta.Decimals), NumberFormat.Format(delta.B, delta.Decimals),
+                delta.Delta is { } change && !(timesApart && delta.Unit == "s") ? ResultText.Signed(change, delta.Decimals) : "n/a", delta.Unit,
+                ResultText.CompanionOf(comparison.A, delta.Key), ResultText.CompanionOf(comparison.B, delta.Key))).ToArray();
+        // Each run says why it is doubtful beside the deltas; a note such as "uncalibrated" holds for both alike, since both
+        // are recomputed with the same inputs.
+        FlagsA = ResultText.Flags(comparison.A).Where(flag => !flag.IsInfo).ToArray();
+        FlagsB = ResultText.Flags(comparison.B).Where(flag => !flag.IsInfo).ToArray();
+        Mismatches = comparison.Mismatches
+            .Select(mismatch => mismatch.Code is "gear" or "test" ? mismatch.Message.TrimEnd('.') + "; times are not compared." : mismatch.Message)
+            .ToArray();
+        Tables = comparison.TableDifferences.Select(difference => new TableChangeRow(difference.Item.Title, Change(difference))).ToArray();
+
+        var unit = a.Spec.Kind == PerfTestKind.RollOn ? "km/h" : "rpm";
+        BandText = comparison is { SharedFrom: { } from, SharedTo: { } to }
+            ? $"Compared over {NumberFormat.Format(from, 0)} to {NumberFormat.Format(to, 0)} {unit}, the band both runs share."
+            : null;
+        // An empty list always says why: one saved image, the comparison's reason (the XDF to open, two XDFs, a snapshot that
+        // cannot be read), no bin open, or no change (minor review, findings 12, 13 and 25).
+        TablesNote = Tables.Count > 0
+            ? null
+            : comparison.SameTune
+                ? "Same tune in both runs, so no table differs."
+                : comparison.TablesNote
+                    ?? (a.Tune?.Snapshot is not { Length: > 0 } || b.Tune?.Snapshot is not { Length: > 0 }
+                        ? "A run saved with no bin open has no calibration to compare."
+                        : "No table differs between the two calibrations.");
+        RecomputedNote = comparison.Recomputed
+            ? "Recomputed with the current car values and speed calibration; the figures saved with the runs differ."
+            : null;
+        NoiseText = comparison.Noise is { } noise && Headline(a.Spec.Kind) is { } key
+            && comparison.A.Figures.FirstOrDefault(figure => figure.Key == key) is { } headline
+            ? $"Noise ±{NumberFormat.Format(noise, headline.Decimals)}{(headline.Unit.Length > 0 ? " " + headline.Unit : "")} over the saved runs of this tune."
+            : null;
+    }
+
     public ComparisonMetric Metric
     {
         get => _metric;
@@ -198,6 +250,15 @@ public sealed class PerformanceComparisonViewModel : ViewModelBase
     public string? YUnits => (TraceOf(_comparison.A, Metric) ?? TraceOf(_comparison.B, Metric))?.YUnit;
 
     public IReadOnlyList<DeltaRow> Deltas { get; }
+
+    /// <summary>A's invalid, cold and suspect flags over the compared band, beside the deltas; notes stay in the result.</summary>
+    public IReadOnlyList<FlagRow> FlagsA { get; }
+
+    public IReadOnlyList<FlagRow> FlagsB { get; }
+
+    public bool HasFlagsA => FlagsA.Count > 0;
+
+    public bool HasFlagsB => FlagsB.Count > 0;
 
     /// <summary>"Intake air 31 and 38 °C: more than 5 °C apart." and the like (spec 7: no correction, so mismatches are named).</summary>
     public IReadOnlyList<string> Mismatches { get; }
@@ -287,4 +348,16 @@ public sealed class PerformanceComparisonViewModel : ViewModelBase
         PerfTestKind.LinkTest => "rate",
         _ => null,
     };
+
+    // As Compare's list reads a change: "largest change +61.1 °CRK" for a table, "4512 → 3520" for a value.
+    private static string Change(ItemDifference difference)
+    {
+        if (difference.Item is XdfTable && difference.LargestChange is { } largest)
+        {
+            var units = CompareViewModel.UnitsOf(difference.Item);
+            return $"largest change {ResultText.Signed(largest, 1)}{(units.Length > 0 ? " " + units : "")}";
+        }
+
+        return $"{difference.ValueA ?? "n/a"} → {difference.ValueB ?? "n/a"}";
+    }
 }
