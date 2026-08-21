@@ -14,6 +14,7 @@ using System.Threading.Tasks;
 using Avalonia.Media;
 using Avalonia.Threading;
 using MS43Logger.Core;
+using MS43Logger.Core.Performance;
 
 namespace MS43Logger.AvaloniaApp;
 
@@ -54,12 +55,12 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private int _pinnedCount;
 
     private RunStage _run;
-    private DateTimeOffset _launchedAt;
     private string _time100 = "n/a";
     private string _time200 = "n/a";
     private bool _reached100;
     private bool _reached200;
     private bool _hasSpeedChannel;
+
     private ReadoutsMode _readouts = ReadoutsMode.Tiles;
     private int _trendSeconds = 10;
     private string _logFolder = AppSettings.DefaultLogFolder;
@@ -73,9 +74,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private DateTimeOffset? _lastSampleAt;
     private DispatcherTimer _staleTimer;
     private static readonly ConnectionMessage NoPort = new("No COM port found. Plug in the K-line cable, then rescan ports.", LiveAction.RescanPorts);
-
-    // Performance tests: the speed channel's ids (MS43X001 says VS, the stock definitions VEHICLESPEED), whatever their case.
-    private static readonly HashSet<string> SpeedIds = new(StringComparer.OrdinalIgnoreCase) { "VEHICLESPEED", "VS" };
 
     private const string NoSpeedChannel = "This definition has no vehicle speed channel";
 
@@ -102,6 +100,8 @@ public class MainWindowViewModel : INotifyPropertyChanged
         Time200 = "n/a";
         Run = RunStage.WaitingForStop;
     }
+    private readonly RunClock _runClock = new();
+    private AdxDefinition _currentDefinition;
 
     private static readonly HashSet<string> DefaultPinnedChannels = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -117,6 +117,9 @@ public class MainWindowViewModel : INotifyPropertyChanged
         "TCO",
         "LAM1",
         "VB",
+        // Oil beside coolant (performance spec 9.3): TOIL in MS43X001, OILTEMP in the stock definitions.
+        "TOIL",
+        "OILTEMP",
     };
 
     public string[] AdxVariants { get; } = { "b22", "b25", "b30", "ms43x" };
@@ -334,45 +337,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
-    // Times run between the samples' own arrival stamps, so a busy UI thread does not lengthen them.
-    private void UpdateAccelerationTimes(double speed, DateTimeOffset at)
-    {
-        switch (Run)
-        {
-            case RunStage.WaitingForStop when speed <= 1.0:
-                Run = RunStage.Ready;
-                break;
-            case RunStage.Ready when speed > 1.0:
-                _launchedAt = at;
-                Time100 = Seconds(TimeSpan.Zero);
-                Time200 = Seconds(TimeSpan.Zero);
-                Run = RunStage.Timing;
-                break;
-            case RunStage.Timing:
-                var elapsed = Seconds(at - _launchedAt);
-                if (!_reached100)
-                {
-                    Time100 = elapsed;
-                    _reached100 = speed >= 100.0;
-                }
-
-                if (!_reached200)
-                {
-                    Time200 = elapsed;
-                    _reached200 = speed >= 200.0;
-                }
-
-                if (_reached200)
-                {
-                    Run = RunStage.Idle;
-                }
-
-                break;
-        }
-    }
-
-    private static string Seconds(TimeSpan span) => NumberFormat.Format(span.TotalSeconds, 1);
-
     public string SearchText
     {
         get => _searchText;
@@ -426,8 +390,9 @@ public class MainWindowViewModel : INotifyPropertyChanged
     /// <summary>The band's speed: VS (MS43X001) or VEHICLESPEED (stock definitions), whole km/h.</summary>
     public ReadoutViewModel SpeedReadout { get; } = new("Vehicle Speed", "km/h", 0, "VS", "VEHICLESPEED");
 
+    // Floored: GEAR's fraction is the high byte of N over 32, so rounding read one gear high above about 4100 rpm (performance spec 4.1).
     /// <summary>The engaged gear, 1 to 5; null in neutral, with the clutch in, or without a value (system 7.2: no slot lit).</summary>
-    public int? Gear => GearReadout.Value is double gear && double.IsFinite(gear) && Math.Round(gear) is >= 1 and <= 5 ? (int)Math.Round(gear) : null;
+    public int? Gear => GearReadout.Value is double gear && double.IsFinite(gear) && Math.Floor(gear) is >= 1 and <= 5 ? (int)Math.Floor(gear) : null;
 
     /// <summary>"4", or "n/a" when no gear is engaged or known.</summary>
     public string GearText => Gear?.ToString(CultureInfo.InvariantCulture) ?? "n/a";
@@ -613,6 +578,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
         _retryText = null;
         SetBanner(null);
         SampleCount = 0;
+        ResetWarmUp();
         IsConnected = true;
     }
 
@@ -671,12 +637,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
         {
             reading.Resolve(channels, SanitizeUnits);
         }
-
-        HasSpeedChannel = channels.Any(channel => SpeedIds.Contains(channel.Id));
-        if (!HasSpeedChannel)
-        {
-            Run = RunStage.Idle;
-        }
     }
 
     public bool ShowPinnedOnly
@@ -724,6 +684,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(ConnectionDetail));
             }
         };
+        WarmUp.Changed += (_, _) => ShowWarmUp();
 
         LiveValues = new ObservableCollection<DecodedValueViewModel>();
         RefreshPorts();
@@ -838,7 +799,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
-    /// <summary>Lists these channels and resolves the band and the Performance tests speed from them.</summary>
+    /// <summary>Lists these channels and resolves the band from them.</summary>
     internal void PreviewChannels(IReadOnlyList<AdxValueDefinition> channels)
     {
         BuildChannelRows(channels);
@@ -892,10 +853,31 @@ public class MainWindowViewModel : INotifyPropertyChanged
     }
 
     /// <summary>The definition the logger decodes with; set on connect.</summary>
-    public AdxDefinition CurrentDefinition { get; internal set; }
+    public AdxDefinition CurrentDefinition
+    {
+        get => _currentDefinition;
+        internal set => SetField(ref _currentDefinition, value);
+    }
 
     /// <summary>Raised on the UI thread after each sample has been shown.</summary>
     public event EventHandler<LiveSample> SampleShown;
+
+    /// <summary>Coolant, oil and the overheat lamp as the samples report them (performance spec 5); reset on disconnect.</summary>
+    public WarmUpMonitor WarmUp { get; } = new();
+
+    /// <summary>The warm-up banners under the connection banner, danger first; Performance shows the same ones.</summary>
+    public ObservableCollection<WarmUpBannerViewModel> WarmUpBanners { get; } = new();
+
+    public bool HasWarmUpBanners => WarmUpBanners.Count > 0;
+
+    /// <summary>
+    /// The sample <see cref="SampleShown"/> is raised for, as the warm-up monitor read it, so the Performance tab decodes no
+    /// sample a second time (minor review, finding 21); null without a definition.
+    /// </summary>
+    internal PerfFrame? LastFrame { get; private set; }
+
+    /// <summary>The clock this screen reads; the Performance tab names its results by it.</summary>
+    internal TimeProvider Time => _time;
 
     internal void ShowSample(LiveSample sample)
     {
@@ -906,7 +888,47 @@ public class MainWindowViewModel : INotifyPropertyChanged
         }
 
         ShowSample(sample.Values, sample.Time);
+
+        // Before SampleShown: a performance run reads the warm-up state this sample left (plan Task 6 ruling), from this frame.
+        LastFrame = CurrentDefinition is { } definition
+            ? PerfChannels.Read(definition, sample.Values, sample.Payload.Span, _runClock.At(sample), sample.Retries)
+            : null;
+        if (LastFrame is { } frame)
+        {
+            WarmUp.Push(frame);
+        }
+
         SampleShown?.Invoke(this, sample);
+    }
+
+    private void ShowWarmUp()
+    {
+        var banners = WarmUp.Banners;
+        // The same banners with a new reading change in place; a new or cleared banner rebuilds the list (and slides in).
+        if (banners.Select(banner => (banner.Code, banner.Level)).SequenceEqual(WarmUpBanners.Select(shown => (shown.Code, shown.Banner.Level))))
+        {
+            for (var i = 0; i < banners.Count; i++)
+            {
+                WarmUpBanners[i].Update(banners[i]);
+            }
+
+            return;
+        }
+
+        WarmUpBanners.Clear();
+        foreach (var banner in banners)
+        {
+            WarmUpBanners.Add(new WarmUpBannerViewModel(banner));
+        }
+
+        OnPropertyChanged(nameof(HasWarmUpBanners));
+    }
+
+    // A new link starts from first readings: warm at the first reading needs no wait, cold needs its 10 s (spec 5).
+    private void ResetWarmUp()
+    {
+        _runClock.Reset();
+        WarmUp.Reset();
     }
 
     /// <summary>Shows one sample; <paramref name="time"/> is when it arrived (the clock's now when not given).</summary>
@@ -949,11 +971,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
             {
                 EngineSpeedLevel = Math.Clamp(decodedValue.Value / 8000.0, 0, 1);
             }
-
-            if (SpeedIds.Contains(id))
-            {
-                UpdateAccelerationTimes(decodedValue.Value, at);
-            }
         }
     }
 
@@ -994,6 +1011,9 @@ public class MainWindowViewModel : INotifyPropertyChanged
         ElapsedTime = "00:00:00";
         ResetRate();
         IsConnected = false;
+
+        // After IsConnected: a performance run ends on the link loss with the warm-up state it ran in (review focus 1).
+        ResetWarmUp();
 
         if (_session is not null)
         {

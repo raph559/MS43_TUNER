@@ -361,3 +361,256 @@ public sealed class PerformanceComparisonViewModel : ViewModelBase
         return $"{difference.ValueA ?? "n/a"} → {difference.ValueB ?? "n/a"}";
     }
 }
+
+/// <summary>A saved result opened from the library: its full result view, read-only except name, description and direction (spec 9.1).</summary>
+public sealed class OpenResultViewModel : ViewModelBase
+{
+    private readonly PerformanceResultsViewModel _owner;
+    private string _name;
+    private string _description;
+    private string? _direction;
+    // As the file holds them, so Back to the list knows what changed.
+    private string _savedName;
+    private string _savedDescription;
+    private string? _savedDirection;
+    private const double KnockWarnFrom = 1.5;
+
+    internal OpenResultViewModel(PerformanceResultsViewModel owner, string fileName, PerfResult result, bool readOnly)
+    {
+        _owner = owner;
+        FileName = fileName;
+        IsReadOnly = readOnly;
+        _name = _savedName = result.Name;
+        _description = _savedDescription = result.Description;
+        _direction = _savedDirection = result.Direction;
+        // Titled with its name, the test and headline beside it (minor review, finding 46).
+        Headline = string.IsNullOrWhiteSpace(result.Figures.Headline) ? result.Spec.ShortName : $"{result.Spec.ShortName} · {result.Figures.Headline}";
+        Figures = ResultText.Figures(result.Figures);
+        Knock = ResultText.KnockByCylinder(result.Figures);
+        KnockText = Knock is { } knock ? ResultText.KnockLine(knock, KnockWarnFrom) : null;
+        Tune = result.Tune;
+        Flags = ResultText.Flags(result.Figures);
+        ConditionsText = ResultText.ConditionsLine(result.Start);
+        TuneText = ResultText.TuneLine(result.Tune);
+        InputsText = ResultText.InputsLine(result.Inputs, result.Spec.Gear);
+    }
+
+    public string FileName { get; }
+
+    /// <summary>A newer version of the app made it: nothing can be changed.</summary>
+    public bool IsReadOnly { get; }
+
+    /// <summary>The result's name as its file holds it.</summary>
+    public string Title => _savedName;
+
+    /// <summary>"3rd pull · 5.50 s, 331 kW".</summary>
+    public string Headline { get; }
+
+    public IReadOnlyList<FigureRow> Figures { get; }
+
+    /// <summary>Each cylinder's worst knock retard of a knock check, for the six bars; null for other tests.</summary>
+    public IReadOnlyList<double?>? Knock { get; }
+
+    public bool HasKnock => Knock is not null;
+
+    /// <summary>The line under the bars naming each cylinder at or past 1.5 °CRK (minor review, finding 34).</summary>
+    public string? KnockText { get; }
+
+    /// <summary>The tune it was made with, for the tune line's file name, firmware id and edits.</summary>
+    public TuneIdentity? Tune { get; }
+
+    public IReadOnlyList<FlagRow> Flags { get; }
+
+    public string ConditionsText { get; }
+
+    public string TuneText { get; }
+
+    public string InputsText { get; }
+
+    public string Name
+    {
+        get => _name;
+        set
+        {
+            if (SetField(ref _name, value ?? ""))
+            {
+                OnChangesChanged();
+            }
+        }
+    }
+
+    public string Description
+    {
+        get => _description;
+        set
+        {
+            if (SetField(ref _description, value ?? ""))
+            {
+                OnChangesChanged();
+            }
+        }
+    }
+
+    public string? Direction
+    {
+        get => _direction;
+        set
+        {
+            if (SetField(ref _direction, value is "A" or "B" ? value : null))
+            {
+                OnPropertyChanged(nameof(IsDirectionA));
+                OnPropertyChanged(nameof(IsDirectionB));
+                OnChangesChanged();
+            }
+        }
+    }
+
+    /// <summary>The direction segment: pressing the lit one clears it.</summary>
+    public bool IsDirectionA { get => Direction == "A"; set => PressDirection("A", value); }
+
+    public bool IsDirectionB { get => Direction == "B"; set => PressDirection("B", value); }
+
+    /// <summary>The name, description or direction differs from what the file holds: Save changes is on only then.</summary>
+    public bool HasChanges => !IsReadOnly
+        && (Name.Trim() != _savedName.Trim() || Description.Trim() != _savedDescription.Trim() || Direction != _savedDirection);
+
+    /// <summary>What Save changes does, or why it is off (system 5.2: every disabled control says why).</summary>
+    public string SaveTip => IsReadOnly
+        ? "A newer version of the app made this result, so it cannot be changed."
+        : HasChanges
+            ? "Writes the name, description and direction into the result's file"
+            : "Nothing to save: the name, description and direction are as saved.";
+
+    private void OnChangesChanged()
+    {
+        OnPropertyChanged(nameof(HasChanges));
+        OnPropertyChanged(nameof(SaveTip));
+    }
+
+    private void PressDirection(string direction, bool on)
+    {
+        if (on)
+        {
+            Direction = direction;
+        }
+        else if (Direction == direction)
+        {
+            Direction = null;
+        }
+
+        OnPropertyChanged(nameof(IsDirectionA));
+        OnPropertyChanged(nameof(IsDirectionB));
+    }
+}
+
+/// <summary>
+/// The Results side of the Performance tab (performance spec 9.1, 9.2): the saved results with search and "Show cold runs",
+/// rename, description and delete with confirmation, a tick on two rows and Compare, and a result opened read-only.
+/// </summary>
+public sealed class PerformanceResultsViewModel : ViewModelBase
+{
+    private readonly HashSet<string> _picked = new(StringComparer.OrdinalIgnoreCase);
+    private IReadOnlyList<PerfResultHeader> _headers = [];
+    private IReadOnlyList<string> _skipped = [];
+    private string _searchText = "";
+    private bool _showCold;
+    private string? _error;
+    private PerformanceComparisonViewModel? _comparison;
+    private OpenResultViewModel? _opened;
+
+    /// <summary>The results the search and the cold switch let through, newest first.</summary>
+    public ObservableCollection<ResultRow> Rows { get; } = new();
+
+    public int PickedCount => _picked.Count;
+
+    /// <summary>What Compare waits for: "Tick two results to compare them." and the like.</summary>
+    public string PickText => _picked.Count switch
+    {
+        0 => "Tick two results to compare them.",
+        1 => "Tick one more to compare.",
+        2 => "Two ticked: ready to compare.",
+        _ => "Tick only two to compare.",
+    };
+
+    /// <summary>Exactly two rows ticked.</summary>
+    public bool CanCompare => _picked.Count == 2;
+
+    /// <summary>"perf-….json: not a result file" for each file the list left out (review focus 3).</summary>
+    public IReadOnlyList<string> Skipped
+    {
+        get => _skipped;
+        private set
+        {
+            if (SetField(ref _skipped, value))
+            {
+                OnPropertyChanged(nameof(HasSkipped));
+            }
+        }
+    }
+
+    public bool HasSkipped => Skipped.Count > 0;
+
+    /// <summary>"Not saved: …", "Not compared: …" and the like after an action failed; null after one succeeded.</summary>
+    public string? Error { get => _error; private set => SetField(ref _error, value); }
+
+    public PerformanceComparisonViewModel? Comparison
+    {
+        get => _comparison;
+        private set
+        {
+            if (SetField(ref _comparison, value))
+            {
+                OnPropertyChanged(nameof(HasComparison));
+                OnPropertyChanged(nameof(ShowsList));
+            }
+        }
+    }
+
+    public bool HasComparison => Comparison is not null;
+
+    public OpenResultViewModel? Opened
+    {
+        get => _opened;
+        private set
+        {
+            if (SetField(ref _opened, value))
+            {
+                OnPropertyChanged(nameof(HasOpened));
+                OnPropertyChanged(nameof(ShowsList));
+            }
+        }
+    }
+
+    public bool HasOpened => Opened is not null;
+
+    /// <summary>The list shows unless a result is open or two are compared; each of those has a way back to it.</summary>
+    public bool ShowsList => !HasOpened && !HasComparison;
+
+    /// <summary>The headers of the last listing, for the Run side's baselines.</summary>
+    internal IReadOnlyList<PerfResultHeader> Headers => _headers;
+
+    public void CloseComparison() => Comparison = null;
+
+    private void OnPicked(ResultRow row)
+    {
+        if (row.IsPicked)
+        {
+            _picked.Add(row.FileName);
+        }
+        else
+        {
+            _picked.Remove(row.FileName);
+        }
+
+        OnPicksChanged();
+    }
+
+    private void OnPicksChanged()
+    {
+        OnPropertyChanged(nameof(PickedCount));
+        OnPropertyChanged(nameof(PickText));
+        OnPropertyChanged(nameof(CanCompare));
+    }
+
+    private static bool IsCold(PerfResultHeader header) => header.Flags.Any(flag => flag.Severity == FlagSeverity.Cold);
+}
