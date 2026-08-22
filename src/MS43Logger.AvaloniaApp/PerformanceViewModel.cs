@@ -10,6 +10,24 @@ using MS43Logger.Core.Performance;
 
 namespace MS43Logger.AvaloniaApp;
 
+/// <summary>One line of the Performance rail: a group title or a test.</summary>
+public abstract class PerformanceEntry : ViewModelBase
+{
+}
+
+public sealed class PerformanceGroup(string title) : PerformanceEntry
+{
+    public string Title { get; } = title;
+}
+
+/// <summary>
+/// A test of the rail (performance spec 9.1) with its one-line summary and, when the definition lacks a channel it needs, why
+/// it is off. <see cref="Kind"/> is null for Car, which holds values and runs nothing.
+/// </summary>
+public sealed class PerformanceTestEntry(string key, string title, string summary, PerfTestKind? kind) : PerformanceEntry
+{
+}
+
 /// <summary>
 /// The run clock of the performance tests (performance spec 4.2): a sample's request time on the logger's monotonic clock,
 /// or, for a sample without one, its arrival time since the first such sample. Never the clock at arrival.
