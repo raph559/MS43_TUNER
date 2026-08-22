@@ -26,6 +26,175 @@ public sealed class PerformanceGroup(string title) : PerformanceEntry
 /// </summary>
 public sealed class PerformanceTestEntry(string key, string title, string summary, PerfTestKind? kind) : PerformanceEntry
 {
+    private string? _offText;
+    private bool _isCurrent;
+
+    /// <summary>"pull", "knock", "rollon", "standing", "calibration", "car", "link" or "pedal".</summary>
+    public string Key { get; } = key;
+
+    public string Title { get; } = title;
+
+    public string Summary { get; } = summary;
+
+    public PerfTestKind? Kind { get; } = kind;
+
+    /// <summary>"This definition does not log knock per cylinder."; null when the test can run here.</summary>
+    public string? OffText
+    {
+        get => _offText;
+        internal set
+        {
+            if (SetField(ref _offText, value))
+            {
+                OnPropertyChanged(nameof(IsOff));
+            }
+        }
+    }
+
+    public bool IsOff => OffText is not null;
+
+    public bool IsCurrent { get => _isCurrent; internal set => SetField(ref _isCurrent, value); }
+}
+
+/// <summary>
+/// The Performance tab (performance spec 9.1): the tests on a rail grouped Pulls, Acceleration and Setup, the chosen test's
+/// Run side and the Results library. It reads the samples Live already receives (<see cref="Push"/>, from
+/// <see cref="MainWindowViewModel.SampleShown"/>) and never asks the car for one of its own; a run goes on while another tab
+/// is shown.
+/// </summary>
+public sealed class PerformanceViewModel : ViewModelBase, ISidePanel
+{
+    // A reading above the calibrated full pedal raises it once it has held this long (performance spec 4.4); the settings keep
+    // 10 to 130.
+    private static readonly TimeSpan PedalHold = TimeSpan.FromSeconds(0.5);
+    private const double MaxFullPedal = 130;
+
+    private readonly MainWindowViewModel _live;
+    private readonly TuneViewModel _tune;
+    private readonly Dictionary<string, AdxDefinition?> _definitions = new(StringComparer.OrdinalIgnoreCase);
+    private PerformanceTestEntry _selected;
+    private bool _isResultsMode;
+    private bool _isVisible;
+    private TimeSpan? _higherPedalSince;
+    private double _higherPedalLow;
+
+    public IReadOnlyList<PerformanceEntry> Entries { get; }
+
+    public bool IsRunMode
+    {
+        get => !_isResultsMode;
+        set
+        {
+            if (value)
+            {
+                SetResultsMode(false);
+            }
+            else
+            {
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool IsResultsMode
+    {
+        get => _isResultsMode;
+        set
+        {
+            if (value)
+            {
+                SetResultsMode(true);
+            }
+            else
+            {
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public PerformanceRunViewModel Run { get; }
+
+    public PerformanceResultsViewModel Results { get; }
+
+    /// <summary>Asks before a result is deleted ("Delete the result "Baseline"?"); a null asker or false keeps the file.</summary>
+    public Func<string, Task<bool>>? AskToDelete { get; set; }
+
+    /// <summary>Live's warm-up banners, shown at the top of the pane too (performance spec 5).</summary>
+    public ObservableCollection<WarmUpBannerViewModel> WarmUp => _live.WarmUpBanners;
+
+    /// <summary>The Performance rail's width as dragged, or null for the layout's own.</summary>
+    public double? RailWidth => _tune.Settings.PerformanceRailWidth;
+
+    /// <summary>True while the Performance rail is folded to its strip (Ctrl B). Remembered between runs.</summary>
+    public bool RailCollapsed => _tune.Settings.PerformanceRailCollapsed;
+
+    public void SetRailWidth(double? width, bool save)
+    {
+        _tune.Settings.PerformanceRailWidth = width is double wanted ? Math.Clamp(Math.Round(wanted), SidePanel.MinWidth, SidePanel.MaxWidth) : null;
+        if (save)
+        {
+            _tune.Settings.Save();
+        }
+
+        OnPropertyChanged(nameof(RailWidth));
+    }
+
+    public void SetRailCollapsed(bool collapsed)
+    {
+        if (_tune.Settings.PerformanceRailCollapsed == collapsed)
+        {
+            return;
+        }
+
+        _tune.Settings.PerformanceRailCollapsed = collapsed;
+        _tune.Settings.Save();
+        OnPropertyChanged(nameof(RailCollapsed));
+    }
+
+    // A reading above the calibration raises it once readings above it have held for 0.5 s, to the lowest of them, so one
+    // glitch never lowers every later pedal share (performance spec 4.4; minor review, findings 17 and 24).
+    private void RaiseFullPedal(PerfFrame frame)
+    {
+        if (Settings.FullPedal is not { } full || frame.Pedal is not { } pedal || !(pedal > full) || pedal > MaxFullPedal)
+        {
+            _higherPedalSince = null;
+            return;
+        }
+
+        if (_higherPedalSince is not { } since || frame.At < since)
+        {
+            _higherPedalSince = frame.At;
+            _higherPedalLow = pedal;
+            return;
+        }
+
+        _higherPedalLow = Math.Min(_higherPedalLow, pedal);
+        if (frame.At - since >= PedalHold)
+        {
+            Settings.FullPedal = _higherPedalLow;
+            Settings.Save();
+            _higherPedalSince = null;
+            Run.FullPedalChanged();
+        }
+    }
+
+    internal MainWindowViewModel Live => _live;
+
+    internal TuneViewModel Tune => _tune;
+
+    internal AppSettings Settings => _tune.Settings;
+
+    internal PerfResultStore Store { get; }
+
+    internal TimeProvider Time => _live.Time;
+
+    private void SetResultsMode(bool results)
+    {
+        if (SetField(ref _isResultsMode, results, nameof(IsResultsMode)))
+        {
+            OnPropertyChanged(nameof(IsRunMode));
+        }
+    }
 }
 
 /// <summary>
