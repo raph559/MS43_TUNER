@@ -172,6 +172,35 @@ public sealed class PerformanceRunViewModel : ViewModelBase
 
     public bool HasBaseline => _entry.Kind is PerfTestKind.Pull or PerfTestKind.KnockCheck or PerfTestKind.RollOn or PerfTestKind.StandingStart;
 
+    /// <summary>
+    /// Defaults to the most recent (spec 6.1); a choice the owner made stays while it is still listed. While the shown test has
+    /// a run, it is the baseline that run was armed with, until Discard or Run again.
+    /// </summary>
+    public BaselineChoice? SelectedBaseline
+    {
+        get => _selectedBaseline;
+        set
+        {
+            // The picker writes its selection back while its list is replaced: that is not the owner's choice.
+            if (_listingBaselines)
+            {
+                return;
+            }
+
+            if (!CanChangeBaseline)
+            {
+                OnPropertyChanged();
+                return;
+            }
+
+            if (value is not null && BaselineChoices.Contains(value))
+            {
+                _baselinePicked = true;
+                ShowBaseline(value);
+            }
+        }
+    }
+
     /// <summary>The picker is free until the shown test has a run, whose deltas were taken against the baseline it was armed with.</summary>
     public bool CanChangeBaseline => Shown is null;
 
@@ -475,6 +504,85 @@ public sealed class PerformanceRunViewModel : ViewModelBase
 
     public string? TuneText => HasResult ? ResultText.TuneLine(_runTune) : null;
 
+    /// <summary>Pre-filled as "3rd pull 14:32" when the run ends; edited inline before Save.</summary>
+    public string Name
+    {
+        get => _name;
+        set
+        {
+            if (SetField(ref _name, value ?? ""))
+            {
+                OnSaveStateChanged();
+            }
+        }
+    }
+
+    public string Description
+    {
+        get => _description;
+        set
+        {
+            if (SetField(ref _description, value ?? ""))
+            {
+                OnSaveStateChanged();
+            }
+        }
+    }
+
+    /// <summary>"A" or "B", which way the road was driven (spec 7); null for one direction.</summary>
+    public string? Direction
+    {
+        get => _direction;
+        set
+        {
+            if (SetField(ref _direction, value is "A" or "B" ? value : null))
+            {
+                OnPropertyChanged(nameof(IsDirectionA));
+                OnPropertyChanged(nameof(IsDirectionB));
+                OnSaveStateChanged();
+            }
+        }
+    }
+
+    /// <summary>The direction segment: pressing the lit one clears it.</summary>
+    public bool IsDirectionA { get => Direction == "A"; set => PressDirection("A", value); }
+
+    public bool IsDirectionB { get => Direction == "B"; set => PressDirection("B", value); }
+
+    public bool IsSaved
+    {
+        get => _isSaved;
+        private set
+        {
+            if (SetField(ref _isSaved, value))
+            {
+                OnPropertyChanged(nameof(SaveText));
+                OnSaveStateChanged();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Saved, and the name, description or direction changed since: Save changes writes them into the same file (minor review,
+    /// findings 61 and 64).
+    /// </summary>
+    public bool HasChangesToSave => IsSaved && _run?.Outcome is { } outcome
+        && (NameFor(outcome.Spec) != _savedName || Description.Trim() != _savedDescription || Direction != _savedDirection);
+
+    public bool CanSave => HasResult && (!IsSaved || HasChangesToSave);
+
+    /// <summary>"Save result", then "Save changes" once the run is in the results.</summary>
+    public string SaveText => IsSaved ? "Save changes" : "Save result";
+
+    /// <summary>The Saved mark: saved, with nothing changed since.</summary>
+    public bool ShowsSaved => IsSaved && !HasChangesToSave;
+
+    /// <summary>
+    /// A finished run that is not saved, or saved with changes not written yet, whichever test the rail shows: closing the app
+    /// asks about it (spec 2).
+    /// </summary>
+    public bool HasUnsavedResult => _run is { Stage: RunStage.Finished, Outcome: not null } && (!IsSaved || HasChangesToSave);
+
     /// <summary>Asks whether to save a finished run before the app closes ("Save the result "3rd pull 14:32"?").</summary>
     public Func<string, System.Threading.Tasks.Task<SaveChoice>>? AskToSaveResult { get; set; }
 
@@ -539,10 +647,55 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     /// <summary>A higher reading raised the full-pedal value (spec 4.4).</summary>
     internal void FullPedalChanged() => OnPropertyChanged(nameof(PedalText));
 
+    internal void Push(PerfFrame frame, LiveSample sample, AdxDefinition definition)
+    {
+        _lastFrame = frame;
+        _lastSampleAt = _owner.Time.GetUtcNow();
+        if (_silentSeconds is not null)
+        {
+            _silentSeconds = null;
+            OnPropertyChanged(nameof(IsLive));
+            OnPropertyChanged(nameof(Status));
+        }
+
+        if (_run is not { Stage: RunStage.Waiting or RunStage.Running } run)
+        {
+            return;
+        }
+
+        _runDefinition ??= definition;
+        // The result is made when its last sample arrived (plan Task 7 ruling); never the clock at arrival for test math.
+        _lastArrival = sample.Time;
+        run.Push(frame, sample.Payload);
+    }
+
     internal void LinkLost()
     {
         _lastSampleAt = null;
         _run?.LinkLost();
+    }
+
+    /// <summary>
+    /// While a run is on, notices that samples stopped coming: the marks turn Ink3 and the status says for how long (minor
+    /// review, finding 42). A timer calls it every second while a run is on; the link's own loss still ends the run.
+    /// </summary>
+    internal void CheckSamples()
+    {
+        int? silent = null;
+        if (_run is { Stage: RunStage.Waiting or RunStage.Running } && _lastSampleAt is { } last
+            && _owner.Time.GetUtcNow() - last is var quiet && quiet > SilentAfter)
+        {
+            silent = (int)quiet.TotalSeconds;
+        }
+
+        if (silent == _silentSeconds)
+        {
+            return;
+        }
+
+        _silentSeconds = silent;
+        OnPropertyChanged(nameof(IsLive));
+        OnPropertyChanged(nameof(Status));
     }
 
     private void ListBaselines(IReadOnlyList<BaselineChoice> choices)
@@ -602,6 +755,34 @@ public sealed class PerformanceRunViewModel : ViewModelBase
         }
     }
 
+    private void OnSaveStateChanged()
+    {
+        OnPropertyChanged(nameof(HasChangesToSave));
+        OnPropertyChanged(nameof(CanSave));
+        OnPropertyChanged(nameof(ShowsSaved));
+    }
+
+    // The name saved: as typed, or "3rd pull 14:32" when left empty.
+    private string NameFor(PerfTestSpec spec) => string.IsNullOrWhiteSpace(Name) ? DefaultName(spec) : Name.Trim();
+
+    // The timer behind CheckSamples runs only while a run is on.
+    private void WatchSamples(bool on)
+    {
+        if (!on)
+        {
+            _sampleWatch?.Stop();
+            _sampleWatch = null;
+            CheckSamples();
+            return;
+        }
+
+        if (_sampleWatch is null && Avalonia.Application.Current is not null)
+        {
+            _sampleWatch = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => CheckSamples());
+            _sampleWatch.Start();
+        }
+    }
+
     // The rpm axis of the live chart (finding 49): rpm = km/h ÷ (km/h per rpm) for a roll-on in a calibrated gear.
     private (double From, double To)? LiveRpmRange => Shown?.Spec switch
     {
@@ -616,6 +797,34 @@ public sealed class PerformanceRunViewModel : ViewModelBase
 
     private string DefaultName(PerfTestSpec spec) =>
         $"{spec.ShortName} {TimeZoneInfo.ConvertTime(_lastArrival, _owner.Time.LocalTimeZone).ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture)}";
+
+    private void PressDirection(string direction, bool on)
+    {
+        if (on)
+        {
+            Direction = direction;
+        }
+        else if (Direction == direction)
+        {
+            Direction = null;
+        }
+
+        OnPropertyChanged(nameof(IsDirectionA));
+        OnPropertyChanged(nameof(IsDirectionB));
+    }
+
+    private void ShowBaseline(BaselineChoice choice)
+    {
+        if (!SetField(ref _selectedBaseline, choice, nameof(SelectedBaseline)) && (_baseline is not null || choice.FileName is null))
+        {
+            return;
+        }
+
+        _baseline = choice.FileName is { } file ? _owner.Store.Load(file) : null;
+        BaselineTrace = _baseline?.Figures.Traces.FirstOrDefault(trace => trace.Key == "rpm-time") is { } trace
+            ? trace.X.Zip(trace.Y, (x, y) => new Point(x, y)).Where(point => double.IsFinite(point.X) && double.IsFinite(point.Y)).ToArray()
+            : null;
+    }
 
     private double? RevLimit(int gear) => TuneIdentity.From(_owner.Tune.Document, gear)?.RevLimitRpm;
 

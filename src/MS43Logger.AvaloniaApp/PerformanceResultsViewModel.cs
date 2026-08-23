@@ -509,6 +509,7 @@ public sealed class OpenResultViewModel : ViewModelBase
 /// </summary>
 public sealed class PerformanceResultsViewModel : ViewModelBase
 {
+    private readonly PerformanceViewModel _owner;
     private readonly HashSet<string> _picked = new(StringComparer.OrdinalIgnoreCase);
     private IReadOnlyList<PerfResultHeader> _headers = [];
     private IReadOnlyList<string> _skipped = [];
@@ -518,8 +519,38 @@ public sealed class PerformanceResultsViewModel : ViewModelBase
     private PerformanceComparisonViewModel? _comparison;
     private OpenResultViewModel? _opened;
 
+    internal PerformanceResultsViewModel(PerformanceViewModel owner)
+    {
+        _owner = owner;
+    }
+
     /// <summary>The results the search and the cold switch let through, newest first.</summary>
     public ObservableCollection<ResultRow> Rows { get; } = new();
+
+    public string SearchText
+    {
+        get => _searchText;
+        set
+        {
+            if (SetField(ref _searchText, value ?? ""))
+            {
+                Filter();
+            }
+        }
+    }
+
+    /// <summary>Cold runs are hidden by default (spec 9.2).</summary>
+    public bool ShowCold
+    {
+        get => _showCold;
+        set
+        {
+            if (SetField(ref _showCold, value))
+            {
+                Filter();
+            }
+        }
+    }
 
     public int PickedCount => _picked.Count;
 
@@ -549,6 +580,11 @@ public sealed class PerformanceResultsViewModel : ViewModelBase
     }
 
     public bool HasSkipped => Skipped.Count > 0;
+
+    /// <summary>"No saved results yet." or "No result matches "xyz"." while the list is empty; null otherwise.</summary>
+    public string? EmptyText => Rows.Count > 0
+        ? null
+        : _headers.Count == 0 ? "No saved results yet." : !string.IsNullOrWhiteSpace(SearchText) ? $"No result matches \"{SearchText.Trim()}\"." : "Only cold runs are saved: turn on Show cold runs to see them.";
 
     /// <summary>"Not saved: …", "Not compared: …" and the like after an action failed; null after one succeeded.</summary>
     public string? Error { get => _error; private set => SetField(ref _error, value); }
@@ -590,6 +626,71 @@ public sealed class PerformanceResultsViewModel : ViewModelBase
     internal IReadOnlyList<PerfResultHeader> Headers => _headers;
 
     public void CloseComparison() => Comparison = null;
+
+    /// <summary>Shows a saved result's full result view.</summary>
+    public void Open(ResultRow row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        if (Load(row.FileName) is { } result)
+        {
+            Opened = new OpenResultViewModel(this, row.FileName, result, row.IsReadOnly);
+        }
+    }
+
+    private PerfResult? Load(string fileName)
+    {
+        var result = _owner.Store.Load(fileName);
+        Error = result is null ? _owner.Store.LastError : null;
+        return result;
+    }
+
+    // The noise is the spread over the saved, warm runs of A's test and tune (spec 9.2); PerfCompare takes the first one's tune.
+    private IReadOnlyList<PerfResult>? SameTune(PerfResult a)
+    {
+        if (a.Tune?.SavedSha256 is not { } hash)
+        {
+            return null;
+        }
+
+        var others = _headers
+            .Where(header => header.Id != a.Id && header.Preset == a.Spec.Preset && header.SavedSha256 == hash && !IsCold(header))
+            .Select(header => _owner.Store.Load(header.FileName))
+            .OfType<PerfResult>();
+        return [a, .. others];
+    }
+
+    private void Filter()
+    {
+        var words = XdfCatalog.Words(SearchText);
+        var rows = new List<ResultRow>();
+        foreach (var header in _headers)
+        {
+            var cold = IsCold(header);
+            if (cold && !ShowCold)
+            {
+                continue;
+            }
+
+            var row = new ResultRow(header, ResultText.Test(header.Kind, header.Preset), ResultText.Date(header.Created, _owner.Time), cold,
+                _picked.Contains(header.FileName), OnPicked);
+            // A ticked row stays in view whatever the search, so A and B can each be found by search (minor review, finding 63).
+            if (row.IsPicked || words.All(row.Matches))
+            {
+                rows.Add(row);
+            }
+        }
+
+        // A row out of view (deleted, or hidden as cold) is never ticked, so Compare never takes one the owner cannot see.
+        _picked.IntersectWith(rows.Select(row => row.FileName));
+        Rows.Clear();
+        foreach (var row in rows)
+        {
+            Rows.Add(row);
+        }
+
+        OnPicksChanged();
+        OnPropertyChanged(nameof(EmptyText));
+    }
 
     private void OnPicked(ResultRow row)
     {
