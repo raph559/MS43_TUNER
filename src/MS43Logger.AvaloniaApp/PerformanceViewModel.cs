@@ -151,6 +151,22 @@ public sealed class PerformanceViewModel : ViewModelBase, ISidePanel
         OnPropertyChanged(nameof(RailCollapsed));
     }
 
+    /// <summary>
+    /// One sample as Live showed it, with the frame Live's warm-up monitor read from it (<see cref="MainWindowViewModel.LastFrame"/>,
+    /// so each sample is decoded once); <paramref name="definition"/> decoded it.
+    /// </summary>
+    public void Push(LiveSample sample, PerfFrame? frame, AdxDefinition? definition)
+    {
+        ArgumentNullException.ThrowIfNull(sample);
+        if (frame is null || definition is null)
+        {
+            return;
+        }
+
+        RaiseFullPedal(frame);
+        Run.Push(frame, sample, definition);
+    }
+
     // A reading above the calibration raises it once readings above it have held for 0.5 s, to the lowest of them, so one
     // glitch never lowers every later pedal share (performance spec 4.4; minor review, findings 17 and 24).
     private void RaiseFullPedal(PerfFrame frame)
@@ -188,12 +204,47 @@ public sealed class PerformanceViewModel : ViewModelBase, ISidePanel
 
     internal TimeProvider Time => _live.Time;
 
+    /// <summary>What the samples are decoded with while connected; otherwise the chosen variant's definition, null if unreadable.</summary>
+    internal AdxDefinition? Definition => _live.IsConnected && _live.CurrentDefinition is { } current ? current : Bundled(_live.SelectedVariant);
+
+    /// <summary>The car values, speed calibration and full-pedal value as they are now (spec 7, 6.5, 4.4).</summary>
+    internal AnalysisInputs CurrentInputs() => new(
+        new CarValues(Settings.TestMassKg, Settings.TyreSize, Settings.Automatic),
+        new Dictionary<int, double>(Settings.KmhPerRpm),
+        Settings.FullPedal ?? 0,
+        new Dictionary<int, double>(Settings.SpeedometerKmhPerRpm),
+        Settings.GpsChecked.Where(pair => pair.Value).Select(pair => pair.Key).Order().ToArray());
+
     private void SetResultsMode(bool results)
     {
         if (SetField(ref _isResultsMode, results, nameof(IsResultsMode)))
         {
             OnPropertyChanged(nameof(IsRunMode));
         }
+    }
+
+    private AdxDefinition? Bundled(string? variant)
+    {
+        if (string.IsNullOrWhiteSpace(variant))
+        {
+            return null;
+        }
+
+        if (!_definitions.TryGetValue(variant, out var definition))
+        {
+            try
+            {
+                definition = BundledDefinitions.Load(variant);
+            }
+            catch (Exception error) when (error is InvalidOperationException or InvalidDataException or IOException)
+            {
+                definition = null;
+            }
+
+            _definitions[variant] = definition;
+        }
+
+        return definition;
     }
 }
 

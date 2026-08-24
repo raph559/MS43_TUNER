@@ -160,6 +160,47 @@ public sealed class PerformanceRunViewModel : ViewModelBase
 
     public bool OffersGear4 => GearChoices.Contains(4);
 
+    /// <summary>
+    /// A new gear brings that preset's band (the last one used, else the preset's own) and its baselines; the gear of a run
+    /// that is on stays.
+    /// </summary>
+    public int? SelectedGear
+    {
+        get => _selectedGear;
+        set
+        {
+            if ((value is { } gear && !GearChoices.Contains(gear)) || Shown is { Stage: RunStage.Waiting or RunStage.Running })
+            {
+                return;
+            }
+
+            if (SetGear(value))
+            {
+                ReloadBand();
+                _baselinePicked = false;
+                RefreshBaselines();
+                OnPropertyChanged(nameof(InputsText));
+                RefreshAvailability();
+            }
+        }
+    }
+
+    public bool IsGear2 { get => SelectedGear == 2; set => PressGear(2, value); }
+
+    public bool IsGear3 { get => SelectedGear == 3; set => PressGear(3, value); }
+
+    public bool IsGear4 { get => SelectedGear == 4; set => PressGear(4, value); }
+
+    /// <summary>The band of a pull or knock check, as typed; the run uses it once both read as rpm with the start below the end.</summary>
+    public string StartRpm { get => _startRpm; set => SetOption(ref _startRpm, value); }
+
+    public string EndRpm { get => _endRpm; set => SetOption(ref _endRpm, value); }
+
+    /// <summary>The speeds of a roll-on, as typed.</summary>
+    public string StartKmh { get => _startKmh; set => SetOption(ref _startKmh, value); }
+
+    public string EndKmh { get => _endKmh; set => SetOption(ref _endKmh, value); }
+
     public bool HasRpmBand => _entry.Kind is PerfTestKind.Pull or PerfTestKind.KnockCheck;
 
     public bool HasSpeedBand => _entry.Kind is PerfTestKind.RollOn;
@@ -277,6 +318,13 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     /// for over a second (system 1.4).
     /// </summary>
     public bool IsLive => _owner.Live.IsConnected && !_owner.Live.IsStale && _silentSeconds is null;
+
+    /// <summary>The speed calibration and car values the test will use (spec 6.5: "speed not GPS-checked" when it was not).</summary>
+    public string? InputsText => HasResult && _runInputs is not null
+        ? ResultText.InputsLine(_runInputs, _run!.Spec.Gear)
+        : _entry.Kind is PerfTestKind.Pull or PerfTestKind.RollOn or PerfTestKind.StandingStart
+            ? ResultText.InputsLine(_owner.CurrentInputs(), _entry.Kind == PerfTestKind.StandingStart ? null : SelectedGear)
+            : null;
 
     /// <summary>Live's warm-up banners, at the top of the pane (performance spec 5).</summary>
     public ObservableCollection<WarmUpBannerViewModel> WarmUp => _owner.Live.WarmUpBanners;
@@ -424,6 +472,10 @@ public sealed class PerformanceRunViewModel : ViewModelBase
 
     /// <summary>The live values line and the rpm-against-time chart, for the tests that drive (spec 6.1).</summary>
     public bool ShowsLiveChart => Shown?.Spec.Kind is PerfTestKind.Pull or PerfTestKind.KnockCheck or PerfTestKind.RollOn or PerfTestKind.StandingStart;
+
+    /// <summary>The definition logs knock per cylinder (not the stock ones: review focus 2), so the six bars show.</summary>
+    public bool HasKnock => ShowsLiveChart && (_runDefinition ?? _owner.Definition) is { } definition
+        && PerfChannels.Missing(definition, PerfTestKind.KnockCheck).Count == 0;
 
     /// <summary>The progress bar's scale: the run's rpm band, its speeds, or the link test's 30 s.</summary>
     public double ProgressFrom => Shown?.Spec switch
@@ -698,6 +750,65 @@ public sealed class PerformanceRunViewModel : ViewModelBase
         OnPropertyChanged(nameof(Status));
     }
 
+    /// <summary>
+    /// The band of the chosen preset again, unless its run is on: the last one used, else the preset's own (spec 6.1, 9.2);
+    /// <paramref name="keepTyped"/> keeps what the owner typed over the band last loaded.
+    /// </summary>
+    internal void ReloadBand(bool keepTyped = false)
+    {
+        if (_run is { Stage: RunStage.Waiting or RunStage.Running } && ReferenceEquals(_runEntry, _entry))
+        {
+            return;
+        }
+
+        var limit = _entry.Kind == PerfTestKind.Pull && SelectedGear == 3 ? RevLimit(3) : null;
+        var spec = PresetSpec(limit is { } rpm ? rpm - RevLimitMargin : null);
+        if (spec is null)
+        {
+            ShowBand(null, null, keepTyped);
+            return;
+        }
+
+        if (spec.Kind is PerfTestKind.Pull or PerfTestKind.KnockCheck or PerfTestKind.RollOn
+            && _owner.Settings.PerformanceBands.TryGetValue(spec.Preset, out var band) && band is [var start, var end])
+        {
+            spec = spec.Kind == PerfTestKind.RollOn ? spec with { StartKmh = start, EndKmh = end } : spec with { StartRpm = start, EndRpm = end };
+            limit = null;
+        }
+
+        ShowBand(spec, limit is { } known ? $"Ends {NumberFormat.Format(RevLimitMargin, 0)} rpm below the open bin's rev limit in 3rd ({NumberFormat.Format(known, 0)} rpm)." : null, keepTyped);
+    }
+
+    /// <summary>The baselines of the chosen test and gear from the library's last listing; the most recent unless one was picked.</summary>
+    internal void RefreshBaselines()
+    {
+        if (Shown is not null)
+        {
+            // The run keeps the baseline it was armed with until Discard or Run again (minor review, finding 62).
+            ListBaselines([_runBaselineChoice]);
+            _baseline = _runBaselineResult;
+            _selectedBaseline = _runBaselineChoice;
+            OnPropertyChanged(nameof(SelectedBaseline));
+            BaselineTrace = _runBaselineTrace;
+            return;
+        }
+
+        var preset = HasBaseline ? PresetSpec(null)?.Preset : null;
+        var choices = new List<BaselineChoice> { NoBaseline };
+        if (preset is not null)
+        {
+            choices.AddRange(_owner.Results.Headers
+                .Where(header => header.Preset == preset && !header.Flags.Any(flag => flag.Severity == FlagSeverity.Cold))
+                .Select(header => new BaselineChoice(header.Name, header.FileName)));
+        }
+
+        ListBaselines(choices);
+        var kept = _baselinePicked ? choices.FirstOrDefault(choice => choice.FileName == _selectedBaseline.FileName) : null;
+        ShowBaseline(kept ?? (choices.Count > 1 ? choices[1] : NoBaseline));
+        // The picker may have dropped its selection with the old list.
+        OnPropertyChanged(nameof(SelectedBaseline));
+    }
+
     private void ListBaselines(IReadOnlyList<BaselineChoice> choices)
     {
         _listingBaselines = true;
@@ -711,12 +822,56 @@ public sealed class PerformanceRunViewModel : ViewModelBase
         }
     }
 
+    /// <summary>What Arm waits for, in order: the definition's channels, the link, the pedal calibration, a run on, the band.</summary>
+    internal void RefreshAvailability()
+    {
+        var tip = Why();
+        ArmTip = tip;
+        CanArm = tip is null && HasArm;
+        OnPropertyChanged(nameof(ArmIsPrimary));
+        OnPropertyChanged(nameof(IsLive));
+        OnPropertyChanged(nameof(HasKnock));
+        OnPropertyChanged(nameof(ShowsRunningTest));
+    }
+
     /// <summary>The link went stale or came back: the live marks follow (system 1.4).</summary>
     internal void LiveStateChanged() => OnPropertyChanged(nameof(IsLive));
 
     private PerfRun? Shown => _run is not null && ReferenceEquals(_runEntry, _entry) ? _run : null;
 
     private AppSettings Settings => _owner.Settings;
+
+    private string? Why()
+    {
+        if (_entry.Kind is not { } kind)
+        {
+            return null;
+        }
+
+        if (ResultText.MissingText(_owner.Definition, kind) is { } missing)
+        {
+            return missing;
+        }
+
+        if (!_owner.Live.IsConnected)
+        {
+            return "Connect to the car to run a test.";
+        }
+
+        // Pull-type tests start on full throttle, which is a share of the calibrated pedal (spec 4.4).
+        if (kind is PerfTestKind.Pull or PerfTestKind.KnockCheck or PerfTestKind.RollOn && !(Settings.FullPedal > 0))
+        {
+            return PedalFirst;
+        }
+
+        if (_run is { Stage: RunStage.Waiting or RunStage.Running } on)
+        {
+            return $"{_runEntry?.Title ?? "A test"} is {(on.Stage == RunStage.Waiting ? "armed" : "running")}: cancel it first.";
+        }
+
+        OptionsSpec(out var problem);
+        return problem;
+    }
 
     // The run's checks into the rows: in place while the labels stay, so the list is never rebuilt for a new reading.
     private void SyncChecks()
@@ -798,6 +953,29 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     private string DefaultName(PerfTestSpec spec) =>
         $"{spec.ShortName} {TimeZoneInfo.ConvertTime(_lastArrival, _owner.Time.LocalTimeZone).ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture)}";
 
+    private bool SetGear(int? gear)
+    {
+        if (!SetField(ref _selectedGear, gear, nameof(SelectedGear)))
+        {
+            return false;
+        }
+
+        OnPropertyChanged(nameof(IsGear2));
+        OnPropertyChanged(nameof(IsGear3));
+        OnPropertyChanged(nameof(IsGear4));
+        return true;
+    }
+
+    private void PressGear(int gear, bool on)
+    {
+        if (on)
+        {
+            SelectedGear = gear;
+        }
+
+        OnPropertyChanged(gear switch { 2 => nameof(IsGear2), 3 => nameof(IsGear3), _ => nameof(IsGear4) });
+    }
+
     private void PressDirection(string direction, bool on)
     {
         if (on)
@@ -813,6 +991,27 @@ public sealed class PerformanceRunViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsDirectionB));
     }
 
+    private void SetOption(ref string field, string? value, [System.Runtime.CompilerServices.CallerMemberName] string? name = null)
+    {
+        if (SetField(ref field, value ?? "", name))
+        {
+            RefreshAvailability();
+        }
+    }
+
+    // keepTyped keeps a field the owner typed over the band last loaded; an end of their own is no longer the bin's limit.
+    private void ShowBand(PerfTestSpec? spec, string? note, bool keepTyped = false)
+    {
+        var (startRpm, endRpm, startKmh, endKmh) = (Whole(spec?.StartRpm), Whole(spec?.EndRpm), Whole(spec?.StartKmh), Whole(spec?.EndKmh));
+        var ownEnd = keepTyped && EndRpm != _loadedEndRpm;
+        StartRpm = keepTyped && StartRpm != _loadedStartRpm ? StartRpm : startRpm;
+        EndRpm = ownEnd ? EndRpm : endRpm;
+        StartKmh = keepTyped && StartKmh != _loadedStartKmh ? StartKmh : startKmh;
+        EndKmh = keepTyped && EndKmh != _loadedEndKmh ? EndKmh : endKmh;
+        (_loadedStartRpm, _loadedEndRpm, _loadedStartKmh, _loadedEndKmh) = (startRpm, endRpm, startKmh, endKmh);
+        BandNote = ownEnd ? null : note;
+    }
+
     private void ShowBaseline(BaselineChoice choice)
     {
         if (!SetField(ref _selectedBaseline, choice, nameof(SelectedBaseline)) && (_baseline is not null || choice.FileName is null))
@@ -824,6 +1023,53 @@ public sealed class PerformanceRunViewModel : ViewModelBase
         BaselineTrace = _baseline?.Figures.Traces.FirstOrDefault(trace => trace.Key == "rpm-time") is { } trace
             ? trace.X.Zip(trace.Y, (x, y) => new Point(x, y)).Where(point => double.IsFinite(point.X) && double.IsFinite(point.Y)).ToArray()
             : null;
+    }
+
+    // The preset of the chosen test and gear; endRpm replaces a pull's end.
+    private PerfTestSpec? PresetSpec(double? endRpm) => _entry.Kind switch
+    {
+        PerfTestKind.Pull when SelectedGear is { } gear => PerfTestSpec.Pull(gear, endRpm),
+        PerfTestKind.KnockCheck => PerfTestSpec.KnockCheck(),
+        PerfTestKind.RollOn when SelectedGear is { } gear => PerfTestSpec.RollOn(gear),
+        PerfTestKind.StandingStart => PerfTestSpec.StandingStart(),
+        PerfTestKind.SpeedCalibration => PerfTestSpec.SpeedCalibration(),
+        PerfTestKind.LinkTest => PerfTestSpec.LinkTest(),
+        PerfTestKind.Pedal => PerfTestSpec.Pedal(),
+        _ => null,
+    };
+
+    // The preset with the typed band; problem says what is wrong with it.
+    private PerfTestSpec? OptionsSpec(out string? problem)
+    {
+        problem = null;
+        if (PresetSpec(null) is not { } spec)
+        {
+            return null;
+        }
+
+        if (spec.Kind is PerfTestKind.Pull or PerfTestKind.KnockCheck)
+        {
+            if (ResultText.Parse(StartRpm) is { } start && ResultText.Parse(EndRpm) is { } end && start > 0 && end <= MaxRpm && start < end)
+            {
+                return spec with { StartRpm = start, EndRpm = end };
+            }
+
+            problem = $"Enter a start below the end, up to {NumberFormat.Format(MaxRpm, 0)} rpm.";
+            return null;
+        }
+
+        if (spec.Kind == PerfTestKind.RollOn)
+        {
+            if (ResultText.Parse(StartKmh) is { } start && ResultText.Parse(EndKmh) is { } end && start > 0 && end <= MaxKmh && start < end)
+            {
+                return spec with { StartKmh = start, EndKmh = end };
+            }
+
+            problem = $"Enter a start below the end, up to {NumberFormat.Format(MaxKmh, 0)} km/h.";
+            return null;
+        }
+
+        return spec;
     }
 
     private double? RevLimit(int gear) => TuneIdentity.From(_owner.Tune.Document, gear)?.RevLimitRpm;

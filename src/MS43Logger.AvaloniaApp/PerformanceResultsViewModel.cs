@@ -625,6 +625,85 @@ public sealed class PerformanceResultsViewModel : ViewModelBase
     /// <summary>The headers of the last listing, for the Run side's baselines.</summary>
     internal IReadOnlyList<PerfResultHeader> Headers => _headers;
 
+    /// <summary>Reads the folder again; ticks stay on the files still there.</summary>
+    public void Refresh()
+    {
+        _headers = _owner.Store.List();
+        Skipped = _owner.Store.Skipped;
+        Filter();
+        _owner.Run.RefreshBaselines();
+    }
+
+    public bool Rename(ResultRow row, string name)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            Error = "Not renamed: a result needs a name";
+            return false;
+        }
+
+        return Update(row.FileName, result => (name.Trim(), result.Description, result.Direction));
+    }
+
+    public bool EditDescription(ResultRow row, string text)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        return Update(row.FileName, result => (result.Name, (text ?? "").Trim(), result.Direction));
+    }
+
+    /// <summary>Deletes the file once the owner confirmed (the confirm dialog); false when they did not or it failed.</summary>
+    public async Task<bool> DeleteAsync(ResultRow row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        if (_owner.AskToDelete is not { } ask || !await ask($"Delete the result \"{row.Name}\"?"))
+        {
+            return false;
+        }
+
+        if (!_owner.Store.Delete(row.FileName))
+        {
+            Error = _owner.Store.LastError;
+            return false;
+        }
+
+        Error = null;
+        if (Opened?.FileName == row.FileName)
+        {
+            Opened = null;
+        }
+
+        Refresh();
+        return true;
+    }
+
+    /// <summary>Compares the two ticked results, the earlier as A, so B − A is what the change did (spec 9.2).</summary>
+    public void Compare()
+    {
+        if (!CanCompare)
+        {
+            return;
+        }
+
+        var picked = Rows.Where(row => row.IsPicked).OrderBy(row => row.Header.Created).ThenBy(row => row.FileName, StringComparer.OrdinalIgnoreCase).ToArray();
+        if (picked.Length != 2 || Load(picked[0].FileName) is not { } a || Load(picked[1].FileName) is not { } b)
+        {
+            return;
+        }
+
+        try
+        {
+            // PerfCompare reads the tables only through the XDF the runs were saved with, and names it otherwise.
+            Comparison = new PerformanceComparisonViewModel(a, b, PerfCompare.Compare(a, b, _owner.CurrentInputs(), _owner.Tune.Document?.Xdf, SameTune(a)));
+            Error = null;
+        }
+        catch (InvalidDataException error)
+        {
+            Comparison = null;
+            Error = $"Not compared: {error.Message.Trim().TrimEnd('.')}";
+        }
+    }
+
     public void CloseComparison() => Comparison = null;
 
     /// <summary>Shows a saved result's full result view.</summary>
@@ -635,6 +714,25 @@ public sealed class PerformanceResultsViewModel : ViewModelBase
         {
             Opened = new OpenResultViewModel(this, row.FileName, result, row.IsReadOnly);
         }
+    }
+
+    private bool Update(string fileName, Func<PerfResult, (string Name, string Description, string? Direction)> change)
+    {
+        if (Load(fileName) is not { } result)
+        {
+            return false;
+        }
+
+        var (name, description, direction) = change(result);
+        if (!_owner.Store.Update(fileName, name, description, direction))
+        {
+            Error = _owner.Store.LastError;
+            return false;
+        }
+
+        Error = null;
+        Refresh();
+        return true;
     }
 
     private PerfResult? Load(string fileName)
