@@ -481,6 +481,20 @@ public sealed class OpenResultViewModel : ViewModelBase
             ? "Writes the name, description and direction into the result's file"
             : "Nothing to save: the name, description and direction are as saved.";
 
+    /// <summary>Writes the name, description and direction into the same file; false with the library's Error set when it cannot.</summary>
+    public bool SaveDetails()
+    {
+        if (IsReadOnly || !_owner.UpdateDetails(FileName, Name, Description, Direction))
+        {
+            return false;
+        }
+
+        (_savedName, _savedDescription, _savedDirection) = (Name.Trim(), Description.Trim(), Direction);
+        OnPropertyChanged(nameof(Title));
+        OnChangesChanged();
+        return true;
+    }
+
     private void OnChangesChanged()
     {
         OnPropertyChanged(nameof(HasChanges));
@@ -714,6 +728,31 @@ public sealed class PerformanceResultsViewModel : ViewModelBase
         {
             Opened = new OpenResultViewModel(this, row.FileName, result, row.IsReadOnly);
         }
+    }
+
+    /// <summary>
+    /// Back to the list (or Ctrl K): what was typed into the result is written first, and one that cannot be written keeps the
+    /// result open with why (minor review, finding 30).
+    /// </summary>
+    public void CloseOpened()
+    {
+        if (Opened is { HasChanges: true } opened && !opened.SaveDetails())
+        {
+            return;
+        }
+
+        Opened = null;
+    }
+
+    internal bool UpdateDetails(string fileName, string name, string description, string? direction)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            Error = "Not renamed: a result needs a name";
+            return false;
+        }
+
+        return Update(fileName, _ => (name.Trim(), (description ?? "").Trim(), direction));
     }
 
     private bool Update(string fileName, Func<PerfResult, (string Name, string Description, string? Direction)> change)

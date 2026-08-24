@@ -134,6 +134,15 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     private string? _massError;
     private string? _tyreError;
 
+    internal PerformanceRunViewModel(PerformanceViewModel owner, PerformanceTestEntry entry)
+    {
+        _owner = owner;
+        _entry = entry;
+        _massKg = NumberFormat.Format(owner.Settings.TestMassKg, 0);
+        _tyreSize = owner.Settings.TyreSize;
+        LoadOptions();
+    }
+
     // ---- Options -----------------------------------------------------------------------------------------------------
 
     /// <summary>The gears the test runs in: 2nd to 4th for a pull, 4th for the knock check, 3rd or 4th for a roll-on.</summary>
@@ -477,6 +486,9 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     public bool HasKnock => ShowsLiveChart && (_runDefinition ?? _owner.Definition) is { } definition
         && PerfChannels.Missing(definition, PerfTestKind.KnockCheck).Count == 0;
 
+    /// <summary>"Knock retard: cylinder 4 at 1.6 °CRK." for every cylinder at or past 1.5 °CRK (spec 9.2: never colour alone).</summary>
+    public string? KnockWarning => HasKnock ? ResultText.KnockLine(Knock, KnockWarnFrom) : null;
+
     /// <summary>The progress bar's scale: the run's rpm band, its speeds, or the link test's 30 s.</summary>
     public double ProgressFrom => Shown?.Spec switch
     {
@@ -641,6 +653,93 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     /// <summary>"Not saved: {reason}" after a save failed; null otherwise.</summary>
     public string? SaveError { get => _saveError; private set => SetField(ref _saveError, value); }
 
+    /// <summary>
+    /// Writes the result with its tune, conditions and samples to the results folder (spec 8), recorded with the definition
+    /// that decoded its samples; once saved, writes a changed name, description or direction into the same file.
+    /// </summary>
+    public void Save()
+    {
+        if (_run is not { Outcome: { } outcome } || _runInputs is null || _runDefinition is null)
+        {
+            return;
+        }
+
+        var name = NameFor(outcome.Spec);
+        if (IsSaved)
+        {
+            if (!HasChangesToSave || _savedFile is null)
+            {
+                return;
+            }
+
+            if (!_owner.Store.Update(_savedFile, name, Description.Trim(), Direction))
+            {
+                SaveError = _owner.Store.LastError;
+                return;
+            }
+        }
+        else
+        {
+            // The variant of the definition the samples were decoded with, not the picker's (minor review, findings 58, 65, 70).
+            if (BundledDefinitions.VariantOf(_runDefinition.SourceName) is not { } variant)
+            {
+                SaveError = $"Not saved: the samples were decoded with {_runDefinition.SourceName}, which is not a bundled definition";
+                return;
+            }
+
+            PerfResult result;
+            try
+            {
+                result = PerfResult.From(outcome, name, Description.Trim(), _runInputs, _runTune, variant, _runDefinition, _lastArrival, AppVersion);
+            }
+            catch (InvalidOperationException error)
+            {
+                SaveError = $"Not saved: {error.Message.Trim().TrimEnd('.')}";
+                return;
+            }
+
+            result.Direction = Direction;
+            if (_owner.Store.Save(result) is not { } file)
+            {
+                SaveError = _owner.Store.LastError;
+                return;
+            }
+
+            _savedFile = file;
+        }
+
+        (_savedName, _savedDescription, _savedDirection) = (name, Description.Trim(), Direction);
+        SaveError = null;
+        IsSaved = true;
+        OnSaveStateChanged();
+        _owner.Results.Refresh();
+    }
+
+    /// <summary>
+    /// True when the app may close: no finished run unsaved, it is saved now, or the owner chose not to keep it; otherwise only
+    /// Discard, Run again or arming another test drop one (spec 2).
+    /// </summary>
+    public async System.Threading.Tasks.Task<bool> ConfirmCloseAsync()
+    {
+        if (!HasUnsavedResult || _run?.Outcome is not { } outcome)
+        {
+            return true;
+        }
+
+        var name = NameFor(outcome.Spec);
+        var choice = AskToSaveResult is null ? SaveChoice.Cancel : await AskToSaveResult($"Save the result \"{name}\"?");
+        switch (choice)
+        {
+            case SaveChoice.Save:
+                Save();
+                return !HasUnsavedResult;
+            case SaveChoice.DontSave:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     // ---- Setup -------------------------------------------------------------------------------------------------------
 
     public bool IsCalibration => _entry.Kind == PerfTestKind.SpeedCalibration;
@@ -687,17 +786,178 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     /// <summary>What the speedometer (VS) read at the moment of <see cref="GpsKmh"/>.</summary>
     public string GpsVsKmh { get => _gpsVsKmh; set => SetField(ref _gpsVsKmh, value ?? ""); }
 
+    /// <summary>
+    /// Stores the captured gears in the settings, every one corrected by GPS / speedometer when both were typed, and ends the
+    /// capture (spec 6.5); the other gears keep their calibration.
+    /// </summary>
+    public void SaveCalibration()
+    {
+        if (Shown is not { Spec.Kind: PerfTestKind.SpeedCalibration } run || run.Captured.Count == 0)
+        {
+            return;
+        }
+
+        var factor = ResultText.Parse(GpsKmh) is { } gps && ResultText.Parse(GpsVsKmh) is { } shown && gps > 0 && shown > 0 ? gps / shown : (double?)null;
+        var gears = run.Captured.Keys.Order().ToArray();
+        foreach (var gear in gears)
+        {
+            _owner.Settings.KmhPerRpm[gear] = run.Captured[gear] * (factor ?? 1);
+            // VS stays the speedometer's reading, so the slip check needs the ratio it was captured with (spec 4.5).
+            _owner.Settings.SpeedometerKmhPerRpm[gear] = run.Captured[gear];
+        }
+
+        foreach (var gear in gears)
+        {
+            // Each gear keeps the check it was saved with (minor review, findings 9 and 23).
+            _owner.Settings.GpsChecked[gear] = factor is not null;
+        }
+
+        _owner.Settings.Save();
+        run.Cancel();
+        GpsKmh = "";
+        GpsVsKmh = "";
+        SetNotice($"Speed calibration saved for {ResultText.Join(gears.Select(ResultText.Ordinal).ToArray())}{(factor is null ? ", not GPS-checked." : ", corrected by the GPS speed.")}", _entry);
+        Project();
+    }
+
+    /// <summary>Test mass with the driver, in kg; 500 to 3500 is stored, anything else is refused with a reason.</summary>
+    public string MassKg
+    {
+        get => _massKg;
+        set
+        {
+            if (!SetField(ref _massKg, value ?? ""))
+            {
+                return;
+            }
+
+            if (ResultText.Parse(_massKg) is { } kg and >= 500 and <= 3500)
+            {
+                _owner.Settings.TestMassKg = kg;
+                _owner.Settings.Save();
+                MassError = null;
+                OnPropertyChanged(nameof(InputsText));
+            }
+            else
+            {
+                MassError = "Enter a mass from 500 to 3500 kg.";
+            }
+        }
+    }
+
     public string? MassError { get => _massError; private set => SetField(ref _massError, value); }
 
+    /// <summary>"205/55 R16"; a size the power estimate cannot read is refused with a reason.</summary>
+    public string TyreSize
+    {
+        get => _tyreSize;
+        set
+        {
+            if (!SetField(ref _tyreSize, value ?? ""))
+            {
+                return;
+            }
+
+            if (RunMath.TyreCircumference(_tyreSize) is not null)
+            {
+                _owner.Settings.TyreSize = _tyreSize.Trim();
+                _owner.Settings.Save();
+                TyreError = null;
+                OnPropertyChanged(nameof(InputsText));
+                OnPropertyChanged(nameof(CapturedRows));
+            }
+            else
+            {
+                TyreError = "Enter a size such as 205/55 R16.";
+            }
+        }
+    }
+
     public string? TyreError { get => _tyreError; private set => SetField(ref _tyreError, value); }
+
+    public bool Automatic
+    {
+        get => _owner.Settings.Automatic;
+        set
+        {
+            if (_owner.Settings.Automatic == value)
+            {
+                return;
+            }
+
+            _owner.Settings.Automatic = value;
+            _owner.Settings.Save();
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsManual));
+            OnPropertyChanged(nameof(IsAutomatic));
+            OnPropertyChanged(nameof(InputsText));
+        }
+    }
+
+    /// <summary>The gearbox segment.</summary>
+    public bool IsManual { get => !Automatic; set { if (value) { Automatic = false; } else { OnPropertyChanged(); } } }
+
+    public bool IsAutomatic { get => Automatic; set { if (value) { Automatic = true; } else { OnPropertyChanged(); } } }
 
     /// <summary>"Full pedal reads 96.1 °PVS." once calibrated (spec 4.4), in the pedal's ADX unit (PVS and ACCELERATORPED alike).</summary>
     public string PedalText => _owner.Settings.FullPedal is { } full
         ? $"Full pedal reads {NumberFormat.Format(full, 1)} {PedalUnit}."
         : "The pedal is not calibrated yet.";
 
+    // ---- Feeding -----------------------------------------------------------------------------------------------------
+
+    internal void Select(PerformanceTestEntry entry)
+    {
+        _entry = entry;
+        LoadOptions();
+        // Back on the run's own test, its baseline stays as picked (minor review, finding 62).
+        if (!ReferenceEquals(entry, _runEntry))
+        {
+            _baselinePicked = false;
+        }
+
+        RefreshBaselines();
+        OnPropertyChanged(nameof(HasGear));
+        OnPropertyChanged(nameof(HasRpmBand));
+        OnPropertyChanged(nameof(HasSpeedBand));
+        OnPropertyChanged(nameof(HasBaseline));
+        OnPropertyChanged(nameof(HasOptions));
+        OnPropertyChanged(nameof(HasArm));
+        OnPropertyChanged(nameof(ArmText));
+        OnPropertyChanged(nameof(IsCalibration));
+        OnPropertyChanged(nameof(IsCar));
+        OnPropertyChanged(nameof(IsPedal));
+        OnPropertyChanged(nameof(InputsText));
+        OnPropertyChanged(nameof(PedalText));
+        OnPropertyChanged(nameof(Notice));
+        OnPropertyChanged(nameof(CanChangeBaseline));
+        Project();
+        RefreshAvailability();
+    }
+
+    /// <summary>The tab is in front again: the run view catches up with the samples it skipped while hidden.</summary>
+    internal void TabShown()
+    {
+        if (_stale)
+        {
+            Project();
+        }
+    }
+
     /// <summary>A higher reading raised the full-pedal value (spec 4.4).</summary>
     internal void FullPedalChanged() => OnPropertyChanged(nameof(PedalText));
+
+    /// <summary>
+    /// A bin was opened on Tune: the band follows its rev limit (spec 6.1), except a run's own and what the owner typed over
+    /// the band last loaded (minor review, finding 27).
+    /// </summary>
+    internal void BinOpened()
+    {
+        if (Shown is null)
+        {
+            ReloadBand(keepTyped: true);
+        }
+    }
 
     internal void Push(PerfFrame frame, LiveSample sample, AdxDefinition definition)
     {
@@ -873,6 +1133,19 @@ public sealed class PerformanceRunViewModel : ViewModelBase
         return problem;
     }
 
+    // Every run projection at once; the charts redraw on Version.
+    private void Project()
+    {
+        _stale = false;
+        SyncChecks();
+        foreach (var name in ProjectionNames)
+        {
+            OnPropertyChanged(name);
+        }
+
+        Version++;
+    }
+
     // The run's checks into the rows: in place while the labels stay, so the list is never rebuilt for a new reading.
     private void SyncChecks()
     {
@@ -920,6 +1193,21 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     // The name saved: as typed, or "3rd pull 14:32" when left empty.
     private string NameFor(PerfTestSpec spec) => string.IsNullOrWhiteSpace(Name) ? DefaultName(spec) : Name.Trim();
 
+    private static readonly string[] ProjectionNames =
+    [
+        nameof(Stage), nameof(IsIdle), nameof(IsWaiting), nameof(IsRunning), nameof(IsFinished), nameof(Status),
+        nameof(RpmText), nameof(ElapsedText), nameof(Progress), nameof(Knock), nameof(LiveTrace), nameof(LiveValuesText),
+        nameof(HasResult), nameof(CanSave), nameof(Figures), nameof(Flags), nameof(ConditionsText), nameof(TuneText),
+        nameof(InputsText), nameof(Captured), nameof(CapturedRows), nameof(CanSaveCalibration),
+        nameof(ShowsArm), nameof(CanChangeOptions), nameof(ShowsChecks), nameof(ChecksTitle), nameof(ChecksNote), nameof(ShowsRunReadout),
+        nameof(CanCancel), nameof(IsCapturing), nameof(ReadingValue), nameof(ReadingUnit), nameof(ShowsElapsed), nameof(ShowsLiveChart),
+        nameof(HasKnock), nameof(KnockWarning), nameof(ProgressFrom), nameof(ProgressTo), nameof(ProgressValue), nameof(ProgressStep),
+        nameof(RunNote), nameof(ShowsArmTip), nameof(ReadingMissing), nameof(HasCaptured), nameof(ShowsOptionsRow), nameof(ResultKnock),
+        nameof(HasResultKnock), nameof(SaveText), nameof(ShowsSaved), nameof(HasChangesToSave), nameof(CanChangeBaseline),
+        nameof(LiveXMaximum), nameof(LiveYMinimum), nameof(LiveYMaximum), nameof(ResultKnockText), nameof(FlagSummary), nameof(HasSevereFlag),
+        nameof(Tune),
+    ];
+
     // The timer behind CheckSamples runs only while a run is on.
     private void WatchSamples(bool on)
     {
@@ -952,6 +1240,29 @@ public sealed class PerformanceRunViewModel : ViewModelBase
 
     private string DefaultName(PerfTestSpec spec) =>
         $"{spec.ShortName} {TimeZoneInfo.ConvertTime(_lastArrival, _owner.Time.LocalTimeZone).ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture)}";
+
+    private void LoadOptions()
+    {
+        GearChoices = _entry.Kind switch
+        {
+            PerfTestKind.Pull => [2, 3, 4],
+            PerfTestKind.KnockCheck => [4],
+            PerfTestKind.RollOn => [3, 4],
+            _ => [],
+        };
+
+        if (_run is not null && ReferenceEquals(_runEntry, _entry))
+        {
+            // Back on the test that runs: its own options.
+            SetGear(_run.Spec.Gear);
+            ShowBand(_run.Spec, null);
+            return;
+        }
+
+        // 3rd is the main pull (spec 6.1).
+        SetGear(GearChoices.Count == 0 ? null : GearChoices.Contains(3) ? 3 : GearChoices[0]);
+        ReloadBand();
+    }
 
     private bool SetGear(int? gear)
     {
