@@ -78,7 +78,77 @@ public sealed class PerformanceViewModel : ViewModelBase, ISidePanel
     private TimeSpan? _higherPedalSince;
     private double _higherPedalLow;
 
+    public PerformanceViewModel(MainWindowViewModel live, TuneViewModel tune)
+    {
+        ArgumentNullException.ThrowIfNull(live);
+        ArgumentNullException.ThrowIfNull(tune);
+        _live = live;
+        _tune = tune;
+        // Beside settings.json, so tests on a temp settings folder never touch the owner's results (spec 8).
+        Store = new PerfResultStore(Path.Combine(tune.Settings.Folder, "results"), live.Time);
+
+        // Spec 9.1's order.
+        Entries =
+        [
+            new PerformanceGroup("Pulls"),
+            new PerformanceTestEntry("pull", "Full-throttle pull", "Time and wheel power over an rpm band", PerfTestKind.Pull),
+            new PerformanceTestEntry("knock", "Knock check", "4th gear, 1500 to 4500 rpm, knock per cylinder", PerfTestKind.KnockCheck),
+            new PerformanceGroup("Acceleration"),
+            new PerformanceTestEntry("rollon", "Roll-on", "60 to 100 km/h in 3rd, 80 to 120 km/h in 4th", PerfTestKind.RollOn),
+            new PerformanceTestEntry("standing", "Standing start", "0 to 100 and 0 to 200 km/h", PerfTestKind.StandingStart),
+            new PerformanceGroup("Setup"),
+            new PerformanceTestEntry("calibration", "Speed calibration", "km/h per 1000 rpm in each gear", PerfTestKind.SpeedCalibration),
+            new PerformanceTestEntry("car", "Car", "Mass, tyres and gearbox for the power estimate", null),
+            new PerformanceTestEntry("link", "Link test", "Samples per second over 30 s", PerfTestKind.LinkTest),
+            new PerformanceTestEntry("pedal", "Pedal", "What the pedal reads when floored", PerfTestKind.Pedal),
+        ];
+        _selected = Entries.OfType<PerformanceTestEntry>().First();
+        _selected.IsCurrent = true;
+
+        Run = new PerformanceRunViewModel(this, _selected);
+        Results = new PerformanceResultsViewModel(this);
+
+        live.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(MainWindowViewModel.IsConnected) or nameof(MainWindowViewModel.SelectedVariant)
+                or nameof(MainWindowViewModel.CurrentDefinition))
+            {
+                RefreshAvailability();
+            }
+            else if (e.PropertyName == nameof(MainWindowViewModel.IsStale))
+            {
+                Run.LiveStateChanged();
+            }
+        };
+
+        // A 3rd gear pull ends below the open bin's rev limit (spec 6.1).
+        tune.DocumentOpened += (_, _) => Run.BinOpened();
+        RefreshAvailability();
+        Results.Refresh();
+    }
+
     public IReadOnlyList<PerformanceEntry> Entries { get; }
+
+    /// <summary>The test in the pane; choosing one shows its Run side. A run of another test goes on meanwhile.</summary>
+    public PerformanceTestEntry SelectedEntry
+    {
+        get => _selected;
+        set
+        {
+            if (value is null || !SetField(ref _selected, value))
+            {
+                return;
+            }
+
+            foreach (var entry in Entries.OfType<PerformanceTestEntry>())
+            {
+                entry.IsCurrent = ReferenceEquals(entry, value);
+            }
+
+            Run.Select(value);
+            IsRunMode = true;
+        }
+    }
 
     public bool IsRunMode
     {
@@ -108,6 +178,22 @@ public sealed class PerformanceViewModel : ViewModelBase, ISidePanel
             else
             {
                 OnPropertyChanged();
+            }
+        }
+    }
+
+    /// <summary>True while the tab is shown. Runs never depend on it: samples reach them on every tab (review focus 1).</summary>
+    public bool IsVisible
+    {
+        get => _isVisible;
+        set
+        {
+            if (SetField(ref _isVisible, value) && value)
+            {
+                // Another window or a hand edit may have changed the folder.
+                Results.Refresh();
+                // The run view skipped its updates while hidden (minor review, finding 21).
+                Run.TabShown();
             }
         }
     }
@@ -167,6 +253,14 @@ public sealed class PerformanceViewModel : ViewModelBase, ISidePanel
         Run.Push(frame, sample, definition);
     }
 
+    /// <summary>The link to the car is gone: a run with a window ends incomplete with what it measured; anything else stops.</summary>
+    public void LinkLost()
+    {
+        _higherPedalSince = null;
+        Run.LinkLost();
+        RefreshAvailability();
+    }
+
     // A reading above the calibration raises it once readings above it have held for 0.5 s, to the lowest of them, so one
     // glitch never lowers every later pedal share (performance spec 4.4; minor review, findings 17 and 24).
     private void RaiseFullPedal(PerfFrame frame)
@@ -214,6 +308,18 @@ public sealed class PerformanceViewModel : ViewModelBase, ISidePanel
         Settings.FullPedal ?? 0,
         new Dictionary<int, double>(Settings.SpeedometerKmhPerRpm),
         Settings.GpsChecked.Where(pair => pair.Value).Select(pair => pair.Key).Order().ToArray());
+
+    /// <summary>Says on each test what this definition lacks for it, and what the Arm button waits for.</summary>
+    internal void RefreshAvailability()
+    {
+        var definition = Definition;
+        foreach (var entry in Entries.OfType<PerformanceTestEntry>())
+        {
+            entry.OffText = ResultText.MissingText(definition, entry.Kind);
+        }
+
+        Run.RefreshAvailability();
+    }
 
     private void SetResultsMode(bool results)
     {

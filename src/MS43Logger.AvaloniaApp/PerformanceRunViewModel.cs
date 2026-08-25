@@ -351,6 +351,15 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     public bool ShowsRunningTest => ShowsArmTip && _run is { Stage: RunStage.Waiting or RunStage.Running } && _runEntry is not null
         && !ReferenceEquals(_runEntry, _entry);
 
+    /// <summary>Shows the test that is armed or running.</summary>
+    public void ShowRunningTest()
+    {
+        if (_run is { Stage: RunStage.Waiting or RunStage.Running } && _runEntry is { } entry)
+        {
+            _owner.SelectedEntry = entry;
+        }
+    }
+
     // ---- The run -----------------------------------------------------------------------------------------------------
 
     /// <summary>The stage of the run of the chosen test; null when it has none (the options and Arm show).</summary>
@@ -530,6 +539,49 @@ public sealed class PerformanceRunViewModel : ViewModelBase
 
     /// <summary>"Baseline: 3rd pull 14:05", the dashed trace's legend; null without one.</summary>
     public string? BaselineLabel => _selectedBaseline.FileName is null || BaselineTrace is not { Count: > 0 } ? null : $"Baseline: {_selectedBaseline.Text}";
+
+    /// <summary>Arms the chosen test with its options: the tune, the car values and the band are taken now (spec 8, 9.2).</summary>
+    public void Arm()
+    {
+        RefreshAvailability();
+        if (!CanArm || OptionsSpec(out _) is not { } spec)
+        {
+            return;
+        }
+
+        _runTune = TuneIdentity.From(_owner.Tune.Document, spec.Gear);
+        if (spec.Kind is PerfTestKind.Pull or PerfTestKind.KnockCheck or PerfTestKind.RollOn)
+        {
+            // The last band per preset is remembered, so before and after runs normally match (spec 9.2).
+            _owner.Settings.PerformanceBands[spec.Preset] = spec.Kind == PerfTestKind.RollOn
+                ? [spec.StartKmh!.Value, spec.EndKmh!.Value]
+                : [spec.StartRpm!.Value, spec.EndRpm!.Value];
+            _owner.Settings.Save();
+        }
+
+        var inputs = _owner.CurrentInputs();
+        Detach();
+        _run = new PerfRun(spec, inputs, _owner.Live.WarmUp);
+        _run.Changed += OnRunChanged;
+        _lastSampleAt ??= _owner.Time.GetUtcNow();
+        WatchSamples(true);
+        _runEntry = _entry;
+        _runInputs = inputs;
+        _runDefinition = null;
+        _runBaseline = BaselineFigures(_baseline, inputs);
+        (_runBaselineChoice, _runBaselineResult, _runBaselineTrace) = (_selectedBaseline, _baseline, BaselineTrace);
+        _finishSeen = false;
+        _lastStage = _run.Stage;
+        _savedFile = null;
+        Name = "";
+        Description = "";
+        Direction = null;
+        IsSaved = false;
+        SaveError = null;
+        ClearNotice(_entry);
+        Project();
+        RefreshAvailability();
+    }
 
     /// <summary>Stops a waiting or running test; nothing is kept.</summary>
     public void Cancel() => _run?.Cancel();
@@ -738,6 +790,29 @@ public sealed class PerformanceRunViewModel : ViewModelBase
             default:
                 return false;
         }
+    }
+
+    /// <summary>Drops the finished run unsaved; the options show again.</summary>
+    public void Discard()
+    {
+        Detach();
+        ClearNotice(_entry);
+        // The picker is free again: the baselines of the test and gear shown now.
+        RefreshBaselines();
+        Project();
+        RefreshAvailability();
+    }
+
+    /// <summary>Drops the finished run and arms the same test again.</summary>
+    public void RunAgain()
+    {
+        if (_runEntry is not { } entry || !ReferenceEquals(entry, _entry))
+        {
+            return;
+        }
+
+        Discard();
+        Arm();
     }
 
     // ---- Setup -------------------------------------------------------------------------------------------------------
@@ -1133,6 +1208,64 @@ public sealed class PerformanceRunViewModel : ViewModelBase
         return problem;
     }
 
+    private void OnRunChanged(object? sender, EventArgs e)
+    {
+        if (sender is not PerfRun run || !ReferenceEquals(run, _run))
+        {
+            return;
+        }
+
+        var stageChanged = run.Stage != _lastStage;
+        _lastStage = run.Stage;
+        if (run.Stage == RunStage.Cancelled)
+        {
+            if (run.Status == "Link lost")
+            {
+                SetNotice("The link to the car was lost, so the test stopped.", _runEntry);
+            }
+            else
+            {
+                ClearNotice(_runEntry);
+            }
+
+            Detach();
+        }
+        else if (run.Stage == RunStage.Finished && !_finishSeen)
+        {
+            _finishSeen = true;
+            if (run.Outcome is { } outcome)
+            {
+                Name = DefaultName(outcome.Spec);
+            }
+            else if (run.Spec.Kind == PerfTestKind.Pedal && run.PedalReading is { } reading)
+            {
+                // The settings keep 10 to 130 (spec 4.4); the run only finishes on a reading of 10 or more.
+                Settings.FullPedal = Math.Min(reading, 130);
+                Settings.Save();
+                SetNotice($"Pedal calibrated: full pedal reads {NumberFormat.Format(Settings.FullPedal, 1)} {PedalUnit}.", _runEntry);
+                OnPropertyChanged(nameof(PedalText));
+            }
+        }
+
+        _liveTrace = null;
+        // A hidden tab's run view is brought up to date when it is shown (minor review, finding 21).
+        if (_owner.IsVisible)
+        {
+            Project();
+        }
+        else
+        {
+            _stale = true;
+        }
+
+        // What Arm waits for changes with the stage, not with every sample.
+        if (stageChanged)
+        {
+            WatchSamples(run.Stage is RunStage.Waiting or RunStage.Running);
+            RefreshAvailability();
+        }
+    }
+
     // Every run projection at once; the charts redraw on Version.
     private void Project()
     {
@@ -1207,6 +1340,20 @@ public sealed class PerformanceRunViewModel : ViewModelBase
         nameof(LiveXMaximum), nameof(LiveYMinimum), nameof(LiveYMaximum), nameof(ResultKnockText), nameof(FlagSummary), nameof(HasSevereFlag),
         nameof(Tune),
     ];
+
+    private void Detach()
+    {
+        if (_run is not null)
+        {
+            _run.Changed -= OnRunChanged;
+        }
+
+        _run = null;
+        _runEntry = null;
+        _lastStage = null;
+        _liveTrace = null;
+        WatchSamples(false);
+    }
 
     // The timer behind CheckSamples runs only while a run is on.
     private void WatchSamples(bool on)
