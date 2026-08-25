@@ -297,6 +297,27 @@
             </DockPanel>
         </Border>
 
+        <!-- Warm-up banners (performance spec 5, 9.3), below the connection banner: red with the warning icon for danger,
+             amber for caution, grey with the info icon for a note; the text stays Ink1 on every banner. -->
+        <ItemsControl Name="WarmUpBanners" DockPanel.Dock="Top" ItemsSource="{Binding WarmUpBanners}" IsVisible="{Binding HasWarmUpBanners}"
+                      Margin="0,0,0,8">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="local:WarmUpBannerViewModel">
+                    <Border Name="WarmUpBanner" Classes="banner" Classes.warn="{Binding IsDanger}" Classes.caution="{Binding IsCaution}" Margin="0,0,0,8">
+                        <DockPanel>
+                            <Panel DockPanel.Dock="Left" Margin="0,1,12,0" VerticalAlignment="Top">
+                                <controls:StrokeIcon Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource WarnBrush}" IsVisible="{Binding IsDanger}" />
+                                <controls:StrokeIcon Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource CautionBrush}" IsVisible="{Binding IsCaution}" />
+                                <controls:StrokeIcon Data="{StaticResource Icon.Info}" Foreground="{DynamicResource Ink2Brush}" IsVisible="{Binding IsInfo}" />
+                            </Panel>
+                            <controls:NumberText Name="WarmUpBannerText" Classes="body" Value="{Binding Text}" Foreground="{DynamicResource Ink1Brush}"
+                                                 TextWrapping="Wrap" VerticalAlignment="Center" />
+                        </DockPanel>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
         <!-- The baud-rate advice still helps while not connected (system 7.2). -->
         <DockPanel Name="BaudNote" DockPanel.Dock="Top" Margin="0,0,0,12" IsVisible="{Binding IsNotConnected}">
             <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Info}" Foreground="{DynamicResource Ink2Brush}" Margin="0,1,8,0" VerticalAlignment="Top" />
@@ -468,8 +489,8 @@
             <DockPanel DockPanel.Dock="Top" Height="32">
                 <TextBlock Classes="section-title" Text="Channels" VerticalAlignment="Center" />
                 <TextBlock Classes="list-count" Margin="12,0,0,0" VerticalAlignment="Center"><Run Classes="num" Text="{Binding VisibleChannelCount, Mode=OneWay}" /><Run Text=" shown" /></TextBlock>
-                <Button Name="PerformanceButton" DockPanel.Dock="Right" Classes="quiet" Content="Performance tests" Click="OpenPerformanceWindow_Click"
-                        VerticalAlignment="Center" />
+                <Button Name="PerformanceButton" DockPanel.Dock="Right" Classes="quiet" Content="Performance tests" Click="OpenPerformance_Click"
+                        VerticalAlignment="Center" ToolTip.Tip="Open the Performance tab" />
                 <StackPanel Orientation="Horizontal" Spacing="16" Margin="20,0,0,0">
                     <TextBox Name="ChannelFilter" Width="300" Watermark="Filter by name or ID" Text="{Binding SearchText}" VerticalAlignment="Center"
                              AutomationProperties.Name="Filter channels">

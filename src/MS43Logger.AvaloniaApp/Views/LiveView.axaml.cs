@@ -87,11 +87,12 @@ public partial class LiveView : UserControl
         }
     }
 
-    private void OpenPerformanceWindow_Click(object? sender, RoutedEventArgs e)
+    // The tests live on their own tab now (performance spec 9.1); Live's button is the way there.
+    private void OpenPerformance_Click(object? sender, RoutedEventArgs e)
     {
-        if (ViewModel is not null && TopLevel.GetTopLevel(this) is Window owner)
+        if (TopLevel.GetTopLevel(this) is Window { DataContext: ShellViewModel shell })
         {
-            new PerformanceWindow { DataContext = ViewModel }.Show(owner);
+            shell.SelectedTab = ShellViewModel.PerformanceTab;
         }
     }
 }

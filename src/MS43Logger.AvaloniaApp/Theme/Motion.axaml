@@ -42,7 +42,7 @@
     </Style>
 
     <!-- A screen coming to the front fades in and rises 6 px, so the change of screen reads as one. -->
-    <Style Selector="views|LiveView[IsVisible=True], views|TuneView[IsVisible=True], views|CompareView[IsVisible=True]">
+    <Style Selector="views|LiveView[IsVisible=True], views|TuneView[IsVisible=True], views|CompareView[IsVisible=True], views|PerformanceView[IsVisible=True]">
         <Style.Animations>
             <Animation Duration="0:0:0.2" Easing="CubicEaseOut">
                 <KeyFrame Cue="0%">
@@ -117,7 +117,7 @@
         </Style.Animations>
     </Style>
 
-    <!-- A side list (Tune rail, Compare list) slides closed to its strip and open again (Ctrl B), so it is seen going where it went. -->
+    <!-- A side list (Tune rail, Compare list, Performance rail) slides closed to its strip and open again (Ctrl B), so it is seen going where it went. -->
     <Style Selector="Border.toggling">
         <Setter Property="Transitions">
             <Transitions>
