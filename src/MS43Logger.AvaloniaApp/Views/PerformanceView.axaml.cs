@@ -25,6 +25,16 @@ public partial class PerformanceView : UserControl
 
     private PerformanceViewModel? ViewModel => DataContext as PerformanceViewModel;
 
+    // The list's own selection follows the test in the pane, so a row chosen another way (Calibrate the pedal) and then the
+    // old row pressed again still changes the test.
+    private void OnPerformanceChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(PerformanceViewModel.SelectedEntry))
+        {
+            ShowCurrentTest();
+        }
+    }
+
     // A group heading is a heading, not a row: no focus, no hover and no press. Containers are
     // reused, so a test's row is made a row again.
     private static void ShapeRow(Control container)
@@ -32,6 +42,43 @@ public partial class PerformanceView : UserControl
         var heading = container.DataContext is PerformanceGroup;
         container.Focusable = !heading;
         container.IsHitTestVisible = !heading;
+    }
+
+    private void ShowCurrentTest()
+    {
+        if (ViewModel is not { } performance || ReferenceEquals(PerformanceTests.SelectedItem, performance.SelectedEntry))
+        {
+            return;
+        }
+
+        // Following the model is not a choice: it must not post the test back, or two such posts take turns for ever.
+        _following = true;
+        try
+        {
+            PerformanceTests.SelectedItem = performance.SelectedEntry;
+        }
+        finally
+        {
+            _following = false;
+        }
+    }
+
+    private void Tests_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        // A group heading is not a test; choosing a test rebuilds the pane, so it waits for the list's own change to finish,
+        // and is dropped if the list was moved to another test in the meantime.
+        if (_following || ViewModel is not { } performance || PerformanceTests.SelectedItem is not PerformanceTestEntry entry)
+        {
+            return;
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (ReferenceEquals(PerformanceTests.SelectedItem, entry))
+            {
+                performance.SelectedEntry = entry;
+            }
+        });
     }
 
     // On the Results side the rail marks no test, so pressing the one last shown shows its Run side

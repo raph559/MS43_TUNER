@@ -187,20 +187,179 @@
             <Setter Property="DockPanel.Dock" Value="Right" />
             <Setter Property="Margin" Value="16,0,0,0" />
         </Style>
+        <Style Selector="Button#ArmButton.solo">
+            <Setter Property="DockPanel.Dock" Value="Left" />
+            <Setter Property="Margin" Value="0" />
+        </Style>
         <!-- The knock bars sit under the progress (mockup); in a short window they move beside the reading, so the live chart
              stays in view while a run is on (system 8: 1024 x 680). -->
+        <Style Selector="StackPanel#KnockSection">
+            <Setter Property="Grid.Row" Value="2" />
+            <Setter Property="Grid.ColumnSpan" Value="2" />
+            <Setter Property="Margin" Value="0,20,0,0" />
+            <Setter Property="MaxWidth" Value="480" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+        </Style>
+        <Style Selector="Window.short StackPanel#KnockSection">
+            <Setter Property="Grid.Row" Value="0" />
+            <Setter Property="Grid.Column" Value="1" />
+            <Setter Property="Grid.ColumnSpan" Value="1" />
+            <Setter Property="Margin" Value="32,0,0,0" />
+            <Setter Property="Width" Value="288" />
+        </Style>
+        <Style Selector="StackPanel#KnockSection controls|CylinderBars">
+            <Setter Property="Width" Value="480" />
+        </Style>
+        <Style Selector="Window.short StackPanel#KnockSection controls|CylinderBars">
+            <Setter Property="Width" Value="288" />
+        </Style>
         <!-- The knock line keeps its room while a run is on (minor review, finding 41): under the bars, or in a short window under
              the reading, beside the bars, where the row already has room, so the live chart stays in view. -->
+        <Style Selector="Panel#KnockLine">
+            <Setter Property="Grid.Row" Value="3" />
+            <Setter Property="Grid.ColumnSpan" Value="2" />
+            <Setter Property="Margin" Value="0,4,0,0" />
+            <Setter Property="MaxWidth" Value="480" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+        </Style>
+        <Style Selector="Window.short Panel#KnockLine">
+            <Setter Property="Grid.Row" Value="0" />
+            <Setter Property="Grid.Column" Value="0" />
+            <Setter Property="Grid.ColumnSpan" Value="1" />
+            <Setter Property="Margin" Value="0,0,16,0" />
+            <Setter Property="VerticalAlignment" Value="Bottom" />
+        </Style>
+        <Style Selector="controls|RunChart#LiveRunChart">
+            <Setter Property="Height" Value="240" />
+        </Style>
+        <Style Selector="Window.compact controls|RunChart#LiveRunChart">
+            <Setter Property="Height" Value="200" />
+        </Style>
+        <Style Selector="Window.short controls|RunChart#LiveRunChart">
+            <Setter Property="Height" Value="180" />
+        </Style>
+        <Style Selector="controls|RunChart#CompareChart">
+            <Setter Property="Height" Value="320" />
+        </Style>
+        <Style Selector="Window.compact controls|RunChart#CompareChart">
+            <Setter Property="Height" Value="240" />
+        </Style>
     </UserControl.Styles>
 
+    <UserControl.DataTemplates>
+        <!-- One figure of a result: its label, the reading with its unit, then a companion ("at 5950 rpm") and the delta. -->
+        <DataTemplate DataType="local:FigureRow">
+            <StackPanel Spacing="2" Margin="0,0,16,0">
+                <controls:NumberText Classes="label" Value="{Binding Label}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Label}" />
+                <Panel Height="28">
+                    <controls:ReadingText Name="FigureValue" Classes="data24 reading" Classes.na="{Binding IsMissing}" Value="{Binding Value}" Unit="{Binding Unit}"
+                                          VerticalAlignment="Bottom" />
+                </Panel>
+                <controls:NumberText Classes="label" Value="{Binding Detail}" IsVisible="{Binding Detail, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                <controls:NumberText Classes="label" Value="{Binding DeltaText}" IsVisible="{Binding DeltaText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+            </StackPanel>
+        </DataTemplate>
+        <!-- A run's flag as a banner (system 5.8): red stripe and icon when invalid or cold, amber when suspect, the info icon
+             for a note; the text stays Ink1, so the state is never colour alone. -->
+        <DataTemplate DataType="local:FlagRow">
+            <Border Classes="banner" Classes.warn="{Binding IsWarn}" Classes.caution="{Binding IsSuspect}" Margin="0,8,0,0">
+                <DockPanel>
+                    <Panel DockPanel.Dock="Left" Margin="0,1,12,0" VerticalAlignment="Top">
+                        <controls:StrokeIcon Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource WarnBrush}" IsVisible="{Binding IsWarn}" />
+                        <controls:StrokeIcon Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource CautionBrush}" IsVisible="{Binding IsSuspect}" />
+                        <controls:StrokeIcon Data="{StaticResource Icon.Info}" Foreground="{DynamicResource Ink2Brush}" IsVisible="{Binding IsInfo}" />
+                    </Panel>
+                    <controls:NumberText Classes="body" Value="{Binding Message}" Foreground="{DynamicResource Ink1Brush}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                </DockPanel>
+            </Border>
+        </DataTemplate>
+    </UserControl.DataTemplates>
 
     <Grid ColumnDefinitions="Auto,*" Background="{DynamicResource PaneBrush}">
         <!-- The tests (spec 9.1): Run / Results, then Pulls, Acceleration and Setup. -->
+        <Border Name="PerformanceRail" Background="{DynamicResource FrameBrush}" BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="0,0,1,0"
+                Padding="12,12,8,8" Classes.collapsed="{Binding RailCollapsed}">
+            <Panel>
+                <StackPanel Name="PerformanceStrip" Spacing="8" IsVisible="{Binding RailCollapsed}">
+                    <Button Name="PerformanceExpandButton" Classes="quiet icon" Click="RailExpand_Click"
+                            ToolTip.Tip="Show the tests (Ctrl B)" AutomationProperties.Name="Show the tests">
+                        <controls:StrokeIcon Data="{StaticResource Icon.PanelLeft}" />
+                    </Button>
+                </StackPanel>
+                <DockPanel IsVisible="{Binding !RailCollapsed}">
+                    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,4,0">
+                        <Border Name="ModeSeg" Classes="seg" AutomationProperties.Name="Run or results">
+                            <UniformGrid Rows="1" ColumnSpacing="2">
+                                <ToggleButton Name="RunModeButton" Classes="seg" Content="Run" IsChecked="{Binding IsRunMode}" HorizontalAlignment="Stretch" />
+                                <ToggleButton Name="ResultsModeButton" Classes="seg" Content="Results" IsChecked="{Binding IsResultsMode}" HorizontalAlignment="Stretch" />
+                            </UniformGrid>
+                        </Border>
+                        <Button Name="PerformanceCollapseButton" Grid.Column="1" Classes="quiet icon" Click="RailCollapse_Click" Margin="8,0,-6,0"
+                                VerticalAlignment="Center" ToolTip.Tip="Hide the tests (Ctrl B)" AutomationProperties.Name="Hide the tests">
+                            <controls:StrokeIcon Data="{StaticResource Icon.PanelLeft}" />
+                        </Button>
+                    </Grid>
+                    <ListBox Name="PerformanceTests" Margin="0,8,0,0" ItemsSource="{Binding Entries}" SelectionChanged="Tests_SelectionChanged"
+                             Tapped="Tests_Tapped" Classes.results="{Binding IsResultsMode}" AutomationProperties.Name="Tests">
+                        <ListBox.DataTemplates>
+                            <DataTemplate DataType="local:PerformanceGroup">
+                                <TextBlock Classes="pgroup" Text="{Binding Title}" />
+                            </DataTemplate>
+                            <DataTemplate DataType="local:PerformanceTestEntry">
+                                <Border Classes="prow" Classes.current="{Binding IsCurrent}">
+                                    <ToolTip.Tip>
+                                        <StackPanel Spacing="4" MaxWidth="320">
+                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                                            <controls:NumberText Value="{Binding Summary}" TextWrapping="Wrap" />
+                                            <TextBlock Classes="label" Text="{Binding OffText}" TextWrapping="Wrap" IsVisible="{Binding IsOff}" />
+                                        </StackPanel>
+                                    </ToolTip.Tip>
+                                    <Panel>
+                                        <Border Classes="pbar" Width="2" HorizontalAlignment="Left" Margin="-8,0,0,0" Background="{DynamicResource Ink1Brush}" />
+                                        <StackPanel Spacing="0">
+                                            <TextBlock Classes="prow-title" Text="{Binding Title}" />
+                                            <controls:NumberText Classes="prow-sum" Value="{Binding Summary}" IsVisible="{Binding !IsOff}" />
+                                            <!-- Off on this definition: why, with the info icon (spec 9.1, review focus 2). -->
+                                            <DockPanel IsVisible="{Binding IsOff}">
+                                                <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Info}" Width="12" Height="12" Margin="0,2,4,0"
+                                                                     VerticalAlignment="Top" Foreground="{DynamicResource Ink2Brush}" />
+                                                <TextBlock Classes="prow-sum" Text="{Binding OffText}" />
+                                            </DockPanel>
+                                        </StackPanel>
+                                    </Panel>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.DataTemplates>
+                    </ListBox>
+                </DockPanel>
+            </Panel>
+        </Border>
+        <Border Name="PerformanceResizeHandle" Classes="railhandle" Grid.Column="0" HorizontalAlignment="Right" ZIndex="1"
+                IsVisible="{Binding !RailCollapsed}"
+                AutomationProperties.Name="Resize the tests" ToolTip.Tip="Drag to resize. Double-click for the default width.">
+            <Border Width="2" HorizontalAlignment="Center" />
+        </Border>
 
         <Border Name="PerformancePane" Grid.Column="1">
             <DockPanel>
                 <!-- Live's warm-up banners at the top of the pane, over Run and Results alike and out of the scrolling part, so they
                      stay in view while connected (performance spec 5; minor review, finding 32). -->
+                <ItemsControl Name="PerformanceBanners" DockPanel.Dock="Top" ItemsSource="{Binding WarmUp}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="local:WarmUpBannerViewModel">
+                            <Border Name="PerformanceBanner" Classes="banner" Classes.warn="{Binding IsDanger}" Classes.caution="{Binding IsCaution}" Margin="0,0,8,16">
+                                <DockPanel>
+                                    <Panel DockPanel.Dock="Left" Margin="0,1,12,0" VerticalAlignment="Top">
+                                        <controls:StrokeIcon Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource WarnBrush}" IsVisible="{Binding IsDanger}" />
+                                        <controls:StrokeIcon Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource CautionBrush}" IsVisible="{Binding IsCaution}" />
+                                        <controls:StrokeIcon Data="{StaticResource Icon.Info}" Foreground="{DynamicResource Ink2Brush}" IsVisible="{Binding IsInfo}" />
+                                    </Panel>
+                                    <controls:NumberText Classes="body" Value="{Binding Text}" Foreground="{DynamicResource Ink1Brush}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                </DockPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
                 <Panel>
                     <!-- Run: the chosen test's options, Arm, then its ready check, running view or result (mockup). The actions of
                          a run (Cancel; Save result, Discard, Run again) sit in a bar under the scrolling part, so the primary
@@ -208,14 +367,144 @@
                     <Grid Name="RunSide" RowDefinitions="*,Auto" IsVisible="{Binding IsRunMode}">
                         <ScrollViewer Name="RunScroller" HorizontalScrollBarVisibility="Disabled">
                             <StackPanel Name="RunPane" Margin="0,0,8,0">
+                                <DockPanel Height="32">
+                                    <TextBlock Name="RunTitle" Classes="title" Text="{Binding SelectedEntry.Title}" VerticalAlignment="Center" />
+                                    <controls:NumberText Classes="body pane-desc" Margin="12,0,0,0" Value="{Binding SelectedEntry.Summary}" ToolTip.Tip="{Binding SelectedEntry.Summary}" />
+                                </DockPanel>
 
                                 <!-- The options and Arm, the one primary once connected (spec 9.1). -->
+                                <DockPanel Name="OptionsRow" Margin="0,24,0,0" IsVisible="{Binding Run.ShowsOptionsRow}">
+                                    <Button Name="ArmButton" VerticalAlignment="Top" MinWidth="104" Content="{Binding Run.ArmText}" Classes.solo="{Binding !Run.HasOptions}"
+                                            Classes.primary="{Binding Run.ArmIsPrimary}" IsEnabled="{Binding Run.CanArm}" IsVisible="{Binding Run.ShowsArm}"
+                                            ToolTip.Tip="{Binding Run.ArmTip}" ToolTip.ShowOnDisabled="True" Click="Arm_Click" />
+                                    <WrapPanel ItemSpacing="24" LineSpacing="12" IsEnabled="{Binding Run.CanChangeOptions}" IsVisible="{Binding Run.HasOptions}">
+                                        <Border Name="GearSeg" Classes="seg" IsVisible="{Binding Run.HasGear}" AutomationProperties.Name="Gear">
+                                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                                <ToggleButton Name="Gear2" Classes="seg" Content="2nd" IsChecked="{Binding Run.IsGear2}" IsVisible="{Binding Run.OffersGear2}" />
+                                                <ToggleButton Name="Gear3" Classes="seg" Content="3rd" IsChecked="{Binding Run.IsGear3}" IsVisible="{Binding Run.OffersGear3}" />
+                                                <ToggleButton Name="Gear4" Classes="seg" Content="4th" IsChecked="{Binding Run.IsGear4}" IsVisible="{Binding Run.OffersGear4}" />
+                                            </StackPanel>
+                                        </Border>
+                                        <StackPanel Name="RpmBand" Orientation="Horizontal" Spacing="8" IsVisible="{Binding Run.HasRpmBand}">
+                                            <TextBlock Classes="field" Text="From" />
+                                            <TextBox Name="StartRpmBox" Classes="data13" Width="104" Text="{Binding Run.StartRpm}" AutomationProperties.Name="Start rpm">
+                                                <TextBox.InnerRightContent>
+                                                    <TextBlock Classes="suffix" Text="rpm" />
+                                                </TextBox.InnerRightContent>
+                                            </TextBox>
+                                            <TextBlock Classes="field" Text="to" />
+                                            <TextBox Name="EndRpmBox" Classes="data13" Width="104" Text="{Binding Run.EndRpm}" AutomationProperties.Name="End rpm">
+                                                <TextBox.InnerRightContent>
+                                                    <TextBlock Classes="suffix" Text="rpm" />
+                                                </TextBox.InnerRightContent>
+                                            </TextBox>
+                                        </StackPanel>
+                                        <StackPanel Name="SpeedBand" Orientation="Horizontal" Spacing="8" IsVisible="{Binding Run.HasSpeedBand}">
+                                            <TextBlock Classes="field" Text="From" />
+                                            <TextBox Name="StartKmhBox" Classes="data13" Width="104" Text="{Binding Run.StartKmh}" AutomationProperties.Name="Start speed">
+                                                <TextBox.InnerRightContent>
+                                                    <TextBlock Classes="suffix" Text="km/h" />
+                                                </TextBox.InnerRightContent>
+                                            </TextBox>
+                                            <TextBlock Classes="field" Text="to" />
+                                            <TextBox Name="EndKmhBox" Classes="data13" Width="104" Text="{Binding Run.EndKmh}" AutomationProperties.Name="End speed">
+                                                <TextBox.InnerRightContent>
+                                                    <TextBlock Classes="suffix" Text="km/h" />
+                                                </TextBox.InnerRightContent>
+                                            </TextBox>
+                                        </StackPanel>
+                                        <!-- Kept with a run until Discard or Run again: its deltas were taken against it. -->
+                                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding Run.HasBaseline}" IsEnabled="{Binding Run.CanChangeBaseline}">
+                                            <TextBlock Classes="field" Text="Compare against" />
+                                            <ComboBox Name="BaselinePicker" ItemsSource="{Binding Run.BaselineChoices}" SelectedItem="{Binding Run.SelectedBaseline}"
+                                                      MinWidth="160" MaxWidth="280" AutomationProperties.Name="Compare against">
+                                                <ComboBox.ItemTemplate>
+                                                    <DataTemplate x:DataType="local:BaselineChoice">
+                                                        <TextBlock Text="{Binding Text}" TextTrimming="CharacterEllipsis" />
+                                                    </DataTemplate>
+                                                </ComboBox.ItemTemplate>
+                                            </ComboBox>
+                                        </StackPanel>
+                                    </WrapPanel>
+                                </DockPanel>
 
                                 <!-- Where the end came from, why Arm is off (system 5.9: not only in a tooltip), and the values the test uses. -->
+                                <StackPanel Name="OptionLines" Margin="0,8,0,0" Spacing="4">
+                                    <!-- Pedal (spec 4.4): what the floored pedal reads, once calibrated. -->
+                                    <controls:NumberText Name="PedalText" Classes="body" Value="{Binding Run.PedalText}" IsVisible="{Binding Run.IsPedal}" />
+                                    <controls:NumberText Name="BandNoteText" Classes="label" Value="{Binding Run.BandNote}" TextWrapping="Wrap"
+                                                         IsVisible="{Binding Run.BandNote, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding Run.ShowsArmTip}">
+                                        <controls:StrokeIcon Data="{StaticResource Icon.Info}" Foreground="{DynamicResource Ink2Brush}" VerticalAlignment="Center" />
+                                        <controls:NumberText Name="ArmTipText" Classes="body" Value="{Binding Run.ArmTip}" Foreground="{DynamicResource Ink2Brush}" VerticalAlignment="Center" />
+                                        <Button Name="CalibratePedalButton" Classes="quiet" Content="Calibrate the pedal" IsVisible="{Binding Run.NeedsPedal}" Click="CalibratePedal_Click"
+                                                ToolTip.Tip="Open the Pedal step" />
+                                        <Button Name="ShowRunningTestButton" Classes="quiet" Content="Show that test" IsVisible="{Binding Run.ShowsRunningTest}" Click="ShowRunningTest_Click"
+                                                ToolTip.Tip="Open the test that is armed or running" />
+                                    </StackPanel>
+                                    <controls:NumberText Name="InputsLine" Classes="label" Value="{Binding Run.InputsText}" TextWrapping="Wrap"
+                                                         IsVisible="{Binding Run.InputsText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                    <DockPanel IsVisible="{Binding Run.Notice, Converter={x:Static ObjectConverters.IsNotNull}}" Margin="0,4,0,0">
+                                        <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Info}" Foreground="{DynamicResource Ink2Brush}" Margin="0,1,8,0" VerticalAlignment="Top" />
+                                        <controls:NumberText Name="NoticeText" Classes="body" Value="{Binding Run.Notice}" TextWrapping="Wrap" Foreground="{DynamicResource Ink1Brush}" />
+                                    </DockPanel>
+                                </StackPanel>
 
                                 <!-- Ready check (mockup): each condition turns to a check as it is met. -->
+                                <StackPanel Name="ChecksBlock" Margin="0,24,0,0" Spacing="8" IsVisible="{Binding Run.ShowsChecks}">
+                                    <TextBlock Classes="h3" Text="{Binding Run.ChecksTitle}" />
+                                    <controls:NumberText Classes="body note" Value="{Binding Run.ChecksNote}" />
+                                    <ItemsControl Name="ReadyChecks" ItemsSource="{Binding Run.Checks}" MaxWidth="560" HorizontalAlignment="Left" AutomationProperties.Name="Ready check">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="local:ReadyCheckRow">
+                                                <Grid ColumnDefinitions="24,*,Auto" Height="28">
+                                                    <Panel Width="16" Height="16" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                                        <controls:StrokeIcon Data="{StaticResource Icon.Check}" Foreground="{DynamicResource Ink1Brush}" IsVisible="{Binding Met}"
+                                                                             ToolTip.Tip="Met" />
+                                                        <!-- Not met yet: a ring, so the state is shape, not colour (system 2.4). -->
+                                                        <Ellipse Width="12" Height="12" Stroke="{DynamicResource EdgeBrush}" StrokeThickness="1.5" IsVisible="{Binding !Met}" />
+                                                    </Panel>
+                                                    <controls:NumberText Grid.Column="1" Classes="body" Value="{Binding Label}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                    <controls:NumberText Grid.Column="2" Classes="label" Value="{Binding Detail}" Margin="24,0,0,0" VerticalAlignment="Center" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
 
                                 <!-- Car (spec 6.5, 7): the values of the power estimate, saved as they are typed. -->
+                                <StackPanel Name="CarBlock" Margin="0,24,0,0" Spacing="16" MaxWidth="560" HorizontalAlignment="Left" IsVisible="{Binding Run.IsCar}">
+                                    <TextBlock Classes="body note" Text="The wheel power estimate uses these values. They are saved as you type." />
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Classes="body" Text="Test mass with the driver" />
+                                        <TextBox Name="MassBox" Classes="data13" Width="144" HorizontalAlignment="Left" Text="{Binding Run.MassKg}" AutomationProperties.Name="Test mass">
+                                            <TextBox.InnerRightContent>
+                                                <TextBlock Classes="suffix" Text="kg" />
+                                            </TextBox.InnerRightContent>
+                                        </TextBox>
+                                        <DockPanel IsVisible="{Binding Run.MassError, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                            <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource WarnBrush}" Margin="0,1,8,0" VerticalAlignment="Top" />
+                                            <controls:NumberText Classes="body" Value="{Binding Run.MassError}" TextWrapping="Wrap" />
+                                        </DockPanel>
+                                    </StackPanel>
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Classes="body" Text="Tyre size" />
+                                        <TextBox Name="TyreBox" Width="200" HorizontalAlignment="Left" Text="{Binding Run.TyreSize}" AutomationProperties.Name="Tyre size" />
+                                        <DockPanel IsVisible="{Binding Run.TyreError, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                            <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource WarnBrush}" Margin="0,1,8,0" VerticalAlignment="Top" />
+                                            <controls:NumberText Classes="body" Value="{Binding Run.TyreError}" TextWrapping="Wrap" />
+                                        </DockPanel>
+                                    </StackPanel>
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Classes="body" Text="Gearbox" />
+                                        <Border Classes="seg" HorizontalAlignment="Left" AutomationProperties.Name="Gearbox">
+                                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                                <ToggleButton Name="GearboxManual" Classes="seg" Content="Manual" IsChecked="{Binding Run.IsManual}" />
+                                                <ToggleButton Name="GearboxAutomatic" Classes="seg" Content="Automatic" IsChecked="{Binding Run.IsAutomatic}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </StackPanel>
 
                                 <!-- Speed calibration (spec 6.5): km/h per 1000 rpm and the overall ratio by gear. -->
 
