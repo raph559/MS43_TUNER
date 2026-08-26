@@ -1,0 +1,246 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:MS43Logger.AvaloniaApp"
+             xmlns:perf="using:MS43Logger.Core.Performance"
+             xmlns:controls="using:MS43Logger.AvaloniaApp.Controls"
+             x:Class="MS43Logger.AvaloniaApp.Views.PerformanceView"
+             x:DataType="local:PerformanceViewModel">
+    <UserControl.Styles>
+        <!-- The test rail (performance spec 9.1, system 5.6, 8): 256 px on Frame, 224 below 1280, as the Tune rail. -->
+        <Style Selector="Border#PerformanceRail">
+            <Setter Property="Width" Value="256" />
+        </Style>
+        <Style Selector="Window.compact Border#PerformanceRail">
+            <Setter Property="Width" Value="224" />
+        </Style>
+        <!-- Collapsed (Ctrl B): the 48 px strip; RailSizer sets the width. -->
+        <Style Selector="Border#PerformanceRail.collapsed">
+            <Setter Property="Padding" Value="8,12,8,8" />
+        </Style>
+        <Style Selector="Border#PerformancePane">
+            <Setter Property="Padding" Value="24" />
+        </Style>
+        <Style Selector="Window.compact Border#PerformancePane">
+            <Setter Property="Padding" Value="16" />
+        </Style>
+
+        <!-- Rail rows (as Compare's list, system 5.15): two lines, the current one Fill with the 2 px Ink1 bar and a SemiBold
+             title. The list's own selection look is off; rows draw IsCurrent. -->
+        <Style Selector="ListBox#PerformanceTests ListBoxItem">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="ListBox#PerformanceTests ListBoxItem:selected">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="FontWeight" Value="Normal" />
+        </Style>
+        <Style Selector="ListBox#PerformanceTests ListBoxItem:selected /template/ Border#PART_Bar">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Border.prow">
+            <Setter Property="MinHeight" Value="44" />
+            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="CornerRadius" Value="8" />
+        </Style>
+        <!-- The current row's look shows on the Run side only: on Results the rail marks no test (minor review, finding 44). -->
+        <Style Selector="ListBox#PerformanceTests:not(.results) Border.prow.current">
+            <Setter Property="Background" Value="{DynamicResource FillBrush}" />
+        </Style>
+        <Style Selector="Border.pbar">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="ListBox#PerformanceTests:not(.results) Border.prow.current Border.pbar">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+        <Style Selector="TextBlock.prow-title">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style Selector="ListBox#PerformanceTests:not(.results) Border.prow.current TextBlock.prow-title">
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="TextBlock.prow-sum">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style Selector="TextBlock.pgroup">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+            <Setter Property="Margin" Value="8,12,8,4" />
+        </Style>
+
+        <!-- Pane parts: a section heading in UI 13 SemiBold, notes in Ink2. -->
+        <Style Selector="TextBlock.h3">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="LineHeight" Value="18" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+        </Style>
+        <Style Selector="TextBlock.note">
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style Selector="TextBlock.pane-desc">
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.field">
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.suffix">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+            <Setter Property="Margin" Value="0,0,10,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!-- Readings, as Live sets them (LiveView, system 3.2): the numerals in Bahnschrift Ink1, the unit in UI Ink3. -->
+        <Style Selector="TextBlock.reading">
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+        </Style>
+        <Style Selector="TextBlock.reading Run.unit">
+            <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
+        <Style Selector="TextBlock#RunRpm Run.unit">
+            <Setter Property="FontSize" Value="16" />
+        </Style>
+        <!-- A missing value (system 7.2): n/a in UI Ink3, never 0 and never a dash. -->
+        <Style Selector="TextBlock.reading.na">
+            <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="LineHeight" Value="28" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
+        <Style Selector="TextBlock#RunRpm.na">
+            <Setter Property="FontFamily" Value="{DynamicResource UiDisplayFont}" />
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="LineHeight" Value="60" />
+        </Style>
+
+        <!-- Tables (the speed calibration, as Compare's bytes table): a 28 px heading line and 28 px rows over hairlines. -->
+        <Style Selector="Border.bhead">
+            <Setter Property="Height" Value="28" />
+            <Setter Property="BorderBrush" Value="{DynamicResource HairlineBrush}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+        </Style>
+        <Style Selector="Border.bhead TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.brow">
+            <Setter Property="Height" Value="28" />
+            <Setter Property="BorderBrush" Value="{DynamicResource HairlineBrush}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+        </Style>
+        <Style Selector="Border.brow TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!-- Saved results (spec 9.1): two-line rows over hairlines, the name on top, the test, date and tune under it. -->
+        <Style Selector="Border.rrow">
+            <Setter Property="MinHeight" Value="52" />
+            <Setter Property="Padding" Value="0,6" />
+            <Setter Property="BorderBrush" Value="{DynamicResource HairlineBrush}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+        </Style>
+        <Style Selector="TextBlock.rrow-name">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="LineHeight" Value="18" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style Selector="TextBlock.rrow-facts">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+
+        <!-- The difference panel: a Hairline box beside the chart. -->
+        <Style Selector="Border.panel">
+            <Setter Property="BorderBrush" Value="{DynamicResource HairlineBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="16" />
+        </Style>
+        <!-- Arm ends the options row (mockup); a test with no options has Arm alone at the row's start. -->
+        <Style Selector="Button#ArmButton">
+            <Setter Property="DockPanel.Dock" Value="Right" />
+            <Setter Property="Margin" Value="16,0,0,0" />
+        </Style>
+        <!-- The knock bars sit under the progress (mockup); in a short window they move beside the reading, so the live chart
+             stays in view while a run is on (system 8: 1024 x 680). -->
+        <!-- The knock line keeps its room while a run is on (minor review, finding 41): under the bars, or in a short window under
+             the reading, beside the bars, where the row already has room, so the live chart stays in view. -->
+    </UserControl.Styles>
+
+
+    <Grid ColumnDefinitions="Auto,*" Background="{DynamicResource PaneBrush}">
+        <!-- The tests (spec 9.1): Run / Results, then Pulls, Acceleration and Setup. -->
+
+        <Border Name="PerformancePane" Grid.Column="1">
+            <DockPanel>
+                <!-- Live's warm-up banners at the top of the pane, over Run and Results alike and out of the scrolling part, so they
+                     stay in view while connected (performance spec 5; minor review, finding 32). -->
+                <Panel>
+                    <!-- Run: the chosen test's options, Arm, then its ready check, running view or result (mockup). The actions of
+                         a run (Cancel; Save result, Discard, Run again) sit in a bar under the scrolling part, so the primary
+                         never scrolls out of sight; the bar comes after the part in tab order (minor review, finding 39). -->
+                    <Grid Name="RunSide" RowDefinitions="*,Auto" IsVisible="{Binding IsRunMode}">
+                        <ScrollViewer Name="RunScroller" HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel Name="RunPane" Margin="0,0,8,0">
+
+                                <!-- The options and Arm, the one primary once connected (spec 9.1). -->
+
+                                <!-- Where the end came from, why Arm is off (system 5.9: not only in a tooltip), and the values the test uses. -->
+
+                                <!-- Ready check (mockup): each condition turns to a check as it is met. -->
+
+                                <!-- Car (spec 6.5, 7): the values of the power estimate, saved as they are typed. -->
+
+                                <!-- Speed calibration (spec 6.5): km/h per 1000 rpm and the overall ratio by gear. -->
+
+                                <!-- Running (spec 6.1): the big reading and the elapsed time, the progress over the band, knock per cylinder,
+                                     the live values and rpm against time with the baseline dashed behind it. -->
+
+                                <!-- What ends the running test. -->
+                                <controls:NumberText Name="RunNoteText" Classes="label" Margin="0,12,0,0" Value="{Binding Run.RunNote}" TextWrapping="Wrap"
+                                                     IsVisible="{Binding Run.RunNote, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+                                <!-- Result (mockup): figures, flags, conditions and tune, then the name and description edited inline, then
+                                     Save result (the primary at that moment), Discard and Run again. -->
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+
+                    <!-- Results (spec 9.1, 9.2): the library, a result opened, or two compared. -->
+                    <Panel Name="ResultsPane" IsVisible="{Binding IsResultsMode}">
+
+                        <!-- Two results (spec 9.2): A solid, B dashed against rpm or time, the difference beside them. -->
+
+                        <!-- A saved result opened: its full result view, read-only except the name, description and direction (spec 9.1). -->
+                    </Panel>
+                </Panel>
+            </DockPanel>
+        </Border>
+    </Grid>
+</UserControl>
