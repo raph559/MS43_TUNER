@@ -27,7 +27,7 @@ internal static class GateClickThrough
     public static readonly (string Screen, Func<bool, Task<GateClicks?>> Run)[] Screens =
     [
         ("shell", ShellAsync), ("live", LiveAsync), ("tune", TuneAsync), ("compare", CompareAsync), ("settings", SettingsAsync),
-        ("dialogs", DialogsAsync), ("performance", PerformanceAsync),
+        ("dialogs", DialogsAsync),
     ];
 
     private static readonly string? Release = TuneRailTests.Local("MS43X001_release_E46_M54B25.bin");
@@ -129,11 +129,8 @@ internal static class GateClickThrough
         c.Press("CsvSwitch", "turns the CSV log on", () => live.EnableCsvLogging);
         var path = live.CsvPath;
         c.Press("BrowseCsvButton", "Browse… " + Picker, () => live.CsvPath == path);
-        c.Press("PerformanceButton", "opens the Performance tests window", () => window.OwnedWindows.OfType<PerformanceWindow>().Any());
-        foreach (var owned in window.OwnedWindows.ToList())
-        {
-            owned.Close();
-        }
+        c.Press("PerformanceButton", "opens the Performance tab", () => shell.IsPerformance);
+        shell.SelectedTab = ShellViewModel.LiveTab;
 
         c.Press("PinnedOnlySwitch", "lists the pinned channels only", () => live.ShowPinnedOnly);
         live.ShowPinnedOnly = false;
@@ -501,15 +498,5 @@ internal static class GateClickThrough
         return Task.FromResult<GateClicks?>(c);
     }
 
-    private static Task<GateClicks?> PerformanceAsync(bool night)
-    {
-        var live = new MainWindowViewModel(new ManualTime(), () => ["COM1"]) { SelectedVariant = "ms43x" };
-        Avalonia.Application.Current!.RequestedThemeVariant = night ? Avalonia.Styling.ThemeVariant.Dark : Avalonia.Styling.ThemeVariant.Light;
-        var window = new PerformanceWindow { DataContext = live };
-        window.Show();
-        Dispatcher.UIThread.RunJobs();
-        var c = new GateClicks(window, null);
-        c.PressLast(c.Named<Button>("StartTestButton"), window, "starts a run: \"Stop the car to start\"", () => live.PerformanceStatus == "Stop the car to start");
-        return Task.FromResult<GateClicks?>(c);
-    }
+
 }

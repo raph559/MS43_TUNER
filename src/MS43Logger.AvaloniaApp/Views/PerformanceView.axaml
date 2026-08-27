@@ -507,9 +507,93 @@
                                 </StackPanel>
 
                                 <!-- Speed calibration (spec 6.5): km/h per 1000 rpm and the overall ratio by gear. -->
+                                <StackPanel Name="CalibrationBlock" Margin="0,24,0,0" IsVisible="{Binding Run.IsCalibration}">
+                                    <TextBlock Classes="h3" Text="By gear" />
+                                    <Border Classes="bhead" Margin="0,8,0,0" Width="480" HorizontalAlignment="Left">
+                                        <Grid ColumnDefinitions="*,1.6*,1.2*" Margin="12,0">
+                                            <TextBlock Text="Gear" />
+                                            <controls:NumberText Grid.Column="1" Value="km/h per 1000 rpm" HorizontalAlignment="Right" />
+                                            <TextBlock Grid.Column="2" Text="Overall ratio" HorizontalAlignment="Right" />
+                                        </Grid>
+                                    </Border>
+                                    <ItemsControl Name="CalibrationRows" Width="480" HorizontalAlignment="Left" ItemsSource="{Binding Run.CapturedRows}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="local:CalibrationRow">
+                                                <Border Classes="brow">
+                                                    <Grid ColumnDefinitions="*,1.6*,1.2*" Margin="12,0">
+                                                        <controls:NumberText Value="{Binding Gear}" />
+                                                        <TextBlock Grid.Column="1" Classes="data13" Text="{Binding KmhPer1000}" HorizontalAlignment="Right" />
+                                                        <TextBlock Grid.Column="2" Classes="data13" Text="{Binding OverallRatio}" HorizontalAlignment="Right" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <TextBlock Classes="body note" Margin="12,8,0,0" Text="No gear captured yet." IsVisible="{Binding !Run.HasCaptured}" />
+
+                                    <!-- The GPS check while capturing: the speedometer's reading is taken as the GPS speed is typed. -->
+                                    <StackPanel Margin="0,24,0,0" Spacing="8" IsVisible="{Binding Run.IsCapturing}">
+                                        <TextBlock Classes="h3" Text="GPS check (optional)" />
+                                        <TextBlock Classes="body note" MaxWidth="640" HorizontalAlignment="Left"
+                                                   Text="At a steady speed, type the speed a phone's GPS shows: the speedometer's reading is taken as you type, and every gear is corrected by the difference. Without it the speedometer is trusted." />
+                                        <WrapPanel ItemSpacing="16" LineSpacing="8">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock Classes="field" Text="GPS" />
+                                                <TextBox Name="GpsSpeedBox" Classes="data13" Width="112" Text="{Binding Run.GpsKmh}" AutomationProperties.Name="GPS speed">
+                                                    <TextBox.InnerRightContent>
+                                                        <TextBlock Classes="suffix" Text="km/h" />
+                                                    </TextBox.InnerRightContent>
+                                                </TextBox>
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock Classes="field" Text="Speedometer" />
+                                                <TextBox Name="GpsVsBox" Classes="data13" Width="112" Text="{Binding Run.GpsVsKmh}" AutomationProperties.Name="Speedometer speed">
+                                                    <TextBox.InnerRightContent>
+                                                        <TextBlock Classes="suffix" Text="km/h" />
+                                                    </TextBox.InnerRightContent>
+                                                </TextBox>
+                                            </StackPanel>
+                                        </WrapPanel>
+                                        <Button Name="SaveCalibrationButton" Content="Save calibration" HorizontalAlignment="Left" Margin="0,8,0,0"
+                                                Classes.primary="{Binding Run.IsCapturing}" IsEnabled="{Binding Run.CanSaveCalibration}"
+                                                ToolTip.Tip="Saves the captured gears; capture one first" ToolTip.ShowOnDisabled="True" Click="SaveCalibration_Click" />
+                                    </StackPanel>
+                                </StackPanel>
 
                                 <!-- Running (spec 6.1): the big reading and the elapsed time, the progress over the band, knock per cylinder,
                                      the live values and rpm against time with the baseline dashed behind it. -->
+                                <Grid Name="RunningBlock" Margin="0,24,0,0" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
+                                      IsVisible="{Binding Run.ShowsRunReadout}">
+                                    <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Top">
+                                        <Panel Height="60">
+                                            <controls:ReadingText Name="RunRpm" Classes="data56 reading" Classes.na="{Binding Run.ReadingMissing}" Value="{Binding Run.ReadingValue}"
+                                                                  Unit="{Binding Run.ReadingUnit}" />
+                                        </Panel>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Bottom" Margin="16,0,0,4" IsVisible="{Binding Run.ShowsElapsed}">
+                                            <TextBlock Classes="label" Text="Elapsed" HorizontalAlignment="Right" />
+                                            <controls:ReadingText Name="RunElapsed" Classes="data24 reading" Value="{Binding Run.ElapsedText}" Unit="s" HorizontalAlignment="Right" />
+                                        </StackPanel>
+                                    </Grid>
+                                    <controls:ReadoutBar Name="RunProgress" Grid.Row="1" Grid.ColumnSpan="2" Margin="0,8,0,0" BarHeight="8" Minimum="{Binding Run.ProgressFrom}"
+                                                         Maximum="{Binding Run.ProgressTo}" Value="{Binding Run.ProgressValue}" Step="{Binding Run.ProgressStep}" IsLive="{Binding Run.IsLive}" />
+                                    <StackPanel Name="KnockSection" Spacing="4" IsVisible="{Binding Run.HasKnock}">
+                                        <TextBlock Classes="label" Text="Knock retard per cylinder" />
+                                        <controls:CylinderBars Name="KnockBars" Values="{Binding Run.Knock}" IsLive="{Binding Run.IsLive}" Version="{Binding Run.Version}" />
+                                    </StackPanel>
+                                    <!-- Each cylinder at or past 1.5 °CRK in words, amber as the run's knock flag (minor review, finding 34). -->
+                                    <Panel Name="KnockLine" MinHeight="18" IsVisible="{Binding Run.HasKnock}">
+                                        <DockPanel IsVisible="{Binding Run.KnockWarning, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                            <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource CautionBrush}" Margin="0,1,8,0" VerticalAlignment="Top" />
+                                            <controls:NumberText Name="KnockWarningText" Classes="body" Value="{Binding Run.KnockWarning}" TextWrapping="Wrap" />
+                                        </DockPanel>
+                                    </Panel>
+                                    <controls:NumberText Name="LiveValuesText" Grid.Row="4" Grid.ColumnSpan="2" Classes="label" Margin="0,16,0,0" Value="{Binding Run.LiveValuesText}"
+                                                         IsVisible="{Binding Run.ShowsLiveChart}" />
+                                    <controls:RunChart Name="LiveRunChart" Grid.Row="5" Grid.ColumnSpan="2" Margin="0,12,0,0" TraceA="{Binding Run.LiveTrace}" TraceB="{Binding Run.BaselineTrace}"
+                                                       LabelA="This run" LabelB="{Binding Run.BaselineLabel}" XUnits="s" YUnits="rpm" IsRunning="True" IsLive="{Binding Run.IsLive}"
+                                                       XMinimum="0" XMaximum="{Binding Run.LiveXMaximum}" YMinimum="{Binding Run.LiveYMinimum}" YMaximum="{Binding Run.LiveYMaximum}"
+                                                       Version="{Binding Run.Version}" IsVisible="{Binding Run.ShowsLiveChart}" />
+                                </Grid>
 
                                 <!-- What ends the running test. -->
                                 <controls:NumberText Name="RunNoteText" Classes="label" Margin="0,12,0,0" Value="{Binding Run.RunNote}" TextWrapping="Wrap"
@@ -517,6 +601,48 @@
 
                                 <!-- Result (mockup): figures, flags, conditions and tune, then the name and description edited inline, then
                                      Save result (the primary at that moment), Discard and Run again. -->
+                                <StackPanel Name="ResultBlock" Margin="0,24,0,0" IsVisible="{Binding Run.HasResult}">
+                                    <TextBlock Classes="h3" Text="Result" />
+                                    <ItemsControl Name="ResultFigures" Margin="0,12,0,0" ItemsSource="{Binding Run.Figures}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel ItemWidth="216" LineSpacing="16" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                    </ItemsControl>
+                                    <StackPanel Margin="0,16,0,0" Spacing="4" IsVisible="{Binding Run.HasResultKnock}">
+                                        <TextBlock Classes="label" Text="Worst knock retard per cylinder" />
+                                        <controls:CylinderBars Name="ResultKnockBars" Width="480" HorizontalAlignment="Left" Values="{Binding Run.ResultKnock}" IsLive="False"
+                                                               Version="{Binding Run.Version}" />
+                                        <DockPanel IsVisible="{Binding Run.ResultKnockText, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                            <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource CautionBrush}" Margin="0,1,8,0" VerticalAlignment="Top" />
+                                            <controls:NumberText Name="ResultKnockText" Classes="body" Value="{Binding Run.ResultKnockText}" TextWrapping="Wrap" />
+                                        </DockPanel>
+                                    </StackPanel>
+                                    <ItemsControl Name="ResultFlags" Margin="0,8,0,0" ItemsSource="{Binding Run.Flags}" />
+                                    <controls:NumberText Name="ConditionsLine" Classes="label" Margin="0,16,0,0" Value="{Binding Run.ConditionsText}" TextWrapping="Wrap" />
+                                    <controls:TuneLineText Name="TuneLine" Classes="label" Margin="0,4,0,0" Tune="{Binding Run.Tune}" TextTrimming="CharacterEllipsis"
+                                                           ToolTip.Tip="{Binding Run.TuneText}" />
+
+                                    <Grid Margin="0,24,0,0" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="16" RowSpacing="12" MaxWidth="640" HorizontalAlignment="Left">
+                                        <TextBlock Classes="field" Text="Name" />
+                                        <TextBox Name="ResultNameBox" Grid.Column="1" Text="{Binding Run.Name}" AutomationProperties.Name="Result name" />
+                                        <TextBlock Grid.Row="1" Classes="field" Text="Description" VerticalAlignment="Top" Margin="0,7,0,0" />
+                                        <TextBox Name="ResultDescriptionBox" Grid.Row="1" Grid.Column="1" Text="{Binding Run.Description}" AcceptsReturn="True" TextWrapping="Wrap"
+                                                 MinHeight="56" Watermark="Optional: what changed, fuel, weather…" AutomationProperties.Name="Result description" />
+                                        <TextBlock Grid.Row="2" Classes="field" Text="Direction" />
+                                        <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="12">
+                                            <Border Classes="seg" AutomationProperties.Name="Direction">
+                                                <StackPanel Orientation="Horizontal" Spacing="2">
+                                                    <ToggleButton Name="DirectionA" Classes="seg" Content="A" IsChecked="{Binding Run.IsDirectionA}" MinWidth="40" />
+                                                    <ToggleButton Name="DirectionB" Classes="seg" Content="B" IsChecked="{Binding Run.IsDirectionB}" MinWidth="40" />
+                                                </StackPanel>
+                                            </Border>
+                                            <TextBlock Classes="label" VerticalAlignment="Center" TextWrapping="Wrap" Text="Mark the way the road was driven when you run it both ways." />
+                                        </StackPanel>
+                                    </Grid>
+
+                                </StackPanel>
                             </StackPanel>
                         </ScrollViewer>
                     </Grid>

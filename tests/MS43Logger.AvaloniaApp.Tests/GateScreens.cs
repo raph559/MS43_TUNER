@@ -69,7 +69,6 @@ internal static class GateScreens
             shell.Live.ReportConnectFailure(new UnauthorizedAccessException("Access to the port 'COM1' is denied."));
             shell.Live.ShowConnectionLog();
         }));
-        yield return new GateState("performance", "timing", Performance);
     }
 
     public static void Theme(GateWindow opened, bool night)
@@ -152,22 +151,7 @@ internal static class GateScreens
         return Task.FromResult<GateWindow?>(opened);
     }
 
-    private static Task<GateWindow?> Performance()
-    {
-        var time = new ManualTime();
-        var live = new MainWindowViewModel(time, () => ["COM1"]) { SelectedVariant = "ms43x" };
-        var window = new PerformanceWindow { DataContext = live };
-        window.Show();
-        Dispatcher.UIThread.RunJobs();
-        live.ArmPerformanceTest();
-        Speed(live, 0);
-        time.Advance(TimeSpan.FromSeconds(0.5));
-        Speed(live, 2);
-        time.Advance(TimeSpan.FromSeconds(7.3));
-        Speed(live, 100);
-        Dispatcher.UIThread.RunJobs();
-        return Task.FromResult<GateWindow?>(new GateWindow(window, null, time));
-    }
+
 
     // Logging with the mockups' sample values (system 11.1) at the logger's 38 samples/s, connected, in Tiles or Dials.
     private static void Logging(ShellViewModel shell, ManualTime time, bool dials)

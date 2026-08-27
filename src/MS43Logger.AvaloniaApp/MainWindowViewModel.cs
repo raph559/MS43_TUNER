@@ -54,13 +54,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private bool _showPinnedOnly;
     private int _pinnedCount;
 
-    private RunStage _run;
-    private string _time100 = "n/a";
-    private string _time200 = "n/a";
-    private bool _reached100;
-    private bool _reached200;
-    private bool _hasSpeedChannel;
-
     private ReadoutsMode _readouts = ReadoutsMode.Tiles;
     private int _trendSeconds = 10;
     private string _logFolder = AppSettings.DefaultLogFolder;
@@ -74,32 +67,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private DateTimeOffset? _lastSampleAt;
     private DispatcherTimer _staleTimer;
     private static readonly ConnectionMessage NoPort = new("No COM port found. Plug in the K-line cable, then rescan ports.", LiveAction.RescanPorts);
-
-    private const string NoSpeedChannel = "This definition has no vehicle speed channel";
-
-    // A run waits for the car to stop, then times from the first sample above 1 km/h.
-    private enum RunStage
-    {
-        Idle,
-        WaitingForStop,
-        Ready,
-        Timing,
-    }
-
-    /// <summary>Starts a run of the Performance tests; the times read n/a until the car moves off.</summary>
-    public void ArmPerformanceTest()
-    {
-        if (!HasSpeedChannel)
-        {
-            return;
-        }
-
-        _reached100 = false;
-        _reached200 = false;
-        Time100 = "n/a";
-        Time200 = "n/a";
-        Run = RunStage.WaitingForStop;
-    }
     private readonly RunClock _runClock = new();
     private AdxDefinition _currentDefinition;
 
@@ -269,72 +236,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _elapsedTime;
         set => SetField(ref _elapsedTime, value);
-    }
-
-    /// <summary>Seconds from the move-off to 100 km/h, "7.3", counting until it is reached; n/a before a run.</summary>
-    public string Time100
-    {
-        get => _time100;
-        private set
-        {
-            if (SetField(ref _time100, value))
-            {
-                OnPropertyChanged(nameof(HasTime100));
-            }
-        }
-    }
-
-    public bool HasTime100 => Time100 != "n/a";
-
-    public string Time200
-    {
-        get => _time200;
-        private set
-        {
-            if (SetField(ref _time200, value))
-            {
-                OnPropertyChanged(nameof(HasTime200));
-            }
-        }
-    }
-
-    public bool HasTime200 => Time200 != "n/a";
-
-    /// <summary>Whether the definition has a speed channel to time; without one "Start test" is off.</summary>
-    public bool HasSpeedChannel
-    {
-        get => _hasSpeedChannel;
-        private set
-        {
-            if (SetField(ref _hasSpeedChannel, value))
-            {
-                OnPropertyChanged(nameof(StartTestTip));
-                OnPropertyChanged(nameof(PerformanceStatus));
-            }
-        }
-    }
-
-    public string StartTestTip => HasSpeedChannel ? null : NoSpeedChannel;
-
-    /// <summary>What the run waits for: "Stop the car to start", "Ready: drive off", "Timing…"; null when no run is on.</summary>
-    public string PerformanceStatus => !HasSpeedChannel
-        ? NoSpeedChannel
-        : Run switch
-        {
-            RunStage.WaitingForStop => "Stop the car to start",
-            RunStage.Ready => "Ready: drive off",
-            RunStage.Timing => "Timing…",
-            _ => null,
-        };
-
-    private RunStage Run
-    {
-        get => _run;
-        set
-        {
-            _run = value;
-            OnPropertyChanged(nameof(PerformanceStatus));
-        }
     }
 
     public string SearchText
