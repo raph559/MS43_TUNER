@@ -265,6 +265,13 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Performance has no undo history: Ctrl Z and Ctrl Y there never reach another screen's (performance spec 9.1), and a
+        // field keeps them for its own text.
+        if (Shell.IsPerformance && e.Key is Key.Z or Key.Y)
+        {
+            return;
+        }
+
         // A field keeps Ctrl Z for its own text, except the number fields that commit edits (class "commits"): they
         // empty or keep the number once it is applied, so Ctrl Z there means the edit, not the typing.
         var typing = FocusManager?.GetFocusedElement() is TextBox box && !box.Classes.Contains("commits");
@@ -274,6 +281,15 @@ public partial class MainWindow : Window
             case Key.S when e.KeyModifiers.HasFlag(KeyModifiers.Shift):
                 e.Handled = true;
                 await SaveAsAsync();
+                break;
+            // Performance's Save is the result's, never the bin's (minor review, finding 31).
+            case Key.S when Shell.IsPerformance:
+                e.Handled = true;
+                if (Shell.Performance.Run.CanSave)
+                {
+                    Shell.Performance.Run.Save();
+                }
+
                 break;
             case Key.S:
                 e.Handled = true;
@@ -295,6 +311,10 @@ public partial class MainWindow : Window
                 e.Handled = true;
                 Shell.Compare.SetRailCollapsed(!Shell.Compare.RailCollapsed);
                 break;
+            case Key.B when Shell.IsPerformance:
+                e.Handled = true;
+                Shell.Performance.SetRailCollapsed(!Shell.Performance.RailCollapsed);
+                break;
             case Key.OemComma:
                 e.Handled = true;
                 OpenSettings(NavigationMethod.Tab);
@@ -311,6 +331,13 @@ public partial class MainWindow : Window
                 if (Shell.IsCompare && this.GetVisualDescendants().OfType<CompareView>().FirstOrDefault() is { } compareView && Shell.Compare.HasB)
                 {
                     compareView.OpenRailOnSearch();
+                    break;
+                }
+
+                // The tab's one search is the results' (performance spec 9.1): Run gives way to it.
+                if (Shell.IsPerformance && this.GetVisualDescendants().OfType<PerformanceView>().FirstOrDefault() is { } performanceView)
+                {
+                    performanceView.OpenResultsOnSearch();
                     break;
                 }
 

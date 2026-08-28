@@ -23,6 +23,38 @@ public partial class PerformanceView : UserControl
     private bool _following;
     private Rect? _flagsViewport;
 
+    public PerformanceView()
+    {
+        InitializeComponent();
+        // The rail has no search of its own; Ctrl K goes to the results' search instead (MainWindow).
+        _rail = new RailSizer(PerformanceRail, PerformanceResizeHandle, null);
+        PerformanceTests.ContainerPrepared += (_, e) => ShapeRow(e.Container);
+        ResultFlags.EffectiveViewportChanged += (_, e) =>
+        {
+            _flagsViewport = e.EffectiveViewport;
+            ShowFlagSummary();
+        };
+        DataContextChanged += (_, _) =>
+        {
+            _rail.Watch(ViewModel);
+            if (_watched is not null)
+            {
+                _watched.PropertyChanged -= OnPerformanceChanged;
+                _watched.Run.PropertyChanged -= OnRunChanged;
+            }
+
+            _watched = ViewModel;
+            if (_watched is not null)
+            {
+                _watched.PropertyChanged += OnPerformanceChanged;
+                _watched.Run.PropertyChanged += OnRunChanged;
+            }
+
+            ShowCurrentTest();
+            ShowFlagSummary();
+        };
+    }
+
     private PerformanceViewModel? ViewModel => DataContext as PerformanceViewModel;
 
     /// <summary>Shows the results with the keyboard in their search field (Ctrl K).</summary>
