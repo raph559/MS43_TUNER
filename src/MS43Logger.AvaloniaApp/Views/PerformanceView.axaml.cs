@@ -25,6 +25,20 @@ public partial class PerformanceView : UserControl
 
     private PerformanceViewModel? ViewModel => DataContext as PerformanceViewModel;
 
+    /// <summary>Shows the results with the keyboard in their search field (Ctrl K).</summary>
+    public void OpenResultsOnSearch()
+    {
+        if (ViewModel is not { } performance)
+        {
+            return;
+        }
+
+        performance.IsResultsMode = true;
+        performance.Results.CloseOpened();
+        performance.Results.CloseComparison();
+        Dispatcher.UIThread.Post(() => ResultsSearchBox.Focus(NavigationMethod.Tab), DispatcherPriority.Loaded);
+    }
+
     // The list's own selection follows the test in the pane, so a row chosen another way (Calibrate the pedal) and then the
     // old row pressed again still changes the test.
     private void OnPerformanceChanged(object? sender, PropertyChangedEventArgs e)
@@ -43,6 +57,18 @@ public partial class PerformanceView : UserControl
         container.Focusable = !heading;
         container.IsHitTestVisible = !heading;
     }
+
+    private void OnRunChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(PerformanceRunViewModel.FlagSummary))
+        {
+            ShowFlagSummary();
+        }
+    }
+
+    // A run's flags named beside Save result while they sit below the fold.
+    private void ShowFlagSummary() =>
+        FlagSummary.IsVisible = ViewModel?.Run.FlagSummary is not null && _flagsViewport is { } seen && seen.Bottom < FlagInView;
 
     private void ShowCurrentTest()
     {
@@ -142,6 +168,26 @@ public partial class PerformanceView : UserControl
         if (ViewModel is { } performance && (sender as Control)?.DataContext is ResultRow row)
         {
             performance.Results.Open(row);
+        }
+    }
+
+    // Rename opens the result on its name, selected, where the description is edited too.
+    private void RenameResult_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { } performance || (sender as Control)?.DataContext is not ResultRow row)
+        {
+            return;
+        }
+
+        performance.Results.Open(row);
+        if (performance.Results.HasOpened)
+        {
+            // Shown only after this layout pass; focus waits for it.
+            Dispatcher.UIThread.Post(() =>
+            {
+                OpenedNameBox.Focus(NavigationMethod.Tab);
+                OpenedNameBox.SelectAll();
+            }, DispatcherPriority.Loaded);
         }
     }
 

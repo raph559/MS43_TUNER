@@ -645,14 +645,333 @@
                                 </StackPanel>
                             </StackPanel>
                         </ScrollViewer>
+                        <Border Name="RunActions" Grid.Row="1" Margin="0,16,8,0" Padding="0,16,0,0" BorderBrush="{DynamicResource HairlineBrush}"
+                                BorderThickness="0,1,0,0">
+                            <Border.IsVisible>
+                                <MultiBinding Converter="{x:Static BoolConverters.Or}">
+                                    <Binding Path="Run.CanCancel" />
+                                    <Binding Path="Run.HasResult" />
+                                </MultiBinding>
+                            </Border.IsVisible>
+                            <StackPanel Spacing="12">
+                                <StackPanel Name="RunControls" Orientation="Horizontal" Spacing="12" IsVisible="{Binding Run.CanCancel}">
+                                    <Button Name="CancelRunButton" Content="Cancel" Click="Cancel_Click" ToolTip.Tip="Stop the test; nothing is kept" />
+                                    <controls:NumberText Name="RunStatusText" Classes="body" Value="{Binding Run.Status}" Foreground="{DynamicResource Ink2Brush}" VerticalAlignment="Center" />
+                                </StackPanel>
+                                <StackPanel Name="ResultActions" Orientation="Horizontal" Spacing="8" IsVisible="{Binding Run.HasResult}">
+                                    <!-- Save result, then Save changes for a new name, description or direction (Ctrl S). -->
+                                    <Button Name="SaveResultButton" Content="{Binding Run.SaveText}" Classes.primary="{Binding Run.CanSave}" IsEnabled="{Binding Run.CanSave}"
+                                            ToolTip.Tip="Keep this run in the results (Ctrl S)" ToolTip.ShowOnDisabled="True" Click="SaveResult_Click" />
+                                    <Button Name="DiscardResultButton" Content="Discard" Click="Discard_Click" ToolTip.Tip="Drop this run" />
+                                    <Button Name="RunAgainButton" Classes="quiet" Content="Run again" Click="RunAgain_Click" ToolTip.Tip="Drop this run and arm the test again" />
+                                    <Border Classes="chip" Margin="4,0,0,0" VerticalAlignment="Center" IsVisible="{Binding Run.ShowsSaved}">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <controls:StrokeIcon Data="{StaticResource Icon.Check}" Width="12" Height="12" VerticalAlignment="Center" />
+                                            <TextBlock Text="Saved" />
+                                        </StackPanel>
+                                    </Border>
+                                    <!-- While the flags are below the fold, they are named beside Save result (minor review, finding 43);
+                                         the view shows it from where the flags sit. -->
+                                    <StackPanel Name="FlagSummary" Orientation="Horizontal" Spacing="8" Margin="8,0,0,0" VerticalAlignment="Center" IsVisible="False">
+                                        <Panel Width="16" Height="16" VerticalAlignment="Center">
+                                            <controls:StrokeIcon Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource WarnBrush}" IsVisible="{Binding Run.HasSevereFlag}" />
+                                            <controls:StrokeIcon Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource CautionBrush}" IsVisible="{Binding !Run.HasSevereFlag}" />
+                                        </Panel>
+                                        <controls:NumberText Name="FlagSummaryText" Classes="body" Value="{Binding Run.FlagSummary}" Foreground="{DynamicResource Ink1Brush}"
+                                                             VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </StackPanel>
+                                <DockPanel IsVisible="{Binding Run.SaveError, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                    <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource WarnBrush}" Margin="0,1,8,0" VerticalAlignment="Top" />
+                                    <controls:NumberText Name="SaveErrorText" Classes="body" Value="{Binding Run.SaveError}" TextWrapping="Wrap" />
+                                </DockPanel>
+                            </StackPanel>
+                        </Border>
                     </Grid>
 
                     <!-- Results (spec 9.1, 9.2): the library, a result opened, or two compared. -->
                     <Panel Name="ResultsPane" IsVisible="{Binding IsResultsMode}">
+                        <DockPanel Name="ResultsLibrary" IsVisible="{Binding Results.ShowsList}">
+                            <DockPanel DockPanel.Dock="Top" Height="32" Margin="0,0,8,0">
+                                <Button Name="CompareButton" DockPanel.Dock="Right" Content="Compare" IsEnabled="{Binding Results.CanCompare}" Click="Compare_Click"
+                                        ToolTip.Tip="{Binding Results.PickText}" ToolTip.ShowOnDisabled="True" />
+                                <controls:NumberText Name="PickText" DockPanel.Dock="Right" Classes="label" Margin="16,0,12,0" Value="{Binding Results.PickText}" VerticalAlignment="Center" />
+                                <StackPanel Orientation="Horizontal" Spacing="16">
+                                    <TextBox Name="ResultsSearchBox" Width="280" Watermark="Search results" Text="{Binding Results.SearchText}" AutomationProperties.Name="Search results">
+                                        <TextBox.InnerLeftContent>
+                                            <controls:StrokeIcon Data="{StaticResource Icon.Search}" Foreground="{DynamicResource Ink2Brush}" Margin="10,0,0,0" VerticalAlignment="Center" />
+                                        </TextBox.InnerLeftContent>
+                                        <TextBox.InnerRightContent>
+                                            <Border Classes="kbd" Margin="8,0,6,0" VerticalAlignment="Center">
+                                                <TextBlock Text="Ctrl K" />
+                                            </Border>
+                                        </TextBox.InnerRightContent>
+                                    </TextBox>
+                                    <ToggleSwitch Name="ShowColdSwitch" IsChecked="{Binding Results.ShowCold}" OnContent="Show cold runs" OffContent="Show cold runs"
+                                                  AutomationProperties.Name="Show cold runs" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </DockPanel>
+
+                            <Border DockPanel.Dock="Top" Classes="banner warn" Margin="0,16,8,0" IsVisible="{Binding Results.Error, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                <DockPanel>
+                                    <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource WarnBrush}" Margin="0,1,12,0" VerticalAlignment="Top" />
+                                    <controls:NumberText Name="ResultsErrorText" Classes="body" Value="{Binding Results.Error}" Foreground="{DynamicResource Ink1Brush}" TextWrapping="Wrap" />
+                                </DockPanel>
+                            </Border>
+                            <!-- A file the list could not read is named with why; the others still show (review focus 3). -->
+                            <Border DockPanel.Dock="Top" Classes="banner" Margin="0,16,8,0" IsVisible="{Binding Results.HasSkipped}">
+                                <DockPanel>
+                                    <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Info}" Foreground="{DynamicResource Ink2Brush}" Margin="0,1,12,0" VerticalAlignment="Top" />
+                                    <StackPanel>
+                                        <TextBlock Classes="body" Text="Left out of the list:" Foreground="{DynamicResource Ink1Brush}" />
+                                        <ItemsControl Name="SkippedFiles" ItemsSource="{Binding Results.Skipped}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="x:String">
+                                                    <!-- A file name is UI text (system 3.1). -->
+                                                    <TextBlock Classes="body" Text="{Binding}" Foreground="{DynamicResource Ink1Brush}" TextWrapping="Wrap" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </DockPanel>
+                            </Border>
+
+                            <Panel>
+                                <!-- Nothing to list (system 5.10). -->
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" MaxWidth="480"
+                                            IsVisible="{Binding Results.EmptyText, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                    <controls:NumberText Name="ResultsEmptyText" Classes="empty-title" Value="{Binding Results.EmptyText}" TextAlignment="Center" TextWrapping="Wrap" />
+                                    <TextBlock Classes="body note" TextAlignment="Center" Text="Run a test on the Run side, then Save result to keep it here." />
+                                    <Button Name="GoToRunButton" Content="Run a test" HorizontalAlignment="Center" Margin="0,16,0,0" Click="GoToRun_Click"
+                                            ToolTip.Tip="Show the Run side of the test chosen on the rail" />
+                                </StackPanel>
+                                <ScrollViewer Margin="0,16,0,0" HorizontalScrollBarVisibility="Disabled">
+                                    <ItemsControl Name="ResultsList" ItemsSource="{Binding Results.Rows}" Margin="0,0,8,0" AutomationProperties.Name="Saved results">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="local:ResultRow">
+                                                <Border Classes="rrow">
+                                                    <Grid ColumnDefinitions="32,*,Auto,Auto" ColumnSpacing="12">
+                                                        <!-- A tick per row picks the two to compare (spec 9.1: not list multi-select). -->
+                                                        <CheckBox Name="PickBox" IsChecked="{Binding IsPicked}" VerticalAlignment="Center"
+                                                                  AutomationProperties.Name="{Binding Name, StringFormat='Tick {0} to compare'}" ToolTip.Tip="Tick two results to compare them" />
+                                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" ToolTip.Tip="{Binding Description}">
+                                                            <TextBlock Classes="rrow-name" Text="{Binding Name}" />
+                                                            <!-- The test and date with their numbers in Bahnschrift, then the bin's file name as UI text,
+                                                                 trimmed in the middle (system 3.1). -->
+                                                            <DockPanel>
+                                                                <controls:NumberText DockPanel.Dock="Left" Classes="rrow-facts">
+                                                                    <controls:NumberText.Value>
+                                                                        <MultiBinding StringFormat="{}{0} · {1} · ">
+                                                                            <Binding Path="TestText" />
+                                                                            <Binding Path="DateText" />
+                                                                        </MultiBinding>
+                                                                    </controls:NumberText.Value>
+                                                                </controls:NumberText>
+                                                                <TextBlock Classes="rrow-facts" Text="{Binding TuneText}" TextTrimming="{x:Static TextTrimming.PrefixCharacterEllipsis}" />
+                                                            </DockPanel>
+                                                        </StackPanel>
+                                                        <StackPanel Grid.Column="2" VerticalAlignment="Center" MinWidth="128">
+                                                            <controls:NumberText Classes="body" Value="{Binding Headline}" HorizontalAlignment="Right" Foreground="{DynamicResource Ink1Brush}" />
+                                                            <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" IsVisible="{Binding HasTags}">
+                                                                <Panel Width="12" Height="12" VerticalAlignment="Center">
+                                                                    <controls:StrokeIcon Data="{StaticResource Icon.Warn}" Width="12" Height="12" Foreground="{DynamicResource WarnBrush}" IsVisible="{Binding HasSevereFlag}" />
+                                                                    <controls:StrokeIcon Data="{StaticResource Icon.Warn}" Width="12" Height="12" Foreground="{DynamicResource CautionBrush}" IsVisible="{Binding !HasSevereFlag}" />
+                                                                </Panel>
+                                                                <TextBlock Classes="rrow-facts" Text="{Binding TagsText}" />
+                                                            </StackPanel>
+                                                        </StackPanel>
+                                                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="0" VerticalAlignment="Center">
+                                                            <Button Name="OpenResultButton" Classes="quiet" Content="Open" Click="OpenResult_Click" ToolTip.Tip="Show the whole result" />
+                                                            <Button Name="RenameButton" Classes="quiet" Content="Rename" Click="RenameResult_Click" ToolTip.Tip="Rename it and edit its description" />
+                                                            <Button Name="DeleteResultButton" Classes="quiet" Content="Delete…" Click="DeleteResult_Click" ToolTip.Tip="Delete the result file, after asking" />
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </Panel>
+                        </DockPanel>
 
                         <!-- Two results (spec 9.2): A solid, B dashed against rpm or time, the difference beside them. -->
+                        <DockPanel Name="ComparisonView" IsVisible="{Binding Results.HasComparison}">
+                            <DockPanel DockPanel.Dock="Top" Height="32">
+                                <Button Name="CloseComparisonButton" DockPanel.Dock="Left" Classes="quiet" Content="Back to the list" Margin="-12,0,12,0" Click="CloseComparison_Click" />
+                                <controls:NumberText Classes="body pane-desc" Value="{Binding Results.Comparison.BandText, FallbackValue=''}" />
+                            </DockPanel>
+                            <ScrollViewer Margin="0,16,0,0" HorizontalScrollBarVisibility="Disabled">
+                                <StackPanel Margin="0,0,8,0">
+                                    <Border Name="MetricSeg" Classes="seg" HorizontalAlignment="Left" AutomationProperties.Name="Trace">
+                                        <StackPanel Orientation="Horizontal" Spacing="2">
+                                            <ToggleButton Name="MetricPower" Classes="seg" Content="Power" IsChecked="{Binding Results.Comparison.IsPower, FallbackValue=False}"
+                                                          IsEnabled="{Binding Results.Comparison.PowerTip, Converter={x:Static ObjectConverters.IsNull}, FallbackValue=False}"
+                                                          ToolTip.Tip="{Binding Results.Comparison.PowerTip, FallbackValue={x:Null}}" ToolTip.ShowOnDisabled="True" />
+                                            <ToggleButton Name="MetricTorque" Classes="seg" Content="Torque" IsChecked="{Binding Results.Comparison.IsTorque, FallbackValue=False}"
+                                                          IsEnabled="{Binding Results.Comparison.TorqueTip, Converter={x:Static ObjectConverters.IsNull}, FallbackValue=False}"
+                                                          ToolTip.Tip="{Binding Results.Comparison.TorqueTip, FallbackValue={x:Null}}" ToolTip.ShowOnDisabled="True" />
+                                            <ToggleButton Name="MetricIgnition" Classes="seg" Content="Ignition" IsChecked="{Binding Results.Comparison.IsIgnition, FallbackValue=False}"
+                                                          IsEnabled="{Binding Results.Comparison.IgnitionTip, Converter={x:Static ObjectConverters.IsNull}, FallbackValue=False}"
+                                                          ToolTip.Tip="{Binding Results.Comparison.IgnitionTip, FallbackValue={x:Null}}" ToolTip.ShowOnDisabled="True" />
+                                            <ToggleButton Name="MetricKnock" Classes="seg" Content="Knock" IsChecked="{Binding Results.Comparison.IsKnock, FallbackValue=False}"
+                                                          IsEnabled="{Binding Results.Comparison.KnockTip, Converter={x:Static ObjectConverters.IsNull}, FallbackValue=False}"
+                                                          ToolTip.Tip="{Binding Results.Comparison.KnockTip, FallbackValue={x:Null}}" ToolTip.ShowOnDisabled="True" />
+                                            <ToggleButton Name="MetricVanos" Classes="seg" Content="VANOS" IsChecked="{Binding Results.Comparison.IsVanos, FallbackValue=False}"
+                                                          IsEnabled="{Binding Results.Comparison.VanosTip, Converter={x:Static ObjectConverters.IsNull}, FallbackValue=False}"
+                                                          ToolTip.Tip="{Binding Results.Comparison.VanosTip, FallbackValue={x:Null}}" ToolTip.ShowOnDisabled="True" />
+                                            <ToggleButton Name="MetricAfr" Classes="seg" Content="AFR" IsChecked="{Binding Results.Comparison.IsAfr, FallbackValue=False}"
+                                                          IsEnabled="{Binding Results.Comparison.AfrTip, Converter={x:Static ObjectConverters.IsNull}, FallbackValue=False}"
+                                                          ToolTip.Tip="{Binding Results.Comparison.AfrTip, FallbackValue={x:Null}}" ToolTip.ShowOnDisabled="True" />
+                                            <ToggleButton Name="MetricMaf" Classes="seg" Content="Airflow" IsChecked="{Binding Results.Comparison.IsMaf, FallbackValue=False}"
+                                                          IsEnabled="{Binding Results.Comparison.MafTip, Converter={x:Static ObjectConverters.IsNull}, FallbackValue=False}"
+                                                          ToolTip.Tip="{Binding Results.Comparison.MafTip, FallbackValue={x:Null}}" ToolTip.ShowOnDisabled="True" />
+                                            <ToggleButton Name="MetricRpm" Classes="seg" Content="Engine speed over time" IsChecked="{Binding Results.Comparison.IsRpm, FallbackValue=False}"
+                                                          IsEnabled="{Binding Results.Comparison.RpmTip, Converter={x:Static ObjectConverters.IsNull}, FallbackValue=False}"
+                                                          ToolTip.Tip="{Binding Results.Comparison.RpmTip, FallbackValue={x:Null}}" ToolTip.ShowOnDisabled="True" />
+                                        </StackPanel>
+                                    </Border>
+                                    <Grid Margin="0,16,0,0" ColumnDefinitions="2*,16,*">
+                                        <StackPanel>
+                                            <controls:RunChart Name="CompareChart" TraceA="{Binding Results.Comparison.TraceA, FallbackValue={x:Null}}" TraceB="{Binding Results.Comparison.TraceB, FallbackValue={x:Null}}"
+                                                               LabelA="{Binding Results.Comparison.LabelA, FallbackValue={x:Null}}" LabelB="{Binding Results.Comparison.LabelB, FallbackValue={x:Null}}"
+                                                               XUnits="{Binding Results.Comparison.XUnits, FallbackValue={x:Null}}" YUnits="{Binding Results.Comparison.YUnits, FallbackValue={x:Null}}"
+                                                               Version="{Binding Results.Comparison.Version, FallbackValue=0}" />
+                                            <DockPanel Margin="0,12,0,0" IsVisible="{Binding Results.Comparison.NoTraceText, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False}">
+                                                <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Info}" Foreground="{DynamicResource Ink2Brush}" Margin="0,1,8,0" VerticalAlignment="Top" />
+                                                <controls:NumberText Classes="body" Value="{Binding Results.Comparison.NoTraceText, FallbackValue=''}" TextWrapping="Wrap" />
+                                            </DockPanel>
+                                        </StackPanel>
+
+                                        <Border Name="DifferencePanel" Grid.Column="2" Classes="panel" VerticalAlignment="Top">
+                                            <StackPanel Spacing="8">
+                                                <TextBlock Classes="h3" Text="B − A" />
+                                                <!-- Each run's invalid, cold and suspect flags beside the deltas, as the result view shows them. -->
+                                                <StackPanel IsVisible="{Binding Results.Comparison.HasFlagsA, FallbackValue=False}">
+                                                    <controls:NumberText Classes="label" Value="{Binding Results.Comparison.LabelA, FallbackValue=''}" TextTrimming="CharacterEllipsis" />
+                                                    <ItemsControl Name="FlagsA" ItemsSource="{Binding Results.Comparison.FlagsA, FallbackValue={x:Null}}" />
+                                                </StackPanel>
+                                                <StackPanel IsVisible="{Binding Results.Comparison.HasFlagsB, FallbackValue=False}">
+                                                    <controls:NumberText Classes="label" Value="{Binding Results.Comparison.LabelB, FallbackValue=''}" TextTrimming="CharacterEllipsis" />
+                                                    <ItemsControl Name="FlagsB" ItemsSource="{Binding Results.Comparison.FlagsB, FallbackValue={x:Null}}" />
+                                                </StackPanel>
+                                                <ItemsControl Name="DeltaList" ItemsSource="{Binding Results.Comparison.Deltas, FallbackValue={x:Null}}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="local:DeltaRow">
+                                                            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="12" Margin="0,0,0,10">
+                                                                <controls:NumberText Classes="body" Value="{Binding Label}" Foreground="{DynamicResource Ink1Brush}" TextWrapping="Wrap" />
+                                                                <controls:ReadingText Grid.Column="1" Classes="data16 reading" Classes.na="{Binding IsMissing}" Value="{Binding Delta}" Unit="{Binding Unit}" />
+                                                                <controls:NumberText Grid.Row="1" Grid.ColumnSpan="2" Classes="label" Value="{Binding Pair}" TextWrapping="Wrap" />
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <controls:NumberText Classes="label" Value="{Binding Results.Comparison.NoiseText, FallbackValue=''}" TextWrapping="Wrap"
+                                                                     IsVisible="{Binding Results.Comparison.NoiseText, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False}" />
+                                                <DockPanel IsVisible="{Binding Results.Comparison.RecomputedNote, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False}">
+                                                    <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Info}" Foreground="{DynamicResource Ink2Brush}" Margin="0,1,8,0" VerticalAlignment="Top" />
+                                                    <controls:NumberText Classes="label" Value="{Binding Results.Comparison.RecomputedNote, FallbackValue=''}" TextWrapping="Wrap" />
+                                                </DockPanel>
+
+                                                <TextBlock Classes="h3" Text="Conditions" Margin="0,8,0,0" />
+                                                <ItemsControl ItemsSource="{Binding Results.Comparison.Mismatches, FallbackValue={x:Null}}"
+                                                              IsVisible="{Binding Results.Comparison.HasMismatches, FallbackValue=False}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="x:String">
+                                                            <DockPanel Margin="0,0,0,6">
+                                                                <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource CautionBrush}" Margin="0,1,8,0" VerticalAlignment="Top" />
+                                                                <controls:NumberText Classes="body" Value="{Binding}" TextWrapping="Wrap" />
+                                                            </DockPanel>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <TextBlock Classes="body note" Text="Intake air, pressure and coolant match closely enough."
+                                                           IsVisible="{Binding !Results.Comparison.HasMismatches, FallbackValue=False}" />
+
+                                                <TextBlock Classes="h3" Text="Tables that differ" Margin="0,8,0,0" />
+                                                <ItemsControl ItemsSource="{Binding Results.Comparison.Tables, FallbackValue={x:Null}}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="local:TableChangeRow">
+                                                            <StackPanel Margin="0,0,0,6">
+                                                                <TextBlock Classes="mono" Text="{Binding Title}" Foreground="{DynamicResource Ink1Brush}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
+                                                                <controls:NumberText Classes="label" Value="{Binding Detail}" />
+                                                            </StackPanel>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <controls:NumberText Classes="body note" Value="{Binding Results.Comparison.TablesNote, FallbackValue=''}"
+                                                                     IsVisible="{Binding Results.Comparison.TablesNote, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </DockPanel>
 
                         <!-- A saved result opened: its full result view, read-only except the name, description and direction (spec 9.1). -->
+                        <Grid Name="OpenedView" RowDefinitions="Auto,*,Auto" IsVisible="{Binding Results.HasOpened}">
+                            <DockPanel Height="32" Margin="0,0,8,0">
+                                <Button Name="CloseOpenedButton" DockPanel.Dock="Left" Classes="quiet" Content="Back to the list" Margin="-12,0,12,0" Click="CloseOpened_Click" />
+                                <Border DockPanel.Dock="Right" Classes="chip" VerticalAlignment="Center" IsVisible="{Binding Results.Opened.IsReadOnly, FallbackValue=False}"
+                                        ToolTip.Tip="A newer version of the app made this result">
+                                    <TextBlock Text="Read-only" />
+                                </Border>
+                                <TextBlock Name="OpenedTitle" Classes="title" VerticalAlignment="Center" Text="{Binding Results.Opened.Title, FallbackValue=''}" />
+                                <controls:NumberText Classes="body pane-desc" Margin="12,0,0,0" Value="{Binding Results.Opened.Headline, FallbackValue=''}" />
+                            </DockPanel>
+                            <ScrollViewer Grid.Row="1" Margin="0,16,0,0" HorizontalScrollBarVisibility="Disabled">
+                                <StackPanel Margin="0,0,8,0">
+                                    <ItemsControl Name="OpenedFigures" ItemsSource="{Binding Results.Opened.Figures, FallbackValue={x:Null}}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel ItemWidth="216" LineSpacing="16" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                    </ItemsControl>
+                                    <StackPanel Margin="0,16,0,0" Spacing="4" IsVisible="{Binding Results.Opened.HasKnock, FallbackValue=False}">
+                                        <TextBlock Classes="label" Text="Worst knock retard per cylinder" />
+                                        <controls:CylinderBars Name="OpenedKnockBars" Width="480" HorizontalAlignment="Left" Values="{Binding Results.Opened.Knock, FallbackValue={x:Null}}"
+                                                               IsLive="False" />
+                                        <DockPanel IsVisible="{Binding Results.Opened.KnockText, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False}">
+                                            <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource CautionBrush}" Margin="0,1,8,0" VerticalAlignment="Top" />
+                                            <controls:NumberText Name="OpenedKnockText" Classes="body" Value="{Binding Results.Opened.KnockText, FallbackValue=''}" TextWrapping="Wrap" />
+                                        </DockPanel>
+                                    </StackPanel>
+                                    <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding Results.Opened.Flags, FallbackValue={x:Null}}" />
+                                    <controls:NumberText Classes="label" Margin="0,16,0,0" Value="{Binding Results.Opened.ConditionsText, FallbackValue=''}" TextWrapping="Wrap" />
+                                    <controls:TuneLineText Name="OpenedTuneLine" Classes="label" Margin="0,4,0,0" Tune="{Binding Results.Opened.Tune, FallbackValue={x:Null}}"
+                                                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Results.Opened.TuneText, FallbackValue=''}" />
+                                    <controls:NumberText Classes="label" Margin="0,4,0,0" Value="{Binding Results.Opened.InputsText, FallbackValue=''}" TextWrapping="Wrap" />
+
+                                    <Grid Margin="0,24,0,0" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="16" RowSpacing="12" MaxWidth="640" HorizontalAlignment="Left"
+                                          IsEnabled="{Binding !Results.Opened.IsReadOnly, FallbackValue=False}">
+                                        <TextBlock Classes="field" Text="Name" />
+                                        <TextBox Name="OpenedNameBox" Grid.Column="1" Text="{Binding Results.Opened.Name, FallbackValue=''}" AutomationProperties.Name="Result name" />
+                                        <TextBlock Grid.Row="1" Classes="field" Text="Description" VerticalAlignment="Top" Margin="0,7,0,0" />
+                                        <TextBox Name="OpenedDescriptionBox" Grid.Row="1" Grid.Column="1" Text="{Binding Results.Opened.Description, FallbackValue=''}" AcceptsReturn="True"
+                                                 TextWrapping="Wrap" MinHeight="56" Watermark="Optional: what changed, fuel, weather…" AutomationProperties.Name="Result description" />
+                                        <TextBlock Grid.Row="2" Classes="field" Text="Direction" />
+                                        <Border Grid.Row="2" Grid.Column="1" Classes="seg" HorizontalAlignment="Left" AutomationProperties.Name="Direction">
+                                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                                <ToggleButton Name="OpenedDirectionA" Classes="seg" Content="A" IsChecked="{Binding Results.Opened.IsDirectionA, FallbackValue=False}" MinWidth="40" />
+                                                <ToggleButton Name="OpenedDirectionB" Classes="seg" Content="B" IsChecked="{Binding Results.Opened.IsDirectionB, FallbackValue=False}" MinWidth="40" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                </StackPanel>
+                            </ScrollViewer>
+                            <!-- Save changes stays in sight under the scrolling result, as the run's actions do, and after it in tab order. -->
+                            <Border Grid.Row="2" Margin="0,16,8,0" Padding="0,16,0,0" BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="0,1,0,0">
+                                <StackPanel Spacing="12">
+                                    <!-- On only when the name, description or direction differ from the file (minor review, finding 46). -->
+                                    <Button Name="SaveDetailsButton" Content="Save changes" Click="SaveDetails_Click" IsEnabled="{Binding Results.Opened.HasChanges, FallbackValue=False}"
+                                            HorizontalAlignment="Left" ToolTip.Tip="{Binding Results.Opened.SaveTip, FallbackValue=''}" ToolTip.ShowOnDisabled="True" />
+                                    <DockPanel IsVisible="{Binding Results.Error, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                        <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource WarnBrush}" Margin="0,1,8,0" VerticalAlignment="Top" />
+                                        <controls:NumberText Classes="body" Value="{Binding Results.Error}" TextWrapping="Wrap" />
+                                    </DockPanel>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
                     </Panel>
                 </Panel>
             </DockPanel>
