@@ -1,10 +1,14 @@
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using MS43Logger.AvaloniaApp.Controls;
 using MS43Logger.AvaloniaApp.Views;
+using MS43Logger.Core.Performance;
+using MS43Logger.Core.Tests;
 using MS43Logger.Core.Tuning;
 
 namespace MS43Logger.AvaloniaApp.Tests;
@@ -20,7 +24,7 @@ internal static class GateClickThrough
     /// <summary>The header and status bar, on every screen; their script is "shell".</summary>
     public static readonly string[] ShellControls =
     [
-        "TabLive", "TabTune", "TabCompare", "FileMenuButton", "SaveButton", "ConnectionButton", "ConnectButton", "SettingsButton",
+        "TabLive", "TabTune", "TabCompare", "TabPerformance", "FileMenuButton", "SaveButton", "ConnectionButton", "ConnectButton", "SettingsButton",
         "NightButton", "DayButton", "ReadoutsTiles", "ReadoutsDials", "RescanButton", "MinimizeButton", "MaximizeButton", "CloseButton",
     ];
 
@@ -36,9 +40,9 @@ internal static class GateClickThrough
 
     private static bool NotShell(Control control) => !IsShell(control);
 
-    private static (MainWindow Window, ShellViewModel Shell) Open(bool night, Func<string[]> ports, double width = 1024, double height = 680)
+    private static (MainWindow Window, ShellViewModel Shell) Open(bool night, Func<string[]> ports, double width = 1024, double height = 680, string? folder = null)
     {
-        var (window, shell) = TestShell.Create(AppSettings.Load(TestShell.NewFolder()), new MainWindowViewModel(new ManualTime(), ports));
+        var (window, shell) = TestShell.Create(AppSettings.Load(folder ?? TestShell.NewFolder()), new MainWindowViewModel(new ManualTime(), ports));
         shell.Live.SelectedVariant = "ms43x";
         window.Width = width;
         window.Height = height;
@@ -64,6 +68,7 @@ internal static class GateClickThrough
 
         c.Press("TabTune", "shows the Tune screen", () => shell.SelectedTab == ShellViewModel.TuneTab);
         c.Press("TabCompare", "shows the Compare screen", () => shell.SelectedTab == ShellViewModel.CompareTab);
+        c.Press("TabPerformance", "shows the Performance screen", () => shell.SelectedTab == ShellViewModel.PerformanceTab && shell.Performance.IsVisible);
         c.Press("TabLive", "shows the Live screen", () => shell.SelectedTab == ShellViewModel.LiveTab);
 
         var file = c.Named<Button>("FileMenuButton");
@@ -79,7 +84,7 @@ internal static class GateClickThrough
 
         var before = scans;
         c.Press("RescanButton", "lists the COM ports again", () => scans == before + 1);
-        c.Note(c.Named<Button>("ConnectButton"), "not pressed: it opens the machine's real serial port (its label and states: ConnectIsPrimaryOnlyOnLive, LiveStateTests); Disconnect is pressed in the live script");
+        c.Note(c.Named<Button>("ConnectButton"), "not pressed: it opens the machine's real serial port (its label and states: ConnectIsPrimaryOnlyOnLiveAndPerformance, LiveStateTests); Disconnect is pressed in the live script");
         c.Press("SettingsButton", "opens Settings", () => c.Dialogs.IsOpen && window.GetVisualDescendants().OfType<SettingsView>().Any());
         c.Dialogs.Close();
         c.Press("DayButton", "switches to Day and saves it", () => shell.IsDay && shell.Tune.Settings.Theme == ThemeMode.Day);
@@ -131,6 +136,7 @@ internal static class GateClickThrough
         c.Press("BrowseCsvButton", "Browse… " + Picker, () => live.CsvPath == path);
         c.Press("PerformanceButton", "opens the Performance tab", () => shell.IsPerformance);
         shell.SelectedTab = ShellViewModel.LiveTab;
+        Dispatcher.UIThread.RunJobs();
 
         c.Press("PinnedOnlySwitch", "lists the pinned channels only", () => live.ShowPinnedOnly);
         live.ShowPinnedOnly = false;
@@ -497,6 +503,4 @@ internal static class GateClickThrough
         c.PressLast(Find.Named<Button>(view, "CloseButton"), view, "connection log: closes", () => !c.Dialogs.IsOpen);
         return Task.FromResult<GateClicks?>(c);
     }
-
-
 }
