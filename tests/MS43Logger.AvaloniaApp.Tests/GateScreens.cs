@@ -6,11 +6,12 @@ using Avalonia.Controls.Primitives;
 using Avalonia.VisualTree;
 using MS43Logger.AvaloniaApp.Views;
 using MS43Logger.Core;
+using MS43Logger.Core.Tests;
 using MS43Logger.Core.Tuning;
 
 namespace MS43Logger.AvaloniaApp.Tests;
 
-/// <summary>A screen in one of its states, opened the way the owner reaches it.</summary>
+/// <summary>A screen in one of its states, opened the way the user reaches it.</summary>
 internal sealed record GateState(string Screen, string State, Func<Task<GateWindow?>> Open)
 {
     public string Name => $"{Screen}-{State}";
@@ -18,13 +19,14 @@ internal sealed record GateState(string Screen, string State, Func<Task<GateWind
     public override string ToString() => Name;
 }
 
-/// <summary>The window a state opened, its shell (null for the Performance tests window) and its clock.</summary>
-internal sealed record GateWindow(Window Window, ShellViewModel? Shell, ManualTime Time);
+/// <summary>The window a state opened, its shell and its clock.</summary>
+internal sealed record GateWindow(Window Window, ShellViewModel Shell, ManualTime Time);
 
 /// <summary>
-/// Every screen and state the restyle's gate checks (plan Task 15): Tune's item kinds and its first run, Live's
+/// Every screen and state the restyle's gate checks: Tune's item kinds and its first run, Live's
 /// states, Compare's views, Settings with and without a save failure, the save prompt, the connection log and the
-/// Performance tests window. States that need the owner's car files are left out when the files are missing.
+/// Performance tab's run, results and compare states. States that need the user's car files are left out when the files
+/// are missing.
 /// </summary>
 internal static class GateScreens
 {
@@ -71,18 +73,21 @@ internal static class GateScreens
         }));
     }
 
+    /// <summary>
+    /// Closes a state's window. A state's finished run is a picture, not the user's: it is dropped first, or the close would
+    /// ask about it and leave the window open, holding the keyboard while the next state is checked.
+    /// </summary>
+    public static void Close(GateWindow opened)
+    {
+        opened.Shell.Performance.Run.Discard();
+        opened.Window.Close();
+        Dispatcher.UIThread.RunJobs();
+    }
+
     public static void Theme(GateWindow opened, bool night)
     {
-        if (opened.Shell is { } shell)
-        {
-            shell.IsNight = night;
-            shell.IsDay = !night;
-        }
-        else
-        {
-            Avalonia.Application.Current!.RequestedThemeVariant = night ? Avalonia.Styling.ThemeVariant.Dark : Avalonia.Styling.ThemeVariant.Light;
-        }
-
+        opened.Shell.IsNight = night;
+        opened.Shell.IsDay = !night;
         Dispatcher.UIThread.RunJobs();
     }
 
@@ -151,9 +156,10 @@ internal static class GateScreens
         return Task.FromResult<GateWindow?>(opened);
     }
 
+    // A 3rd gear pull from 1700 to 6500 rpm in 6 s, cylinder 4 retarding 1.6 degrees from 5000 to 5600 rpm.
+    private static IReadOnlyList<LiveSample> Pull() => SyntheticRuns.Pull(PerfFeed.Ms43x, 3, 1700, 6500, 6.0, knockCyl4: 1.6);
 
-
-    // Logging with the mockups' sample values (system 11.1) at the logger's 38 samples/s, connected, in Tiles or Dials.
+    // Logging with the mockups' sample values at the logger's 38 samples/s, connected, in Tiles or Dials.
     private static void Logging(ShellViewModel shell, ManualTime time, bool dials)
     {
         var live = shell.Live;
@@ -173,8 +179,6 @@ internal static class GateScreens
 
     private static void Sample(MainWindowViewModel live, params (string Id, double Value)[] values) =>
         live.ShowSample(values.Select(value => new DecodedValue(Ms43x.Single(channel => channel.Id == value.Id), value.Value)).ToList());
-
-    private static void Speed(MainWindowViewModel live, double kmh) => Sample(live, ("VS", kmh));
 
     private static ItemDifference Item(CompareViewModel compare, string title) =>
         compare.Result!.Items.Single(item => item.Item.Title == title);
