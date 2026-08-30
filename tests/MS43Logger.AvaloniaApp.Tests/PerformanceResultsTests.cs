@@ -204,6 +204,122 @@ public sealed class PerformanceResultsTests : IDisposable
         Assert.True(comparison.Version > version);
     }
 
+    // Each run's doubts show beside the deltas, so a cold, invalid or knocking run never gets bare B − A figures; notes stay
+    // in the result itself (final review, finding 5).
+    [AvaloniaFact]
+    public void CompareShowsEachRunsFlags()
+    {
+        Save("Warm", 6.0, minute: 1);
+        Save("Morning", 6.4, cold: true, minute: 2);
+        var results = Results();
+        results.ShowCold = true;
+        foreach (var row in results.Rows)
+        {
+            row.IsPicked = true;
+        }
+
+        results.Compare();
+
+        var comparison = results.Comparison!;
+        Assert.Equal("A: Warm", comparison.LabelA);
+        Assert.Empty(comparison.FlagsA);
+        Assert.False(comparison.HasFlagsA);
+        var cold = Assert.Single(comparison.FlagsB, flag => flag.Code == "cold");
+        Assert.True(cold.IsWarn);
+        Assert.True(comparison.HasFlagsB);
+        Assert.DoesNotContain(comparison.FlagsB, flag => flag.IsInfo);
+    }
+
+    // Back to the list keeps what was typed into an opened result: it is written to the file (minor review, finding 30).
+    [AvaloniaFact]
+    public void ClosingAnOpenedResultKeepsItsEdits()
+    {
+        Save("Baseline", 6.2);
+        var results = Results();
+        results.Open(results.Rows[0]);
+        results.Opened!.Name = "Before";
+        results.Opened.Description = "SP95";
+        results.Opened.IsDirectionA = true;
+
+        results.CloseOpened();
+
+        Assert.False(results.HasOpened);
+        var row = Assert.Single(results.Rows);
+        Assert.Equal(("Before", "SP95"), (row.Name, row.Description));
+        Assert.Equal("A", new PerfResultStore(Path.Combine(_folder, "results")).Load(row.FileName)!.Direction);
+
+        // A blank name is not written: the result stays open and says why.
+        results.Open(row);
+        results.Opened!.Name = " ";
+        results.CloseOpened();
+        Assert.True(results.HasOpened);
+        Assert.Equal("Not renamed: a result needs a name", results.Error);
+    }
+
+    // A ticked row stays ticked and in view while the search changes, so A and B can each be found by search (minor review,
+    // finding 63).
+    [AvaloniaFact]
+    public void SearchKeepsTheTicks()
+    {
+        Save("Baseline", 6.2, minute: 1);
+        Save("Ignition +1.5", 6.0, minute: 2);
+        var results = Results();
+        results.Rows.Single(row => row.Name == "Baseline").IsPicked = true;
+
+        results.SearchText = "ignition";
+
+        Assert.Equal(["Ignition +1.5", "Baseline"], results.Rows.Select(row => row.Name));
+        Assert.True(results.Rows.Single(row => row.Name == "Baseline").IsPicked);
+        results.Rows.Single(row => row.Name == "Ignition +1.5").IsPicked = true;
+        Assert.True(results.CanCompare);
+        results.SearchText = "zzz";
+        Assert.Equal(2, results.Rows.Count);
+        results.SearchText = "";
+        Assert.Equal(2, results.PickedCount);
+    }
+
+    // The rpm of each run's peak goes beside its peak, not in a row of its own reading "0 rpm" (minor review, finding 69).
+    [AvaloniaFact]
+    public void ThePeakRpmShowsBesideThePeak()
+    {
+        Save("Baseline", 6.2, minute: 1);
+        Save("Ignition +1.5", 6.0, minute: 2);
+        var results = Results();
+        foreach (var row in results.Rows)
+        {
+            row.IsPicked = true;
+        }
+
+        results.Compare();
+
+        var deltas = results.Comparison!.Deltas;
+        Assert.DoesNotContain(deltas, delta => delta.Key is "peak-power-rpm" or "peak-torque-rpm" or "knock-cyl");
+        Assert.Matches(@"^A \d+ kW at \d+ rpm, B \d+ kW at \d+ rpm$", Assert.Single(deltas, delta => delta.Key == "peak-power").Pair);
+        Assert.Matches(@"^A \d+ Nm at \d+ rpm, B \d+ Nm at \d+ rpm$", Assert.Single(deltas, delta => delta.Key == "peak-torque").Pair);
+    }
+
+    // Two gears are named, and their times are not subtracted (minor review, finding 26).
+    [AvaloniaFact]
+    public void DifferentGearsLeaveTheTimesOut()
+    {
+        Save("Second", 6.0, minute: 1, gear: 2);
+        Save("Third", 6.0, minute: 2);
+        var results = Results();
+        foreach (var row in results.Rows)
+        {
+            row.IsPicked = true;
+        }
+
+        results.Compare();
+
+        var comparison = results.Comparison!;
+        Assert.Contains("Different gears: 2nd and 3rd; times are not compared.", comparison.Mismatches);
+        var times = comparison.Deltas.Where(delta => delta.Unit == "s").ToArray();
+        Assert.NotEmpty(times);
+        Assert.All(times, delta => Assert.Equal("n/a", delta.Delta));
+        Assert.NotEqual("n/a", Assert.Single(comparison.Deltas, delta => delta.Key == "time").A);
+    }
+
     // An empty table list says why, from the comparison, and one saved image is a plain line, not a mismatch (minor review,
     // findings 12, 13 and 25).
     [AvaloniaFact]
@@ -262,5 +378,32 @@ public sealed class PerformanceResultsTests : IDisposable
         Assert.Equal("No airflow trace in either run.", comparison.NoTraceText);
         comparison.IsPower = true;
         Assert.Null(comparison.NoTraceText);
+    }
+
+    // An opened result is titled with its name, the test beside it; Save changes waits for a change (minor review, finding 46).
+    [AvaloniaFact]
+    public void AnOpenedResultIsTitledWithItsName()
+    {
+        Save("Baseline", 6.2);
+        var results = Results();
+        results.Open(results.Rows[0]);
+        var opened = results.Opened!;
+        var changes = new List<string?>();
+        opened.PropertyChanged += (_, e) => changes.Add(e.PropertyName);
+
+        Assert.Equal("Baseline", opened.Title);
+        Assert.Matches(@"^3rd pull · \d\.\d\d s, \d+ kW$", opened.Headline);
+        Assert.False(opened.HasChanges);
+
+        opened.Name = "Before";
+        Assert.True(opened.HasChanges);
+        Assert.Contains(nameof(OpenResultViewModel.HasChanges), changes);
+        Assert.Equal("Baseline", opened.Title);
+
+        Assert.True(opened.SaveDetails());
+        Assert.False(opened.HasChanges);
+        Assert.Equal("Before", opened.Title);
+        opened.IsDirectionB = true;
+        Assert.True(opened.HasChanges);
     }
 }
