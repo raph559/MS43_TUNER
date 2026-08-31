@@ -304,4 +304,392 @@ public sealed class PerformanceRunTests : IDisposable
         Assert.InRange(Number(power.Delta!), -1, 1);
         Assert.InRange(Number(Assert.Single(run.Figures, figure => figure.Key == "time").Delta!), -0.01, 0.01);
     }
+
+    [AvaloniaFact]
+    public void AnotherGearBringsItsBandOnceTheRunIsOver()
+    {
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Connect(shell);
+        var run = shell.Performance.Run;
+        run.Arm();
+        PerfFeed.Feed(shell, ThirdGearPull().Take(90));
+        // The gear of a run that is on stays.
+        run.IsGear2 = true;
+        Assert.Equal(3, run.SelectedGear);
+        Assert.False(run.IsGear2);
+        Assert.Equal("2000", run.StartRpm);
+
+        PerfFeed.Feed(shell, ThirdGearPull().Skip(90));
+        Assert.True(run.HasResult);
+        run.IsGear2 = true;
+
+        Assert.Equal(2, run.SelectedGear);
+        Assert.Equal("1500", run.StartRpm);
+        Assert.Equal("6400", run.EndRpm);
+        run.IsGear4 = true;
+        Assert.Equal("4500", run.EndRpm);
+        Assert.False(run.IsGear2);
+    }
+
+    // The owner's car bin: 7104 rpm in 3rd (plan Task 7), so a 3rd gear pull ends at 6954 (spec 6.1) and keeps the tune.
+    [AvaloniaFact]
+    public async Task ThirdGearEndsBelowTheOpenBinsLimit()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (_, shell) = await TuneScreen.OpenAsync(select: null);
+        var run = shell.Performance.Run;
+        Assert.Equal("2000", run.StartRpm);
+        Assert.Equal("6954", run.EndRpm);
+        Assert.Equal("Ends 150 rpm below the open bin's rev limit in 3rd (7104 rpm).", run.BandNote);
+        run.IsGear2 = true;
+        Assert.Equal("6400", run.EndRpm);
+        Assert.Null(run.BandNote);
+
+        shell.Live.SelectedVariant = "ms43x";
+        shell.Tune.Settings.FullPedal = SyntheticRuns.FullPedal;
+        PerfFeed.Connect(shell);
+        run.Arm();
+        PerfFeed.Feed(shell, SyntheticRuns.Pull(PerfFeed.Ms43x, 2, 1200, 6500, 6.0));
+        Assert.True(run.HasResult);
+        Assert.Equal("Tune: CAR_current_43X001_SP95_STAGE1.bin · 43X001 · saved, no edits", run.TuneText);
+    }
+
+    // Closing the window asks about a finished run that is not saved, as it asks about unsaved Tune edits: only Discard, Run
+    // again or arming another test drop one (spec 2; final review, finding 9).
+    [AvaloniaFact]
+    public void CloseWithAnUnsavedRunAsks()
+    {
+        var (window, shell) = PerfFeed.Open(_folder);
+        window.Show();
+        PerfFeed.Connect(shell);
+        var run = shell.Performance.Run;
+        run.Arm();
+        PerfFeed.Feed(shell, ThirdGearPull());
+        Assert.True(run.CanSave);
+        string? asked = null;
+        var answer = SaveChoice.Cancel;
+        run.AskToSaveResult = message =>
+        {
+            asked = message;
+            return Task.FromResult(answer);
+        };
+
+        window.Close();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.True(window.IsVisible);
+        Assert.Equal("Save the result \"3rd pull 12:00\"?", asked);
+        Assert.True(run.CanSave);
+
+        // With another test on the rail the run is still kept, and Save writes it.
+        PerfFeed.Select(shell, "Roll-on");
+        answer = SaveChoice.Save;
+        window.Close();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.False(window.IsVisible);
+        Assert.Single(Directory.GetFiles(Path.Combine(_folder, "results"), "*.json"));
+    }
+
+    [AvaloniaFact]
+    public void DiscardDropsTheRun()
+    {
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Connect(shell);
+        var run = shell.Performance.Run;
+        run.Arm();
+        PerfFeed.Feed(shell, ThirdGearPull());
+
+        run.Discard();
+
+        Assert.Null(run.Stage);
+        Assert.False(run.HasResult);
+        Assert.True(run.CanArm);
+        Assert.False(Directory.Exists(Path.Combine(shell.Tune.Settings.Folder, "results")));
+    }
+
+    [AvaloniaFact]
+    public void CancelStopsAWaitingRun()
+    {
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Connect(shell);
+        var run = shell.Performance.Run;
+        run.Arm();
+        Assert.False(run.CanArm);
+
+        run.Cancel();
+
+        Assert.Null(run.Stage);
+        Assert.True(run.CanArm);
+    }
+
+    [AvaloniaFact]
+    public void RunSurvivesSwitchingTabs()
+    {
+        var (_, shell) = PerfFeed.Open(_folder);
+        shell.SelectedTab = ShellViewModel.PerformanceTab;
+        Assert.True(shell.IsPerformance);
+        Assert.True(shell.Performance.IsVisible);
+        PerfFeed.Connect(shell);
+        var run = shell.Performance.Run;
+        run.Arm();
+        var samples = ThirdGearPull();
+        PerfFeed.Feed(shell, samples.Take(90));
+        Assert.Equal(RunStage.Running, run.Stage);
+
+        shell.SelectedTab = ShellViewModel.LiveTab;
+        Assert.False(shell.Performance.IsVisible);
+        PerfFeed.Feed(shell, samples.Skip(90).Take(30));
+        Assert.Equal(RunStage.Running, run.Stage);
+        shell.SelectedTab = ShellViewModel.PerformanceTab;
+        Assert.Equal(RunStage.Running, run.Stage);
+        PerfFeed.Feed(shell, samples.Skip(120));
+
+        Assert.Equal(RunStage.Finished, run.Stage);
+        Assert.Equal(5.5, Number(Assert.Single(run.Figures, figure => figure.Key == "time").Value), 0.02);
+    }
+
+    [AvaloniaFact]
+    public void DisconnectEndsTheRunAsIncomplete()
+    {
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Connect(shell);
+        var run = shell.Performance.Run;
+        run.Arm();
+        PerfFeed.Feed(shell, ThirdGearPull().Take(120));
+
+        shell.Live.Disconnect();
+
+        Assert.Equal(RunStage.Finished, run.Stage);
+        Assert.True(run.HasResult);
+        Assert.Contains(run.Flags, flag => flag.Code == "link-lost");
+        Assert.Empty(shell.Live.WarmUpBanners);
+    }
+
+    [AvaloniaFact]
+    public void ColdEngineBlocksTheStart()
+    {
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Connect(shell);
+        var run = shell.Performance.Run;
+        run.Arm();
+        PerfFeed.Feed(shell, SyntheticRuns.Pull(PerfFeed.Ms43x, 3, 1700, 6500, 6.0, coolantC: 64));
+
+        Assert.Equal(RunStage.Waiting, run.Stage);
+        Assert.False(Assert.Single(run.Checks, check => check.Label == "Engine warm").Met);
+        // Live's banners show on Performance too (performance spec 5).
+        Assert.Same(shell.Live.WarmUpBanners, run.WarmUp);
+        Assert.Contains(run.WarmUp, banner => banner.IsDanger);
+    }
+
+    [AvaloniaFact]
+    public void KnockCheckIsOffOnStockDefinitions()
+    {
+        var (_, shell) = PerfFeed.Open(_folder, variant: "b25");
+        var knock = shell.Performance.Entries.OfType<PerformanceTestEntry>().Single(entry => entry.Title == "Knock check");
+        Assert.Equal("This definition does not log knock per cylinder.", knock.OffText);
+        Assert.Null(shell.Performance.Entries.OfType<PerformanceTestEntry>().Single(entry => entry.Title == "Full-throttle pull").OffText);
+
+        PerfFeed.Select(shell, "Knock check");
+        var run = shell.Performance.Run;
+        Assert.False(run.CanArm);
+        Assert.Equal("This definition does not log knock per cylinder.", run.ArmTip);
+
+        // Connected on the stock definition: still off, for the same reason.
+        PerfFeed.Connect(shell, BundledDefinitions.Load("b25"));
+        Assert.Equal("This definition does not log knock per cylinder.", run.ArmTip);
+
+        shell.Live.Disconnect();
+        shell.Live.SelectedVariant = "ms43x";
+        Assert.Null(knock.OffText);
+        Assert.Equal("Connect to the car to run a test.", run.ArmTip);
+    }
+
+    // Was DialogTests.StartTestIsDisabledWithoutASpeedChannel: the old window's Start test is now the standing start's Arm.
+    [AvaloniaFact]
+    public void StandingStartIsOffWithoutASpeedChannel()
+    {
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Select(shell, "Standing start");
+        var run = shell.Performance.Run;
+        // The button names the test it arms (minor review, finding 47).
+        Assert.Equal("Arm standing start", run.ArmText);
+
+        PerfFeed.Connect(shell, PerfFeed.WithoutSpeed());
+        Assert.False(run.CanArm);
+        Assert.Equal("This definition does not log vehicle speed.", run.ArmTip);
+        Assert.Equal("This definition does not log vehicle speed.",
+            shell.Performance.Entries.OfType<PerformanceTestEntry>().Single(entry => entry.Title == "Standing start").OffText);
+    }
+
+    // Was DialogTests.VsChannelDrivesThePerformanceTimer: 0 to 100 km/h, now back-extrapolated (performance spec 6.4).
+    [AvaloniaFact]
+    public void StandingStartTimesFromLiveSamples()
+    {
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Select(shell, "Standing start");
+        PerfFeed.Connect(shell);
+        var run = shell.Performance.Run;
+        run.Arm();
+        var samples = SyntheticRuns.Standing(PerfFeed.Ms43x, 7.6);
+        PerfFeed.Feed(shell, samples.Take(45));
+        Assert.Equal(RunStage.Waiting, run.Stage);
+        Assert.True(Assert.Single(run.Checks, check => check.Label == "Stopped").Met);
+
+        PerfFeed.Feed(shell, samples.Skip(45));
+
+        Assert.Equal(RunStage.Finished, run.Stage);
+        var to100 = Assert.Single(run.Figures, figure => figure.Key == "t-0-100");
+        Assert.Equal(7.6, Number(to100.Value), 0.05);
+        Assert.Equal("Standing start 12:00", run.Name);
+    }
+
+    [AvaloniaFact]
+    public void CalibrationIsSavedToSettings()
+    {
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Select(shell, "Speed calibration");
+        PerfFeed.Connect(shell);
+        var run = shell.Performance.Run;
+        Assert.Equal("Start capture", run.ArmText);
+        run.Arm();
+        Assert.Equal(RunStage.Running, run.Stage);
+
+        // Steady 100 km/h in 5th at 3000 rpm, a light pedal.
+        PerfFeed.Feed(shell, PerfFeed.Steady(4, 3000, 5, values: [("VS", 100), ("PVS", 20), ("TCO", 92), ("TOIL", 88)]));
+
+        Assert.Equal(100.0 / 3000, run.Captured[5], 6);
+        var row = Assert.Single(run.CapturedRows);
+        Assert.Equal("5th", row.Gear);
+        Assert.Equal("33.3", row.KmhPer1000);
+        Assert.True(run.CanSaveCalibration);
+
+        run.SaveCalibration();
+
+        Assert.Equal(100.0 / 3000, shell.Tune.Settings.KmhPerRpm[5], 6);
+        Assert.False(shell.Tune.Settings.GpsChecked[5]);
+        Assert.Null(run.Stage);
+        Assert.Equal(100.0 / 3000, AppSettings.Load(_folder).KmhPerRpm[5], 6);
+    }
+
+    [AvaloniaFact]
+    public void GpsSpeedCorrectsTheCalibration()
+    {
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Select(shell, "Speed calibration");
+        PerfFeed.Connect(shell);
+        var run = shell.Performance.Run;
+        run.Arm();
+        PerfFeed.Feed(shell, PerfFeed.Steady(4, 3000, 5, values: [("VS", 100), ("PVS", 20), ("TCO", 92), ("TOIL", 88)]));
+
+        // The speedometer's reading is taken as the GPS speed is typed (performance spec 6.5).
+        run.GpsKmh = "96";
+        Assert.Equal("100", run.GpsVsKmh);
+        run.SaveCalibration();
+
+        Assert.Equal(100.0 / 3000 * 0.96, shell.Tune.Settings.KmhPerRpm[5], 6);
+        Assert.True(shell.Tune.Settings.GpsChecked[5]);
+
+        // The speedometer's own ratio stays beside the corrected one: the slip check compares VS with it (final review, finding 3).
+        Assert.Equal(100.0 / 3000, shell.Tune.Settings.SpeedometerKmhPerRpm[5], 6);
+        Assert.Equal(100.0 / 3000, AppSettings.Load(_folder).SpeedometerKmhPerRpm[5], 6);
+        var inputs = shell.Performance.CurrentInputs();
+        Assert.Equal(100.0 / 3000 * 0.96, inputs.KmhPerRpm[5], 6);
+        Assert.Equal(100.0 / 3000, inputs.SpeedometerKmhPerRpm![5], 6);
+    }
+
+    [AvaloniaFact]
+    public void PedalStepStoresTheFullPedal()
+    {
+        var (_, shell) = PerfFeed.Open(_folder, fullPedal: null);
+        PerfFeed.Select(shell, "Pedal");
+        PerfFeed.Connect(shell);
+        var run = shell.Performance.Run;
+        Assert.Equal("Read pedal", run.ArmText);
+        run.Arm();
+
+        // Ignition on, engine off, the pedal floored and held.
+        PerfFeed.Feed(shell, PerfFeed.Steady(2.5, 0, 0, values: [("PVS", 96), ("TCO", 20), ("TOIL", 20)]));
+
+        Assert.Equal(RunStage.Finished, run.Stage);
+        Assert.Equal(96, shell.Tune.Settings.FullPedal!.Value, 0.25);
+        Assert.Equal(96, AppSettings.Load(_folder).FullPedal!.Value, 0.25);
+        PerfFeed.Select(shell, "Full-throttle pull");
+        Assert.True(run.CanArm);
+    }
+
+    // A calibration saved gear by gear keeps each gear's GPS check, so the line under a test's options says what holds for its
+    // own gear (minor review, findings 9 and 23).
+    [AvaloniaFact]
+    public void GpsCheckIsKeptPerGear()
+    {
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Select(shell, "Speed calibration");
+        PerfFeed.Connect(shell);
+        var run = shell.Performance.Run;
+
+        // 3rd checked against a GPS speed, then 4th saved without one.
+        run.Arm();
+        PerfFeed.Feed(shell, PerfFeed.Steady(4, 3600, 3, values: [("VS", 80), ("PVS", 20), ("TCO", 92), ("TOIL", 88)]));
+        run.GpsKmh = "78";
+        run.SaveCalibration();
+        run.Arm();
+        PerfFeed.Feed(shell, PerfFeed.Steady(4, 3000, 4, from: 10, values: [("VS", 100), ("PVS", 20), ("TCO", 92), ("TOIL", 88)]));
+        run.SaveCalibration();
+
+        Assert.True(shell.Tune.Settings.GpsChecked[3]);
+        Assert.False(shell.Tune.Settings.GpsChecked[4]);
+        PerfFeed.Select(shell, "Full-throttle pull");
+        Assert.StartsWith("Speed calibration: 3rd ", run.InputsText);
+        Assert.DoesNotContain("GPS", run.InputsText);
+        run.IsGear4 = true;
+        Assert.Contains("km/h per 1000 rpm, speed not GPS-checked.", run.InputsText);
+        // A result keeps which gears were checked.
+        Assert.Equal([3], shell.Performance.CurrentInputs().GpsCheckedGears);
+    }
+
+    // One glitch above the calibrated full pedal never raises it; a reading held for 0.5 s does, to its lowest during the hold
+    // (minor review, findings 17 and 24).
+    [AvaloniaFact]
+    public void AHigherPedalCountsOnlyOnceItHolds()
+    {
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Connect(shell);
+        var settings = shell.Tune.Settings;
+        var run = shell.Performance.Run;
+        var raised = new List<string?>();
+        run.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        PerfFeed.Feed(shell, PerfFeed.Steady(0.1, 800, 0, values: [("PVS", 110), ("TCO", 92), ("TOIL", 88)]));
+        PerfFeed.Feed(shell, PerfFeed.Steady(1, 800, 0, from: 0.2, values: [("PVS", 40), ("TCO", 92), ("TOIL", 88)]));
+        Assert.Equal(SyntheticRuns.FullPedal, settings.FullPedal);
+
+        PerfFeed.Feed(shell, PerfFeed.Steady(0.6, 800, 0, from: 2, values: [("PVS", 104), ("TCO", 92), ("TOIL", 88)]));
+        Assert.Equal(104, settings.FullPedal!.Value, 0.5);
+        Assert.Equal(104, AppSettings.Load(_folder).FullPedal!.Value, 0.5);
+        Assert.Contains(nameof(PerformanceRunViewModel.PedalText), raised);
+        Assert.StartsWith("Full pedal reads 104.", run.PedalText);
+    }
+
+    // A notice belongs to the test that raised it (minor review, finding 28).
+    [AvaloniaFact]
+    public void NoticeStaysWithItsTest()
+    {
+        var (_, shell) = PerfFeed.Open(_folder, fullPedal: null);
+        PerfFeed.Select(shell, "Pedal");
+        PerfFeed.Connect(shell);
+        var run = shell.Performance.Run;
+        run.Arm();
+        PerfFeed.Feed(shell, PerfFeed.Steady(2.5, 0, 0, values: [("PVS", 96), ("TCO", 20), ("TOIL", 20)]));
+        Assert.StartsWith("Pedal calibrated: ", run.Notice);
+
+        PerfFeed.Select(shell, "Full-throttle pull");
+        Assert.Null(run.Notice);
+        PerfFeed.Select(shell, "Pedal");
+        Assert.StartsWith("Pedal calibrated: ", run.Notice);
+    }
 }
