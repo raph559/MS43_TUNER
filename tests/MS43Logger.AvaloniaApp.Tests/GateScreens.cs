@@ -71,6 +71,48 @@ internal static class GateScreens
             shell.Live.ReportConnectFailure(new UnauthorizedAccessException("Access to the port 'COM1' is denied."));
             shell.Live.ShowConnectionLog();
         }));
+
+        // The Performance tab: a pull ready to arm, running with cylinder 4 knocking, its result,
+        // the saved results, two of them compared, and a pull waiting on a cold engine (the red and amber banners).
+        yield return new GateState("performance", "run", () => Performance(shell => Warm(shell)));
+        yield return new GateState("performance", "running", () => Performance(shell =>
+        {
+            Warm(shell);
+            shell.Performance.Run.Arm();
+            var pull = Pull();
+            for (var i = 0; i < pull.Count && shell.Performance.Run.KnockWarning is null; i++)
+            {
+                shell.Live.ShowSample(pull[i]);
+            }
+        }));
+        yield return new GateState("performance", "result", () => Performance(shell =>
+        {
+            Warm(shell);
+            shell.Performance.Run.Arm();
+            PerfFeed.Feed(shell, Pull());
+        }));
+        yield return new GateState("performance", "results", () => Performance(shell =>
+        {
+            shell.Performance.IsResultsMode = true;
+            shell.Performance.Results.ShowCold = true;
+        }));
+        yield return new GateState("performance", "compare", () => Performance(shell =>
+        {
+            var results = shell.Performance.Results;
+            shell.Performance.IsResultsMode = true;
+            foreach (var row in results.Rows.Where(row => !row.IsCold))
+            {
+                row.IsPicked = true;
+            }
+
+            results.Compare();
+        }));
+        yield return new GateState("performance", "cold", () => Performance(shell =>
+        {
+            Connect(shell);
+            shell.Performance.Run.Arm();
+            PerfFeed.Feed(shell, SyntheticRuns.Idle(PerfFeed.Ms43x, 1, coolantC: 64, oilC: 60));
+        }));
     }
 
     /// <summary>
@@ -119,12 +161,13 @@ internal static class GateScreens
         return Sized(new GateWindow(window, shell, time));
     }
 
-    private static Task<GateWindow?> Shell(Action<ShellViewModel> arrange, bool settings = false) => Shell((shell, _) => arrange(shell), settings);
+    private static Task<GateWindow?> Shell(Action<ShellViewModel> arrange, bool settings = false, AppSettings? saved = null) =>
+        Shell((shell, _) => arrange(shell), settings, saved);
 
-    private static Task<GateWindow?> Shell(Action<ShellViewModel, ManualTime> arrange, bool settings = false)
+    private static Task<GateWindow?> Shell(Action<ShellViewModel, ManualTime> arrange, bool settings = false, AppSettings? saved = null)
     {
         var time = new ManualTime();
-        var (window, shell) = TestShell.Create(AppSettings.Load(TestShell.NewFolder()), new MainWindowViewModel(time, () => ["COM1"]));
+        var (window, shell) = TestShell.Create(saved ?? AppSettings.Load(TestShell.NewFolder()), new MainWindowViewModel(time, () => ["COM1"]));
         shell.Live.SelectedVariant = "ms43x";
         window.Show();
         var opened = Sized(new GateWindow(window, shell, time));
@@ -154,6 +197,37 @@ internal static class GateScreens
         Find.Named<ToggleButton>(window.GetVisualDescendants().OfType<SettingsView>().Single(), "Trend30").IsChecked = true;
         Dispatcher.UIThread.RunJobs();
         return Task.FromResult<GateWindow?>(opened);
+    }
+
+    // The Performance tab with the pedal calibrated and three saved 3rd gear pulls, the earliest made cold.
+    private static Task<GateWindow?> Performance(Action<ShellViewModel> arrange)
+    {
+        var folder = TestShell.NewFolder();
+        PerfFeed.SaveResult(folder, "Morning", 6.4, minute: 0, cold: true);
+        PerfFeed.SaveResult(folder, "Baseline", 6.2, minute: 1);
+        PerfFeed.SaveResult(folder, "Ignition +1.5", 6.0, minute: 2);
+        var settings = AppSettings.Load(folder);
+        settings.FullPedal = SyntheticRuns.FullPedal;
+        return Shell(shell =>
+        {
+            shell.SelectedTab = ShellViewModel.PerformanceTab;
+            Dispatcher.UIThread.RunJobs();
+            arrange(shell);
+        }, saved: settings);
+    }
+
+    // Connected to the ms43x definition, the header showing the logger's rate (over 15 samples/s).
+    private static void Connect(ShellViewModel shell)
+    {
+        PerfFeed.Connect(shell);
+        shell.Live.ShowRate(new RateStats(30.2, 33.1, 31, 36, 100));
+    }
+
+    // Connected with a warm engine idling, so no banner shows and the ready check can pass.
+    private static void Warm(ShellViewModel shell)
+    {
+        Connect(shell);
+        PerfFeed.Feed(shell, SyntheticRuns.Idle(PerfFeed.Ms43x, 1));
     }
 
     // A 3rd gear pull from 1700 to 6500 rpm in 6 s, cylinder 4 retarding 1.6 degrees from 5000 to 5600 rpm.
