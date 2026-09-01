@@ -675,6 +675,81 @@ public sealed class PerformanceRunTests : IDisposable
         Assert.StartsWith("Full pedal reads 104.", run.PedalText);
     }
 
+    // Each sample is decoded once, a hidden tab's run view raises nothing per sample, and the ready checks change in place
+    // (minor review, finding 21).
+    [AvaloniaFact]
+    public void PerSampleWorkStaysSmall()
+    {
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Connect(shell);
+        var run = shell.Performance.Run;
+        run.Arm();
+        var samples = ThirdGearPull();
+        PerfFeed.Feed(shell, samples.Take(5));
+        Assert.Same(shell.Live.LastFrame, run.LastFrame);
+
+        var raised = new List<string?>();
+        run.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        PerfFeed.Feed(shell, samples.Skip(5).Take(10));
+        Assert.Equal(RunStage.Waiting, run.Stage);
+        Assert.Empty(raised);
+
+        // Shown again, the run view catches up at once.
+        shell.SelectedTab = ShellViewModel.PerformanceTab;
+        Assert.Contains(nameof(PerformanceRunViewModel.Status), raised);
+
+        var checks = run.Checks;
+        var first = checks[0];
+        var changes = 0;
+        ((System.Collections.Specialized.INotifyCollectionChanged)checks).CollectionChanged += (_, _) => changes++;
+        raised.Clear();
+        PerfFeed.Feed(shell, samples.Skip(15).Take(5));
+        Assert.Equal(RunStage.Waiting, run.Stage);
+        Assert.Same(checks, run.Checks);
+        Assert.Same(first, run.Checks[0]);
+        Assert.Equal(0, changes);
+        Assert.DoesNotContain(nameof(PerformanceRunViewModel.Checks), raised);
+        // Arm's state changes with the stage, not with every sample.
+        Assert.DoesNotContain(nameof(PerformanceRunViewModel.ArmIsPrimary), raised);
+    }
+
+    // Opening a bin again keeps a band typed but not armed, and a finished run's band (minor review, finding 27).
+    [AvaloniaFact]
+    public async Task OpeningABinKeepsATypedBand()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (_, shell) = await TuneScreen.OpenAsync(select: null);
+        var run = shell.Performance.Run;
+        Assert.Equal("6954", run.EndRpm);
+
+        run.StartRpm = "2500";
+        await shell.Tune.OpenAsync(TuneScreen.Car!, TuneScreen.Xdf);
+        Assert.Equal(("2500", "6954"), (run.StartRpm, run.EndRpm));
+        Assert.NotNull(run.BandNote);
+
+        // An end typed over the bin's is the owner's: it stays and no longer reads as the bin's limit.
+        run.EndRpm = "6400";
+        await shell.Tune.OpenAsync(TuneScreen.Car!, TuneScreen.Xdf);
+        Assert.Equal(("2500", "6400"), (run.StartRpm, run.EndRpm));
+        Assert.Null(run.BandNote);
+
+        shell.Live.SelectedVariant = "ms43x";
+        shell.Tune.Settings.FullPedal = SyntheticRuns.FullPedal;
+        PerfFeed.Connect(shell);
+        run.StartRpm = "2000";
+        run.Arm();
+        PerfFeed.Feed(shell, ThirdGearPull());
+        Assert.True(run.HasResult);
+        // Without the remembered band a reload would bring the bin's.
+        shell.Tune.Settings.PerformanceBands.Remove("pull-3");
+        await shell.Tune.OpenAsync(TuneScreen.Car!, TuneScreen.Xdf);
+        Assert.Equal(("2000", "6400"), (run.StartRpm, run.EndRpm));
+    }
+
     // A notice belongs to the test that raised it (minor review, finding 28).
     [AvaloniaFact]
     public void NoticeStaysWithItsTest()
@@ -691,5 +766,260 @@ public sealed class PerformanceRunTests : IDisposable
         Assert.Null(run.Notice);
         PerfFeed.Select(shell, "Pedal");
         Assert.StartsWith("Pedal calibrated: ", run.Notice);
+    }
+
+    // Arm on another test names the one that is on and leads to it (minor review, finding 29).
+    [AvaloniaFact]
+    public void TheTipNamesTheRunningTestAndLeadsToIt()
+    {
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Connect(shell);
+        var run = shell.Performance.Run;
+        run.Arm();
+
+        PerfFeed.Select(shell, "Roll-on");
+        Assert.Equal("Full-throttle pull is armed: cancel it first.", run.ArmTip);
+        Assert.True(run.ShowsRunningTest);
+        PerfFeed.Feed(shell, ThirdGearPull().Take(90));
+        Assert.Equal("Full-throttle pull is running: cancel it first.", run.ArmTip);
+
+        run.ShowRunningTest();
+        Assert.Equal("Full-throttle pull", shell.Performance.SelectedEntry.Title);
+        Assert.Equal(RunStage.Running, run.Stage);
+        Assert.False(run.ShowsRunningTest);
+    }
+
+    // The link failing as it does on the car (the logger stops on a timeout) keeps what a cold-oil pull measured, saves it and
+    // clears the banners (minor review, finding 53).
+    [AvaloniaFact]
+    public void ALinkFailureKeepsWhatThePullMeasured()
+    {
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Connect(shell);
+        var run = shell.Performance.Run;
+        run.Arm();
+        PerfFeed.Feed(shell, SyntheticRuns.Pull(PerfFeed.Ms43x, 3, 1700, 6500, 6.0, oilC: 60).Take(120));
+        Assert.Contains(shell.Live.WarmUpBanners, banner => banner.IsCaution);
+
+        shell.Live.ReportLoggingStopped(new TimeoutException("The ECU did not answer."));
+
+        Assert.False(shell.Live.IsConnected);
+        Assert.True(run.HasResult);
+        Assert.Contains(run.Flags, flag => flag.Code == "link-lost");
+        Assert.NotEqual("n/a", Assert.Single(run.Figures, figure => figure.Key == "t-2000-4000").Value);
+        Assert.Empty(shell.Live.WarmUpBanners);
+        run.Save();
+        Assert.Null(run.SaveError);
+        Assert.Single(Directory.GetFiles(Path.Combine(_folder, "results"), "*.json"));
+    }
+
+    // A result records the definition that decoded its samples, not the picker's choice (minor review, findings 58, 65, 70).
+    [AvaloniaFact]
+    public void AResultRecordsTheDefinitionThatDecodedIt()
+    {
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Connect(shell);
+        shell.Live.SelectedVariant = "b25";
+        var run = shell.Performance.Run;
+        run.Arm();
+        PerfFeed.Feed(shell, ThirdGearPull());
+
+        run.Save();
+
+        Assert.Null(run.SaveError);
+        var file = Assert.Single(Directory.GetFiles(Path.Combine(_folder, "results"), "*.json"));
+        var stored = new PerfResultStore(Path.GetDirectoryName(file)!).Load(Path.GetFileName(file))!;
+        Assert.Equal("ms43x", stored.Variant);
+        Assert.Equal(BundledDefinitions.Sha256("ms43x"), stored.DefinitionSha256);
+        Assert.InRange(PerfCompare.Frames(stored).Max(frame => frame.Rpm ?? 0), 6400, 6600);
+    }
+
+    // After Save result, a new name, description or direction is written into the same file by Save changes (minor review,
+    // findings 61 and 64).
+    [AvaloniaFact]
+    public void EditsAfterSaveAreWrittenToTheFile()
+    {
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Connect(shell);
+        var run = shell.Performance.Run;
+        run.Arm();
+        PerfFeed.Feed(shell, ThirdGearPull());
+        run.Name = "Baseline";
+        run.Save();
+        Assert.False(run.CanSave);
+        Assert.True(run.ShowsSaved);
+
+        run.Name = "Baseline, dry";
+        run.Description = "SP95";
+        run.IsDirectionB = true;
+
+        Assert.True(run.CanSave);
+        Assert.False(run.ShowsSaved);
+        Assert.Equal("Save changes", run.SaveText);
+        Assert.True(run.HasUnsavedResult);
+        run.Save();
+
+        Assert.False(run.CanSave);
+        Assert.False(run.HasUnsavedResult);
+        var file = Assert.Single(Directory.GetFiles(Path.Combine(_folder, "results"), "*.json"));
+        var stored = new PerfResultStore(Path.GetDirectoryName(file)!).Load(Path.GetFileName(file))!;
+        Assert.Equal(("Baseline, dry", "SP95", "B"), (stored.Name, stored.Description, stored.Direction));
+        Assert.Equal("Baseline, dry", Assert.Single(shell.Performance.Results.Rows).Name);
+    }
+
+    // The picker and the dashed trace stay on the baseline the run's deltas were taken against, until Discard or Run again
+    // (minor review, finding 62).
+    [AvaloniaFact]
+    public void TheBaselineStaysWithTheRun()
+    {
+        PerfFeed.SaveResult(_folder, "Baseline", 6.2, minute: 0);
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Connect(shell);
+        var run = shell.Performance.Run;
+        Assert.Equal("Baseline", run.SelectedBaseline!.Text);
+        run.Arm();
+        PerfFeed.Feed(shell, ThirdGearPull());
+
+        // Saved, the run is now the newest pull of its preset.
+        run.Save();
+        Assert.Equal("Baseline", run.SelectedBaseline!.Text);
+        Assert.Equal("Baseline: Baseline", run.BaselineLabel);
+        PerfFeed.Select(shell, "Roll-on");
+        PerfFeed.Select(shell, "Full-throttle pull");
+        Assert.Equal("Baseline", run.SelectedBaseline!.Text);
+        Assert.False(run.CanChangeBaseline);
+        run.SelectedBaseline = new BaselineChoice("None", null);
+        Assert.Equal("Baseline", run.SelectedBaseline!.Text);
+        Assert.EndsWith(" s against Baseline", Assert.Single(run.Figures, figure => figure.Key == "time").DeltaText);
+
+        // Discard frees the picker: the newest saved pull is the default again.
+        run.Discard();
+        Assert.True(run.CanChangeBaseline);
+        Assert.Equal("3rd pull 12:00", run.SelectedBaseline!.Text);
+    }
+
+    // A run goes on while another test is chosen, and a finished one waits there unsaved (minor review, finding 76).
+    [AvaloniaFact]
+    public void ARunSurvivesChoosingAnotherTest()
+    {
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Connect(shell);
+        var run = shell.Performance.Run;
+        run.Arm();
+        var samples = ThirdGearPull();
+        PerfFeed.Feed(shell, samples.Take(90));
+
+        PerfFeed.Select(shell, "Car");
+        Assert.Null(run.Stage);
+        PerfFeed.Feed(shell, samples.Skip(90));
+        PerfFeed.Select(shell, "Full-throttle pull");
+
+        Assert.True(run.HasResult);
+        Assert.Equal(5.5, Number(Assert.Single(run.Figures, figure => figure.Key == "time").Value), 0.02);
+        PerfFeed.Select(shell, "Standing start");
+        Assert.False(run.HasResult);
+        Assert.True(run.HasUnsavedResult);
+        PerfFeed.Select(shell, "Full-throttle pull");
+        Assert.True(run.CanSave);
+        Assert.Equal("3rd pull 12:00", run.Name);
+    }
+
+    [AvaloniaFact]
+    public void CarValuesAreSavedToSettings()
+    {
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Select(shell, "Car");
+        var run = shell.Performance.Run;
+        Assert.False(run.HasArm);
+        Assert.Equal("1480", run.MassKg);
+        Assert.Equal("205/55 R16", run.TyreSize);
+        Assert.True(run.IsManual);
+
+        run.MassKg = "1520";
+        run.TyreSize = "225/45 R17";
+        run.IsAutomatic = true;
+        run.MassKg = "12";
+        run.TyreSize = "junk";
+
+        Assert.NotNull(run.MassError);
+        Assert.NotNull(run.TyreError);
+        var saved = AppSettings.Load(_folder);
+        Assert.Equal(1520, saved.TestMassKg);
+        Assert.Equal("225/45 R17", saved.TyreSize);
+        Assert.True(saved.Automatic);
+    }
+
+    // The checks list only what can be met together, and the note says when to floor it (minor review, finding 38).
+    [AvaloniaFact]
+    public void TheNoteSaysWhenToFloorIt()
+    {
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Connect(shell);
+        var run = shell.Performance.Run;
+
+        run.Arm();
+        PerfFeed.Feed(shell, ThirdGearPull().Take(10));
+
+        Assert.Equal("Once every check is met, floor it: the run starts by itself.", run.ChecksNote);
+        Assert.DoesNotContain(run.Checks, check => check.Label == "Full throttle");
+    }
+
+    // Samples that stop mid-run are said in words as well as by the marks turning Ink3 (minor review, finding 42).
+    [AvaloniaFact]
+    public void SilentSamplesMidRunAreSaidInWords()
+    {
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Connect(shell);
+        var run = shell.Performance.Run;
+        var pull = ThirdGearPull();
+        run.Arm();
+        PerfFeed.Feed(shell, pull.Take(150));
+        Assert.Equal(RunStage.Running, run.Stage);
+        Assert.True(run.IsLive);
+
+        ((UtcTime)shell.Live.Time).Advance(TimeSpan.FromSeconds(2.4));
+        run.CheckSamples();
+
+        Assert.False(run.IsLive);
+        Assert.Equal("No samples for 2 s.", run.Status);
+
+        PerfFeed.Feed(shell, pull.Skip(150).Take(1));
+        Assert.True(run.IsLive);
+        Assert.NotEqual("No samples for 2 s.", run.Status);
+    }
+
+    // The live chart's axes hold for the run: rpm over the band, seconds in whole 5 s steps or the baseline's length, so the
+    // chart never rescales with each sample (minor review, finding 49).
+    [AvaloniaFact]
+    public void TheLiveChartKeepsItsAxesForTheRun()
+    {
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Connect(shell);
+        var run = shell.Performance.Run;
+
+        IReadOnlyList<(double?, double?, double?)> Axes()
+        {
+            var seen = new List<(double?, double?, double?)>();
+            foreach (var sample in ThirdGearPull())
+            {
+                shell.Live.ShowSample(sample);
+                if (run.Stage == RunStage.Running && !seen.Contains((run.LiveXMaximum, run.LiveYMinimum, run.LiveYMaximum)))
+                {
+                    seen.Add((run.LiveXMaximum, run.LiveYMinimum, run.LiveYMaximum));
+                }
+            }
+
+            return seen;
+        }
+
+        run.Arm();
+        Assert.Equal([(5.0, 2000.0, 6400.0), (10.0, 2000.0, 6400.0)], Axes());
+
+        // Against a baseline, time runs to the baseline's length.
+        Assert.True(run.HasResult);
+        run.Save();
+        run.RunAgain();
+        var length = run.BaselineTrace!.Max(point => point.X);
+        Assert.Equal([(length, 2000.0, 6400.0)], Axes());
     }
 }
