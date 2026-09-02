@@ -756,4 +756,97 @@ public sealed class PerformanceViewTests : IDisposable
         Assert.All(headings, item => Assert.False(item.Focusable || item.IsHitTestVisible));
         Assert.All(items.Where(item => item.DataContext is PerformanceTestEntry), item => Assert.True(item.Focusable && item.IsHitTestVisible));
     }
+
+    // The knock line keeps its room while a run is on, so the chart under it never jumps as a cylinder starts or stops
+    // knocking (minor review, finding 41); in a short window that room costs no height, so the chart stays in view at
+    // 1024 x 680 (ruling: the bars beside the reading there).
+    [AvaloniaTheory]
+    [InlineData(1440, 900)]
+    [InlineData(1024, 680)]
+    public void TheKnockLineKeepsItsRoom(double width, double height)
+    {
+        var (window, shell) = Show(width, height);
+        PerfFeed.Connect(shell);
+        var run = shell.Performance.Run;
+        run.Arm();
+        var chart = Find.Named<RunChart>(window, "LiveRunChart");
+        var scroller = Find.Named<ScrollViewer>(window, "RunScroller");
+        var tops = new HashSet<double>();
+        var (knocking, quiet) = (false, false);
+        var pull = ThirdGearPull(knock: 1.6);
+        for (var i = 0; i < pull.Count; i++)
+        {
+            shell.Live.ShowSample(pull[i]);
+            if (run.Stage != RunStage.Running || i % 5 != 0)
+            {
+                continue;
+            }
+
+            Dispatcher.UIThread.RunJobs();
+            tops.Add(chart.TranslatePoint(default, window)!.Value.Y);
+            Assert.True(chart.TranslatePoint(new Point(0, chart.Bounds.Height), scroller)!.Value.Y <= scroller.Viewport.Height, "the live chart runs below the fold");
+            knocking |= run.KnockWarning is not null;
+            quiet |= run.KnockWarning is null;
+        }
+
+        Assert.True(knocking && quiet);
+        Assert.Single(tops);
+    }
+
+    // At 1024 x 680 under two warm-up banners the flags sit below the fold under the figures: a line beside Save result
+    // names them (minor review, finding 43).
+    [AvaloniaFact]
+    public void FlagsBelowTheFoldAreNamedBesideSave()
+    {
+        var (window, shell) = Show(1024, 680);
+        PerfFeed.Connect(shell);
+        shell.Performance.Run.Arm();
+        PerfFeed.Feed(shell, SyntheticRuns.Pull(PerfFeed.Ms43x, 3, 1700, 6500, 6.0, coolantC: 117, oilC: 70, knockCyl4: 1.6));
+        Dispatcher.UIThread.RunJobs();
+
+        var summary = Find.Named<NumberText>(window, "FlagSummaryText");
+        Assert.True(summary.IsEffectivelyVisible);
+        Assert.Equal("Flags below: knock, oil cold", summary.Value);
+
+        var scroller = Find.Named<ScrollViewer>(window, "RunScroller");
+        scroller.Offset = new Vector(0, scroller.Extent.Height);
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(summary.IsEffectivelyVisible);
+
+        // In view at 1440 x 900, so not said twice.
+        window.Width = 1440;
+        window.Height = 900;
+        scroller.Offset = default;
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(summary.IsEffectivelyVisible);
+    }
+
+    // An empty Results side leads to Run, and the rail marks no test while Results show (minor review, finding 44).
+    [AvaloniaFact]
+    public void EmptyResultsLeadToRunAndTheRailMarksNoTest()
+    {
+        var (window, shell) = Show(1024, 680);
+        var row = window.GetVisualDescendants().OfType<Border>().Single(border => border.Classes.Contains("prow") && border.DataContext == shell.Performance.SelectedEntry);
+        var bar = row.GetVisualDescendants().OfType<Border>().Single(border => border.Classes.Contains("pbar"));
+        Assert.NotNull(row.Background);
+        Assert.True(bar.IsVisible);
+
+        shell.Performance.IsResultsMode = true;
+        Dispatcher.UIThread.RunJobs();
+        Assert.Null(row.Background);
+        Assert.False(bar.IsVisible);
+
+        Press(window, "GoToRunButton");
+        Assert.True(shell.Performance.IsRunMode);
+        Assert.NotNull(row.Background);
+
+        // Pressed on the Results side, the test last shown opens its Run side again.
+        shell.Performance.IsResultsMode = true;
+        Dispatcher.UIThread.RunJobs();
+        var at = row.TranslatePoint(new Point(row.Bounds.Width / 2, row.Bounds.Height / 2), window)!.Value;
+        window.MouseDown(at, MouseButton.Left);
+        window.MouseUp(at, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(shell.Performance.IsRunMode);
+    }
 }
