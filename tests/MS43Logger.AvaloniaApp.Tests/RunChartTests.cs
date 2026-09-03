@@ -266,4 +266,40 @@ public sealed class RunChartTests
         Assert.True(Near(Color.Parse("#1F2328"), frame[bars.BarRect(1).Center.X, bottom], 8), $"cylinder 2 is filled: {frame[bars.BarRect(1).Center.X, bottom]}");
         Assert.True(Near(Ink2, frame[bars.BarRect(0).Center.X, bottom], 8), $"cylinder 1 is not filled: {frame[bars.BarRect(0).Center.X, bottom]}");
     }
+
+    // A fixed range holds the axes while the trace grows: the live chart never rescales with each sample.
+    [AvaloniaFact]
+    public void FixedRangesHoldTheAxes()
+    {
+        var chart = Show(new RunChart { TraceA = Line(0, 2000, 1, 2800), XMinimum = 0, XMaximum = 5, YMinimum = 2000, YMaximum = 6400, IsRunning = true }, 400, 240);
+        var (x, y) = (chart.XTickLabels, chart.YTickLabels);
+
+        chart.TraceA = Line(0, 2000, 3, 4400);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(["0", "1", "2", "3", "4", "5"], x);
+        Assert.Equal("2000", y[0]);
+        Assert.Equal(x, chart.XTickLabels);
+        Assert.Equal(y, chart.YTickLabels);
+    }
+
+    // Long run names are trimmed in the middle to the plot's width, so the legend never runs past the chart; short ones stay
+    // whole.
+    [AvaloniaFact]
+    public void TheLegendIsTrimmedToThePlot()
+    {
+        const string LongA = "A: Ignition +1.5 with the SP98 tank and the new intake, 3rd gear on the long straight";
+        const string LongB = "B: Ignition +1.5 with the SP95 tank and the stock intake, 3rd gear on the long straight";
+        var chart = Show(new RunChart { TraceA = Line(2000, 50, 7000, 150), TraceB = Line(2000, 20, 7000, 100), LabelA = LongA, LabelB = LongB }, 400, 240);
+
+        Assert.True(chart.LegendRect.Right <= chart.PlotRect.Right, $"legend ends at {chart.LegendRect.Right}, plot at {chart.PlotRect.Right}");
+        Assert.All(chart.LegendLabels, label => Assert.Contains("…", label));
+        Assert.StartsWith("A: Ign", chart.LegendLabels[0]);
+        Assert.EndsWith("straight", chart.LegendLabels[1]);
+
+        chart.LabelA = "A: Baseline";
+        chart.LabelB = "B: Ignition +1.5";
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(["A: Baseline", "B: Ignition +1.5"], chart.LegendLabels);
+    }
 }

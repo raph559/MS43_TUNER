@@ -39,7 +39,7 @@ public class StyleTests
         Assert.Equal(Color.Parse("#0A0B0D"), Solid(button.Foreground));
     }
 
-    // The owner found the Edge outline on every button too bright at Night: a secondary button is a filled surface with
+    // The Edge outline on every button was too bright at Night: a secondary button is a filled surface with
     // a dim edge; its label names it.
     [AvaloniaTheory]
     [InlineData("Dark", "#1F2328", "#30363D")]
@@ -81,7 +81,7 @@ public class StyleTests
         return scroller.GetVisualDescendants().OfType<ScrollBar>().First(bar => bar.Orientation == Orientation.Horizontal);
     }
 
-    // The owner found Fluent's bar heavy: 16 px, arrow buttons, a square grey thumb over the grid's last row.
+    // Fluent's scroll bar was heavy: 16 px, arrow buttons, a square grey thumb over the grid's last row.
     [AvaloniaFact]
     public void ScrollBarIsSlimWithoutArrows()
     {
@@ -288,6 +288,32 @@ public class StyleTests
         System.Runtime.InteropServices.Marshal.Copy(buffer.Address, bytes, 0, bytes.Length);
         window.Close();
         return bytes;
+    }
+
+    // The amber banner's stripe and icon are non-text cues: 3:1 on both surfaces a banner sits on.
+    [AvaloniaTheory]
+    [InlineData("Dark")]
+    [InlineData("Light")]
+    public void CautionReadsOnFillAndPane(string theme)
+    {
+        var variant = theme == "Dark" ? ThemeVariant.Dark : ThemeVariant.Light;
+        Color Token(string key) => Assert.IsType<Color>(Application.Current!.TryGetResource(key, variant, out var value) ? value : null);
+
+        var caution = Token("CautionColor");
+        foreach (var surface in new[] { "FillColor", "PaneColor" })
+        {
+            var ratio = SettingsTests.Contrast(caution, Token(surface));
+            Assert.True(ratio >= 3, $"Caution {caution} is {ratio:0.00}:1 on {surface} ({theme})");
+        }
+    }
+
+    [AvaloniaFact]
+    public void CautionBannerHasACautionStripe()
+    {
+        var banner = Show(new Border { Classes = { "banner", "caution" }, Child = new TextBlock { Text = "Oil 71 °C: not at working temperature yet (80 °C)." } });
+
+        Assert.Equal(Color.Parse("#E8A33D"), Solid(banner.BorderBrush));
+        Assert.Equal(new Thickness(3, 0, 0, 0), banner.BorderThickness);
     }
 
     [AvaloniaFact]
