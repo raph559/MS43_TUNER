@@ -501,7 +501,9 @@ public sealed class PerformanceViewTests : IDisposable
         Dispatcher.UIThread.RunJobs();
         Assert.False(Shown(window, "ArmButton"));
         Assert.Equal("1480", Find.Named<TextBox>(window, "MassBox").Text);
-        Assert.Equal("205/55 R16", Find.Named<TextBox>(window, "TyreBox").Text);
+        Assert.Equal(205, Find.Named<ComboBox>(window, "TyreWidthPicker").SelectedItem);
+        Assert.Equal(55, Find.Named<ComboBox>(window, "TyreAspectPicker").SelectedItem);
+        Assert.Equal(16, Find.Named<ComboBox>(window, "TyreRimPicker").SelectedItem);
         Assert.True(Find.Named<ToggleButton>(window, "GearboxManual").IsChecked);
         Find.Named<ToggleButton>(window, "GearboxAutomatic").IsChecked = true;
         Assert.True(shell.Tune.Settings.Automatic);

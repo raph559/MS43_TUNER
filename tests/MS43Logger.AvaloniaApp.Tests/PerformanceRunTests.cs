@@ -84,7 +84,7 @@ internal static class PerfFeed
 
     /// <summary>
     /// <paramref name="seconds"/> of ms43x samples at <paramref name="rate"/> holding these physical values, with N carrying
-    /// <paramref name="rpm"/> and <paramref name="gear"/> (performance spec 4.1); times from <paramref name="from"/> seconds.
+    /// <paramref name="rpm"/> and <paramref name="gear"/>; times from <paramref name="from"/> seconds.
     /// </summary>
     public static IReadOnlyList<LiveSample> Steady(double seconds, double rpm, int gear, double from = 0, double rate = 30,
         params (string Id, double Value)[] values)
@@ -122,7 +122,7 @@ internal static class PerfFeed
     }
 }
 
-/// <summary>The Performance tab's Run side (performance spec 6, 9.1), fed by Live's samples.</summary>
+/// <summary>The Performance tab's Run side, fed by Live's samples.</summary>
 public sealed class PerformanceRunTests : IDisposable
 {
     private readonly string _folder = TestShell.NewFolder();
@@ -228,7 +228,7 @@ public sealed class PerformanceRunTests : IDisposable
         Assert.Equal("3rd pull 12:00", run.Name);
         Assert.Equal("", run.Description);
         Assert.Null(run.Direction);
-        // One name and one unit per thing, as the analysis names them (minor review, finding 36).
+        // One name and one unit per thing, as the analysis names them.
         Assert.StartsWith("Conditions: intake air 25 °C · coolant 92 °C · oil 88 °C · pressure ", run.ConditionsText);
         Assert.Contains(" kPa · battery ", run.ConditionsText);
         Assert.Contains(" V · RON adaptation ", run.ConditionsText);
@@ -238,7 +238,7 @@ public sealed class PerformanceRunTests : IDisposable
         Assert.True(run.LiveTrace[^1].Y >= 6400);
         Assert.True(run.Version > 0);
 
-        // The band is remembered for the next run of this preset (performance spec 9.2).
+        // The band is remembered for the next run of this preset.
         Assert.Equal([2000.0, 6400.0], shell.Tune.Settings.PerformanceBands["pull-3"]);
     }
 
@@ -271,7 +271,7 @@ public sealed class PerformanceRunTests : IDisposable
         Assert.Equal("A", stored.Direction);
         Assert.Null(stored.Tune);
         Assert.Equal("ms43x", stored.Variant);
-        // Made when the run's last sample arrived (plan Task 7 ruling), the end crossing, before the pull's last sample.
+        // Made when the run's last sample arrived, the end crossing, before the pull's last sample.
         Assert.Contains(samples, sample => sample.Time == stored.Created);
         Assert.True(stored.Created < samples[^1].Time);
 
@@ -284,7 +284,7 @@ public sealed class PerformanceRunTests : IDisposable
     }
 
     // The baseline is recomputed from its samples with the run's car values, so a test mass changed since it was saved never
-    // shows up as a gain against it (spec 9.2; final review, findings 6 and 8).
+    // shows up as a gain against it.
     [AvaloniaFact]
     public void BaselineDeltasUseTheRunsCarValues()
     {
@@ -331,7 +331,7 @@ public sealed class PerformanceRunTests : IDisposable
         Assert.False(run.IsGear2);
     }
 
-    // The owner's car bin: 7104 rpm in 3rd (plan Task 7), so a 3rd gear pull ends at 6954 (spec 6.1) and keeps the tune.
+    // The user's car bin: 7104 rpm in 3rd, so a 3rd gear pull ends at 6954 and keeps the tune.
     [AvaloniaFact]
     public async Task ThirdGearEndsBelowTheOpenBinsLimit()
     {
@@ -359,7 +359,7 @@ public sealed class PerformanceRunTests : IDisposable
     }
 
     // Closing the window asks about a finished run that is not saved, as it asks about unsaved Tune edits: only Discard, Run
-    // again or arming another test drop one (spec 2; final review, finding 9).
+    // again or arming another test drop one.
     [AvaloniaFact]
     public void CloseWithAnUnsavedRunAsks()
     {
@@ -481,7 +481,7 @@ public sealed class PerformanceRunTests : IDisposable
 
         Assert.Equal(RunStage.Waiting, run.Stage);
         Assert.False(Assert.Single(run.Checks, check => check.Label == "Engine warm").Met);
-        // Live's banners show on Performance too (performance spec 5).
+        // Live's banners show on Performance too.
         Assert.Same(shell.Live.WarmUpBanners, run.WarmUp);
         Assert.Contains(run.WarmUp, banner => banner.IsDanger);
     }
@@ -516,7 +516,7 @@ public sealed class PerformanceRunTests : IDisposable
         var (_, shell) = PerfFeed.Open(_folder);
         PerfFeed.Select(shell, "Standing start");
         var run = shell.Performance.Run;
-        // The button names the test it arms (minor review, finding 47).
+        // The button names the test it arms.
         Assert.Equal("Arm standing start", run.ArmText);
 
         PerfFeed.Connect(shell, PerfFeed.WithoutSpeed());
@@ -526,7 +526,7 @@ public sealed class PerformanceRunTests : IDisposable
             shell.Performance.Entries.OfType<PerformanceTestEntry>().Single(entry => entry.Title == "Standing start").OffText);
     }
 
-    // Was DialogTests.VsChannelDrivesThePerformanceTimer: 0 to 100 km/h, now back-extrapolated (performance spec 6.4).
+    // Was DialogTests.VsChannelDrivesThePerformanceTimer: 0 to 100 km/h, now back-extrapolated.
     [AvaloniaFact]
     public void StandingStartTimesFromLiveSamples()
     {
@@ -586,7 +586,7 @@ public sealed class PerformanceRunTests : IDisposable
         run.Arm();
         PerfFeed.Feed(shell, PerfFeed.Steady(4, 3000, 5, values: [("VS", 100), ("PVS", 20), ("TCO", 92), ("TOIL", 88)]));
 
-        // The speedometer's reading is taken as the GPS speed is typed (performance spec 6.5).
+        // The speedometer's reading is taken as the GPS speed is typed.
         run.GpsKmh = "96";
         Assert.Equal("100", run.GpsVsKmh);
         run.SaveCalibration();
@@ -594,7 +594,7 @@ public sealed class PerformanceRunTests : IDisposable
         Assert.Equal(100.0 / 3000 * 0.96, shell.Tune.Settings.KmhPerRpm[5], 6);
         Assert.True(shell.Tune.Settings.GpsChecked[5]);
 
-        // The speedometer's own ratio stays beside the corrected one: the slip check compares VS with it (final review, finding 3).
+        // The speedometer's own ratio stays beside the corrected one: the slip check compares VS with it.
         Assert.Equal(100.0 / 3000, shell.Tune.Settings.SpeedometerKmhPerRpm[5], 6);
         Assert.Equal(100.0 / 3000, AppSettings.Load(_folder).SpeedometerKmhPerRpm[5], 6);
         var inputs = shell.Performance.CurrentInputs();
@@ -623,7 +623,7 @@ public sealed class PerformanceRunTests : IDisposable
     }
 
     // A calibration saved gear by gear keeps each gear's GPS check, so the line under a test's options says what holds for its
-    // own gear (minor review, findings 9 and 23).
+    // own gear.
     [AvaloniaFact]
     public void GpsCheckIsKeptPerGear()
     {
@@ -652,8 +652,7 @@ public sealed class PerformanceRunTests : IDisposable
         Assert.Equal([3], shell.Performance.CurrentInputs().GpsCheckedGears);
     }
 
-    // One glitch above the calibrated full pedal never raises it; a reading held for 0.5 s does, to its lowest during the hold
-    // (minor review, findings 17 and 24).
+    // One glitch above the calibrated full pedal never raises it; a reading held for 0.5 s does, to its lowest during the hold.
     [AvaloniaFact]
     public void AHigherPedalCountsOnlyOnceItHolds()
     {
@@ -675,8 +674,7 @@ public sealed class PerformanceRunTests : IDisposable
         Assert.StartsWith("Full pedal reads 104.", run.PedalText);
     }
 
-    // Each sample is decoded once, a hidden tab's run view raises nothing per sample, and the ready checks change in place
-    // (minor review, finding 21).
+    // Each sample is decoded once, a hidden tab's run view raises nothing per sample, and the ready checks change in place.
     [AvaloniaFact]
     public void PerSampleWorkStaysSmall()
     {
@@ -713,7 +711,7 @@ public sealed class PerformanceRunTests : IDisposable
         Assert.DoesNotContain(nameof(PerformanceRunViewModel.ArmIsPrimary), raised);
     }
 
-    // Opening a bin again keeps a band typed but not armed, and a finished run's band (minor review, finding 27).
+    // Opening a bin again keeps a band typed but not armed, and a finished run's band.
     [AvaloniaFact]
     public async Task OpeningABinKeepsATypedBand()
     {
@@ -731,7 +729,7 @@ public sealed class PerformanceRunTests : IDisposable
         Assert.Equal(("2500", "6954"), (run.StartRpm, run.EndRpm));
         Assert.NotNull(run.BandNote);
 
-        // An end typed over the bin's is the owner's: it stays and no longer reads as the bin's limit.
+        // An end typed over the bin's is the user's: it stays and no longer reads as the bin's limit.
         run.EndRpm = "6400";
         await shell.Tune.OpenAsync(TuneScreen.Car!, TuneScreen.Xdf);
         Assert.Equal(("2500", "6400"), (run.StartRpm, run.EndRpm));
@@ -750,7 +748,7 @@ public sealed class PerformanceRunTests : IDisposable
         Assert.Equal(("2000", "6400"), (run.StartRpm, run.EndRpm));
     }
 
-    // A notice belongs to the test that raised it (minor review, finding 28).
+    // A notice belongs to the test that raised it.
     [AvaloniaFact]
     public void NoticeStaysWithItsTest()
     {
@@ -768,7 +766,7 @@ public sealed class PerformanceRunTests : IDisposable
         Assert.StartsWith("Pedal calibrated: ", run.Notice);
     }
 
-    // Arm on another test names the one that is on and leads to it (minor review, finding 29).
+    // Arm on another test names the one that is on and leads to it.
     [AvaloniaFact]
     public void TheTipNamesTheRunningTestAndLeadsToIt()
     {
@@ -790,7 +788,7 @@ public sealed class PerformanceRunTests : IDisposable
     }
 
     // The link failing as it does on the car (the logger stops on a timeout) keeps what a cold-oil pull measured, saves it and
-    // clears the banners (minor review, finding 53).
+    // clears the banners.
     [AvaloniaFact]
     public void ALinkFailureKeepsWhatThePullMeasured()
     {
@@ -813,7 +811,7 @@ public sealed class PerformanceRunTests : IDisposable
         Assert.Single(Directory.GetFiles(Path.Combine(_folder, "results"), "*.json"));
     }
 
-    // A result records the definition that decoded its samples, not the picker's choice (minor review, findings 58, 65, 70).
+    // A result records the definition that decoded its samples, not the picker's choice.
     [AvaloniaFact]
     public void AResultRecordsTheDefinitionThatDecodedIt()
     {
@@ -834,8 +832,7 @@ public sealed class PerformanceRunTests : IDisposable
         Assert.InRange(PerfCompare.Frames(stored).Max(frame => frame.Rpm ?? 0), 6400, 6600);
     }
 
-    // After Save result, a new name, description or direction is written into the same file by Save changes (minor review,
-    // findings 61 and 64).
+    // After Save result, a new name, description or direction is written into the same file by Save changes.
     [AvaloniaFact]
     public void EditsAfterSaveAreWrittenToTheFile()
     {
@@ -867,8 +864,7 @@ public sealed class PerformanceRunTests : IDisposable
         Assert.Equal("Baseline, dry", Assert.Single(shell.Performance.Results.Rows).Name);
     }
 
-    // The picker and the dashed trace stay on the baseline the run's deltas were taken against, until Discard or Run again
-    // (minor review, finding 62).
+    // The picker and the dashed trace stay on the baseline the run's deltas were taken against, until Discard or Run again.
     [AvaloniaFact]
     public void TheBaselineStaysWithTheRun()
     {
@@ -898,7 +894,7 @@ public sealed class PerformanceRunTests : IDisposable
         Assert.Equal("3rd pull 12:00", run.SelectedBaseline!.Text);
     }
 
-    // A run goes on while another test is chosen, and a finished one waits there unsaved (minor review, finding 76).
+    // A run goes on while another test is chosen, and a finished one waits there unsaved.
     [AvaloniaFact]
     public void ARunSurvivesChoosingAnotherTest()
     {
@@ -922,6 +918,46 @@ public sealed class PerformanceRunTests : IDisposable
         PerfFeed.Select(shell, "Full-throttle pull");
         Assert.True(run.CanSave);
         Assert.Equal("3rd pull 12:00", run.Name);
+    }
+
+    // The tyre size is picked like on a tyre shop, width, profile and rim, never typed.
+    [AvaloniaFact]
+    public void TyreSizeIsPickedFromThreeLists()
+    {
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Select(shell, "Car");
+        var run = shell.Performance.Run;
+        Assert.Equal(205, run.TyreWidth);
+        Assert.Equal(55, run.TyreAspect);
+        Assert.Equal(16, run.TyreRim);
+        Assert.Equal(135, run.TyreWidths[0]);
+        Assert.Equal(355, run.TyreWidths[^1]);
+        Assert.Equal([25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85], run.TyreAspects);
+        Assert.Equal(13, run.TyreRims[0]);
+        Assert.Equal(22, run.TyreRims[^1]);
+
+        run.TyreWidth = 225;
+        run.TyreAspect = 45;
+        run.TyreRim = 17;
+
+        Assert.Equal("225/45 R17", run.TyreSize);
+        Assert.Equal("225/45 R17", AppSettings.Load(_folder).TyreSize);
+    }
+
+    // A size saved by hand in another form ("225/45ZR17") still selects its three parts.
+    [AvaloniaFact]
+    public void ASavedSizeInAnotherFormSelectsItsParts()
+    {
+        var settings = AppSettings.Load(_folder);
+        settings.TyreSize = "225/45ZR17";
+        settings.Save();
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Select(shell, "Car");
+        var run = shell.Performance.Run;
+
+        Assert.Equal(225, run.TyreWidth);
+        Assert.Equal(45, run.TyreAspect);
+        Assert.Equal(17, run.TyreRim);
     }
 
     [AvaloniaFact]
@@ -949,7 +985,7 @@ public sealed class PerformanceRunTests : IDisposable
         Assert.True(saved.Automatic);
     }
 
-    // The checks list only what can be met together, and the note says when to floor it (minor review, finding 38).
+    // The checks list only what can be met together, and the note says when to floor it.
     [AvaloniaFact]
     public void TheNoteSaysWhenToFloorIt()
     {
@@ -964,7 +1000,7 @@ public sealed class PerformanceRunTests : IDisposable
         Assert.DoesNotContain(run.Checks, check => check.Label == "Full throttle");
     }
 
-    // Samples that stop mid-run are said in words as well as by the marks turning Ink3 (minor review, finding 42).
+    // Samples that stop mid-run are said in words as well as by the marks turning Ink3.
     [AvaloniaFact]
     public void SilentSamplesMidRunAreSaidInWords()
     {
@@ -989,7 +1025,7 @@ public sealed class PerformanceRunTests : IDisposable
     }
 
     // The live chart's axes hold for the run: rpm over the band, seconds in whole 5 s steps or the baseline's length, so the
-    // chart never rescales with each sample (minor review, finding 49).
+    // chart never rescales with each sample.
     [AvaloniaFact]
     public void TheLiveChartKeepsItsAxesForTheRun()
     {
