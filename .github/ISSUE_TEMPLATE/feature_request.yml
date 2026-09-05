@@ -1,0 +1,40 @@
+name: Feature request
+description: Suggest something MS43 Tuner or the CLI could do.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        MS43 Tuner reads and edits bins and logs live data. It never writes ECU flash: flashing and the checksum are done with MS4X Flasher.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What you are trying to do, and what gets in the way today.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What the app could do about it. A sketch or screenshot helps.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: screen
+    attributes:
+      label: Which screen
+      multiple: true
+      options:
+        - Live
+        - Tune
+        - Compare
+        - Performance
+        - Settings
+        - CLI
+        - Other
+    validations:
+      required: true

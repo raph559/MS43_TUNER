@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security problem
+    url: https://github.com/raph559/MS43_LOGGER/security/advisories/new
+    about: Report a vulnerability privately, as SECURITY.md describes. Do not open a public issue for it.
+  - name: MS4X project
+    url: https://www.ms4x.net
+    about: Questions about the MS43X001 firmware, its XDF or MS4X Flasher belong with the MS4X project.
