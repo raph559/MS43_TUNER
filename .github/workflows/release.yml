@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  release:
+    name: Publish and release (win-x64)
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # Writes artifacts/publish/win-x64/desktop and artifacts/publish/win-x64/cli.
+      - name: Publish
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          ./scripts/Publish-Windows.ps1
+
+      - name: Zip
+        shell: pwsh
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $publish = 'artifacts/publish/win-x64'
+          foreach ($dir in 'desktop', 'cli') {
+            if (-not (Test-Path "$publish/$dir/*")) { throw "Nothing published in $publish/$dir" }
+          }
+          Compress-Archive -Path "$publish/desktop/*" -DestinationPath "artifacts/MS43Tuner-$env:TAG-win-x64.zip"
+          Compress-Archive -Path "$publish/cli/*" -DestinationPath "artifacts/MS43Tuner-CLI-$env:TAG-win-x64.zip"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          # Tags such as v1.2.0-beta.1 are marked as pre-releases.
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            artifacts/MS43Tuner-${{ github.ref_name }}-win-x64.zip
+            artifacts/MS43Tuner-CLI-${{ github.ref_name }}-win-x64.zip
+          fail_on_unmatched_files: true
