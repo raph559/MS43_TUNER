@@ -193,6 +193,48 @@ public sealed class MotionTests
         Assert.NotEqual(Colors.Transparent, Assert.IsAssignableFrom<ISolidColorBrush>(a.Background).Color);
     }
 
+    private static (ToggleSwitch Switch, Border Fill) Switch(bool motion)
+    {
+        var toggle = new ToggleSwitch { Content = "Changed only" };
+        var window = new Window { Width = 300, Height = 120, Content = toggle };
+        if (motion)
+        {
+            window.Styles.Add(App.NewMotionLayer());
+        }
+
+        window.Show();
+        Settle();
+        return (toggle, Part(toggle, "SwitchKnobBounds"));
+    }
+
+    // The owner: switches (Changed only, Differs from B) were not animated. The 16 px knob slide was lost behind the
+    // track turning from outline to fill at once; the fill now fades in with the slide.
+    [AvaloniaFact]
+    public void ASwitchFillsAsItsKnobSlides()
+    {
+        var (toggle, fill) = Switch(motion: true);
+        Assert.Equal(0, fill.Opacity);
+
+        var since = System.Diagnostics.Stopwatch.StartNew();
+        toggle.IsChecked = true;
+        Tick();
+        AssertMoving(fill.Opacity, since);
+
+        Settle();
+        Assert.Equal(1, fill.Opacity);
+    }
+
+    [AvaloniaFact]
+    public void WithMotionOffASwitchFillsAtOnce()
+    {
+        var (toggle, fill) = Switch(motion: false);
+
+        toggle.IsChecked = true;
+        Tick();
+
+        Assert.Equal(1, fill.Opacity);
+    }
+
     [AvaloniaFact]
     public void WithMotionOffNothingMoves()
     {

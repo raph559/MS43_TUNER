@@ -125,6 +125,16 @@
             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
+        <!-- A switch's choice is a sentence: UI 20 SemiBold that wraps, at most 480 px a side, so A and B read in full. -->
+        <Style Selector="TextBlock.choice">
+            <Setter Property="FontFamily" Value="{DynamicResource UiDisplayFont}" />
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="LineHeight" Value="26" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="MaxWidth" Value="480" />
+        </Style>
         <Style Selector="TextBlock.vlab">
             <Setter Property="FontSize" Value="12" />
             <Setter Property="LineHeight" Value="16" />
@@ -417,11 +427,15 @@
                             <WrapPanel ItemSpacing="64" LineSpacing="24">
                                 <StackPanel Spacing="4">
                                     <TextBlock Classes="vlab"><Run Classes="ab" Text="A" /><Run Text="{Binding FileA, StringFormat='&#x2002;{0}', Mode=OneWay}" /></TextBlock>
-                                    <controls:ReadingText Name="ValueAText" Classes="data56 reading" Value="{Binding Selected.ValueA, FallbackValue=''}" Unit="{Binding Units}" />
+                                    <controls:ReadingText Name="ValueAText" Classes="data56 reading" Value="{Binding Selected.ValueA, FallbackValue=''}" Unit="{Binding Units}"
+                                                          IsVisible="{Binding !ValuesAreChoices}" />
+                                    <TextBlock Name="ChoiceAText" Classes="choice" Text="{Binding Selected.ValueA, FallbackValue=''}" IsVisible="{Binding ValuesAreChoices}" />
                                 </StackPanel>
                                 <StackPanel Spacing="4">
                                     <TextBlock Classes="vlab"><Run Classes="ab" Text="B" /><Run Text="{Binding FileB, StringFormat='&#x2002;{0}', Mode=OneWay}" /></TextBlock>
-                                    <controls:ReadingText Name="ValueBText" Classes="data56 reading" Value="{Binding Selected.ValueB, FallbackValue=''}" Unit="{Binding Units}" />
+                                    <controls:ReadingText Name="ValueBText" Classes="data56 reading" Value="{Binding Selected.ValueB, FallbackValue=''}" Unit="{Binding Units}"
+                                                          IsVisible="{Binding !ValuesAreChoices}" />
+                                    <TextBlock Name="ChoiceBText" Classes="choice" Text="{Binding Selected.ValueB, FallbackValue=''}" IsVisible="{Binding ValuesAreChoices}" />
                                 </StackPanel>
                             </WrapPanel>
                             <controls:NumberText Name="ValueDeltaText" Classes="body" Margin="0,16,0,0" Value="{Binding ValueDeltaText}" Foreground="{DynamicResource Ink2Brush}"

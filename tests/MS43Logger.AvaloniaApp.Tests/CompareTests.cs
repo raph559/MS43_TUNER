@@ -557,6 +557,45 @@ public sealed class CompareTests : IDisposable
         Assert.True(Find.Named<TextBox>(window, "CompareSearchBox").IsEffectivelyVisible);
     }
 
+    // The owner: a switch's choice ("Electrical cooling fan present, function and diagnosis active") was set in the 56 px
+    // number style and cut off at the pane's edge. A choice is text: it wraps, at a size that reads.
+    [AvaloniaFact]
+    public async Task SwitchChoicesWrapAsText()
+    {
+        if (!Available)
+        {
+            return;
+        }
+
+        // B: the car bin with the cooling-fan switch flipped, so one switch differs.
+        var xdf = XdfDefinition.LoadFromFile(TuneScreen.Xdf!);
+        var fan = (XdfConstant)xdf.FindByTitle("c_conf_ecf")!;
+        var image = BinImage.Load(TuneScreen.Car!);
+        image.WriteElement(fan.Data, 0, image.ReadElement(fan.Data, 0) == 0 ? 1 : 0);
+        var b = Path.Combine(_folder, "fan.bin");
+        Directory.CreateDirectory(_folder);
+        File.WriteAllBytes(b, image.ToArray());
+        var (window, _, compare) = await Open(b);
+        var row = Item(compare, "c_conf_ecf");
+        Assert.Equal(MS43Logger.Core.Tuning.ItemKind.Switch, row.Kind);
+
+        compare.Selected = row;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        var a = Find.Named<TextBlock>(window, "ChoiceAText");
+        var choiceB = Find.Named<TextBlock>(window, "ChoiceBText");
+        Assert.True(a.IsEffectivelyVisible);
+        Assert.True(choiceB.IsEffectivelyVisible);
+        Assert.False(Find.Named<Control>(window, "ValueAText").IsEffectivelyVisible);
+        Assert.Equal(row.ValueA, a.Text);
+        Assert.Equal(row.ValueB, choiceB.Text);
+        Assert.Equal(Avalonia.Media.TextWrapping.Wrap, a.TextWrapping);
+        Assert.True(a.FontSize <= 20, $"choice set at {a.FontSize} px");
+        var right = a.TranslatePoint(new Point(a.Bounds.Width, 0), window)!.Value.X;
+        Assert.True(right <= window.Bounds.Width - 16, $"the choice ends at {right} in a {window.Bounds.Width} px window");
+        Screens.Save(window, "compare-switch-night-1440");
+    }
+
     [AvaloniaFact]
     public async Task ValueViewShowsTheDifference()
     {
