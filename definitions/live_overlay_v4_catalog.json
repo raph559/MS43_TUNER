@@ -386,5 +386,396 @@
     ],
     "reader": 852634,
     "id": 31
+  },
+  {
+    "address": 486721,
+    "bytes": 64,
+    "name": "ip_iga_ch__n__maf",
+    "rows": 8,
+    "columns": 8,
+    "sites": [
+      383732
+    ],
+    "reader": 852634,
+    "id": 32
+  },
+  {
+    "address": 486849,
+    "bytes": 64,
+    "name": "ip_iga_ch_cat_var__n__maf",
+    "rows": 8,
+    "columns": 8,
+    "sites": [
+      383756
+    ],
+    "reader": 852634,
+    "id": 33
+  },
+  {
+    "address": 486977,
+    "bytes": 64,
+    "name": "ip_iga_knk_diag__n__maf",
+    "rows": 8,
+    "columns": 8,
+    "sites": [
+      220670
+    ],
+    "reader": 852634,
+    "id": 34
+  },
+  {
+    "address": 487041,
+    "bytes": 64,
+    "name": "ip_iga_knk_diag_ron__n__maf",
+    "rows": 8,
+    "columns": 8,
+    "sites": [
+      220642
+    ],
+    "reader": 852634,
+    "id": 35
+  },
+  {
+    "address": 487185,
+    "bytes": 16,
+    "name": "ip_iga_maf_n_is__n__maf",
+    "rows": 4,
+    "columns": 4,
+    "sites": [
+      185550
+    ],
+    "reader": 852634,
+    "id": 36
+  },
+  {
+    "address": 487201,
+    "bytes": 64,
+    "name": "ip_iga_maf_n_knk_diag__n__maf",
+    "rows": 8,
+    "columns": 8,
+    "sites": [
+      185666
+    ],
+    "reader": 852634,
+    "id": 37
+  },
+  {
+    "address": 487265,
+    "bytes": 36,
+    "name": "ip_iga_maf_n_toil_is__n__maf",
+    "rows": 6,
+    "columns": 6,
+    "sites": [
+      185608
+    ],
+    "reader": 852634,
+    "id": 38
+  },
+  {
+    "address": 487397,
+    "bytes": 192,
+    "name": "ip_iga_optm_e85__n__maf",
+    "rows": 16,
+    "columns": 12,
+    "sites": [
+      66192
+    ],
+    "reader": 852634,
+    "id": 39
+  },
+  {
+    "address": 487589,
+    "bytes": 192,
+    "name": "ip_iga_optm_ron98__n__maf",
+    "rows": 16,
+    "columns": 12,
+    "sites": [
+      66176
+    ],
+    "reader": 852634,
+    "id": 40
+  },
+  {
+    "address": 487829,
+    "bytes": 64,
+    "name": "ip_iga_ref_mon2",
+    "rows": 8,
+    "columns": 8,
+    "sites": [
+      72958
+    ],
+    "reader": 852634,
+    "id": 41
+  },
+  {
+    "address": 487893,
+    "bytes": 320,
+    "name": "ip_iga_ron91_pl__n__maf",
+    "rows": 20,
+    "columns": 16,
+    "sites": [
+      181854
+    ],
+    "reader": 852634,
+    "id": 42
+  },
+  {
+    "address": 488560,
+    "bytes": 36,
+    "name": "ip_iga_e85_is__n__maf",
+    "rows": 6,
+    "columns": 6,
+    "sites": [
+      181172
+    ],
+    "reader": 852634,
+    "id": 43
+  },
+  {
+    "address": 488596,
+    "bytes": 320,
+    "name": "ip_iga_e85_pl__n__maf",
+    "rows": 20,
+    "columns": 16,
+    "sites": [
+      181892
+    ],
+    "reader": 852634,
+    "id": 44
+  },
+  {
+    "address": 488952,
+    "bytes": 64,
+    "name": "ip_iga_tco_ch_at__tco__t_ast",
+    "rows": 8,
+    "columns": 8,
+    "sites": [
+      383124
+    ],
+    "reader": 852634,
+    "id": 45
+  },
+  {
+    "address": 489016,
+    "bytes": 64,
+    "name": "ip_iga_tco_ch_is__tco__t_ast",
+    "rows": 8,
+    "columns": 8,
+    "sites": [
+      383068
+    ],
+    "reader": 852634,
+    "id": 46
+  },
+  {
+    "address": 489080,
+    "bytes": 64,
+    "name": "ip_iga_tco_ch_mt__tco__t_ast",
+    "rows": 8,
+    "columns": 8,
+    "sites": [
+      383142
+    ],
+    "reader": 852634,
+    "id": 47
+  },
+  {
+    "address": 489560,
+    "bytes": 24,
+    "name": "ip_ivvthpwm__tmag__vb",
+    "rows": 6,
+    "columns": 4,
+    "sites": [
+      209372,
+      209444,
+      361940,
+      362028
+    ],
+    "reader": 852634,
+    "id": 48
+  },
+  {
+    "address": 489584,
+    "bytes": 64,
+    "name": "ip_lam_i_1__n__maf",
+    "rows": 8,
+    "columns": 8,
+    "sites": [
+      376896,
+      377078
+    ],
+    "reader": 852634,
+    "id": 49
+  },
+  {
+    "address": 489648,
+    "bytes": 64,
+    "name": "ip_lam_i_2__n__maf",
+    "rows": 8,
+    "columns": 8,
+    "sites": [
+      376870,
+      377052
+    ],
+    "reader": 852634,
+    "id": 50
+  },
+  {
+    "address": 489720,
+    "bytes": 64,
+    "name": "ip_lam_neg_p__n__maf",
+    "rows": 8,
+    "columns": 8,
+    "sites": [
+      376978
+    ],
+    "reader": 852634,
+    "id": 51
+  },
+  {
+    "address": 489788,
+    "bytes": 64,
+    "name": "ip_lam_pos_p__n__maf",
+    "rows": 8,
+    "columns": 8,
+    "sites": [
+      377158
+    ],
+    "reader": 852634,
+    "id": 52
+  },
+  {
+    "address": 490000,
+    "bytes": 60,
+    "name": "ip_maf_min_cop__n__iga_dif",
+    "rows": 10,
+    "columns": 6,
+    "sites": [
+      283034,
+      283306
+    ],
+    "reader": 852634,
+    "id": 53
+  },
+  {
+    "address": 490060,
+    "bytes": 60,
+    "name": "ip_maf_min_cop_ron__n__iga_dif",
+    "rows": 10,
+    "columns": 6,
+    "sites": [
+      283002,
+      283274
+    ],
+    "reader": 852634,
+    "id": 54
+  },
+  {
+    "address": 490144,
+    "bytes": 32,
+    "name": "ip_maf_min_knk__n__tco",
+    "rows": 8,
+    "columns": 4,
+    "sites": [
+      220462
+    ],
+    "reader": 852634,
+    "id": 55
+  },
+  {
+    "address": 490176,
+    "bytes": 32,
+    "name": "ip_maf_min_knk_ron__n__tco",
+    "rows": 8,
+    "columns": 4,
+    "sites": [
+      220446
+    ],
+    "reader": 852634,
+    "id": 56
+  },
+  {
+    "address": 490234,
+    "bytes": 36,
+    "name": "ip_mis_a_fac__n__maf",
+    "rows": 6,
+    "columns": 6,
+    "sites": [
+      356710
+    ],
+    "reader": 852634,
+    "id": 57
+  },
+  {
+    "address": 490791,
+    "bytes": 96,
+    "name": "ip_pvs_dif_cr_neg__pvs_max__n",
+    "rows": 12,
+    "columns": 8,
+    "sites": [
+      249636
+    ],
+    "reader": 852634,
+    "id": 58
+  },
+  {
+    "address": 490887,
+    "bytes": 96,
+    "name": "ip_pvs_dif_neg_fac__pvs_max__n",
+    "rows": 12,
+    "columns": 8,
+    "sites": [
+      249668
+    ],
+    "reader": 852634,
+    "id": 59
+  },
+  {
+    "address": 491605,
+    "bytes": 36,
+    "name": "ip_soi_tco_1_is__n__ti",
+    "rows": 6,
+    "columns": 6,
+    "sites": [
+      307512
+    ],
+    "reader": 852634,
+    "id": 60
+  },
+  {
+    "address": 491641,
+    "bytes": 80,
+    "name": "ip_soi_tco_1_pl__n__ti",
+    "rows": 8,
+    "columns": 10,
+    "sites": [
+      307588
+    ],
+    "reader": 852634,
+    "id": 61
+  },
+  {
+    "address": 491721,
+    "bytes": 36,
+    "name": "ip_soi_tco_2_is__n__ti",
+    "rows": 6,
+    "columns": 6,
+    "sites": [
+      307496
+    ],
+    "reader": 852634,
+    "id": 62
+  },
+  {
+    "address": 491757,
+    "bytes": 80,
+    "name": "ip_soi_tco_2_pl__n__ti",
+    "rows": 8,
+    "columns": 10,
+    "sites": [
+      307572
+    ],
+    "reader": 852634,
+    "id": 63
   }
 ]
