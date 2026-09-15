@@ -1,4 +1,5 @@
 using System.IO.Ports;
+using MS43Logger.Core.LiveTuning;
 
 namespace MS43Logger.Core;
 

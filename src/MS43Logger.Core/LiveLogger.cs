@@ -32,20 +32,26 @@ public sealed record LiveSample(
     int Retries = 0);
 
 /// <summary>
-/// The polling loop: poll, decode, publish, pause. Same rules as before the move out of the window:
-/// up to 3 timeouts in a row are retried after 50 ms, any other error stops the loop, and a pause follows every sample.
+/// Polls, decodes and publishes samples. Retries the first two consecutive timeouts after 50 ms; the third
+/// timeout or any other error stops the loop. An optional pause follows each sample; the default is zero.
 /// </summary>
 public sealed class LiveLogger
 {
     public const int TimeoutLimit = 3;
 
     private readonly TimeSpan _pause;
+
+    /// <summary>The shortest time from one poll to the next, whatever the source.</summary>
+    public static readonly TimeSpan MinInterval = TimeSpan.FromMilliseconds(10);
+
+    /// <summary>The wait after each sample.</summary>
+    public TimeSpan Pause => _pause;
     private readonly SampleRateMeter _rate = new();
     private readonly object _rateLock = new();
 
     public LiveLogger(TimeSpan? pause = null)
     {
-        _pause = pause ?? TimeSpan.FromMilliseconds(20);
+        _pause = pause ?? TimeSpan.Zero;
     }
 
     /// <summary>Raised on the polling thread for every decoded sample.</summary>
