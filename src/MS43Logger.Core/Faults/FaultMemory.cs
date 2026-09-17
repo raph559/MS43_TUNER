@@ -46,8 +46,33 @@ public static class FaultMemory
     /// </summary>
     public const int QueueFlagsAddress = 0xFD84;
 
+    /// <summary>The queues that have overflowed since key-on: 1, 2 or 3; empty when none has.</summary>
+    public static IReadOnlyList<int> ReadQueueOverflows(IDs2Line line)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+        var flags = line.Read(QueueFlagsAddress, 2);
+        return QueueOverflows(flags[0] | flags[1] << 8);
+    }
+
     /// <summary>The queues whose overflow flag is set in the word at <see cref="QueueFlagsAddress"/>.</summary>
     public static IReadOnlyList<int> QueueOverflows(int word) => new[] { 1, 2, 3 }.Where(queue => (word & 1 << (5 + queue)) != 0).ToArray();
+
+    /// <summary>The stored faults, oldest first, each path once. Throws <see cref="NotSupportedException"/> on another layout.</summary>
+    public static IReadOnlyList<EcuFault> ReadStored(IDs2Line line)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+        var paths = FaultPaths.All;
+        if (!MatchesLayout(line.Read(DescriptorsAddress, LayoutBytes)))                    // two requests, not 29
+            throw new NotSupportedException("This ECU's fault memory is not laid out as MS43X001's; nothing was read.");
+
+        int count = line.Read(StoredCountAddress, 1)[0];
+        if (count == 0) return Array.Empty<EcuFault>();
+        var list = line.Read(StoredListAddress, Math.Min(count, paths.Count));
+        var faults = new List<EcuFault>();
+        foreach (var path in list.Select(b => (int)b).Where(p => p < paths.Count).Distinct())
+            faults.Add(Decode(path, line.Read(RecordsAddress + RecordSize * path, RecordSize)));
+        return faults;
+    }
 
     /// <summary>
     /// A path's state record: status (bits 0-3 the type bits, 5 stored, 6 present now, 7 sporadic), debounce, frequency, heal,
