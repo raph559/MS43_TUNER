@@ -25,9 +25,14 @@ public sealed class LiveTuningSession(IDs2Line line)
     private readonly SemaphoreSlim _gate = new(1, 1);
     private MapIntent[] _intent = new MapIntent[5];
     private byte[]?[] _sent = new byte[5][];
+    private LimiterSettings? _limiterIntent;
+    private LimiterSettings? _limiterFlash;
     private bool _adopted;
 
     public event EventHandler<Exception>? Stopped;
+
+    public OverlayDetection? Detection { get; private set; }
+    public IReadOnlyList<OverlayMap> Maps => Detection?.Catalogue ?? OverlayContract.Maps;
 
     public bool IsStopped { get; private set; }
 
@@ -38,4 +43,43 @@ public sealed class LiveTuningSession(IDs2Line line)
 
     /// <summary>The copy the ECU holds (or held before a key cycle) for this map, as sent or read back.</summary>
     public byte[]? SentCopy(int table) => _sent[table] is { } copy ? (byte[])copy.Clone() : null;
+
+    private byte[] Flash(int table) => Detection?.Flash is { } flash
+        ? flash[table]
+        : throw new InvalidOperationException("No live-tuning overlay was detected on this ECU.");
+
+    private string Describe(int table, SendResult result) => result.FreeFirst is { } free
+        ? $"{Maps[table].Key} does not fit in the ECU: remove {Maps[free].Key} first."
+        : result.Refused == OverlayReason.Overlap ? $"{Maps[table].Key} does not fit. Remove loaded maps to release a slot and a large enough memory block."
+        : $"The ECU refused {Maps[table].Key}: {result.Refused}.";
+
+    private async Task<T> Run<T>(Func<T> work, bool fatalOnly)
+    {
+        if (IsStopped)
+        {
+            throw new InvalidOperationException("The live-tuning session has stopped: " + Problem);
+        }
+
+        if (fatalOnly && Detection?.Problem is not null)
+        {
+            throw new InvalidOperationException("No live-tuning overlay was detected on this ECU.");
+        }
+
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            return await Task.Run(work).ConfigureAwait(false);
+        }
+        catch (Exception error) when (error is not TimeoutException and not InvalidOperationException and not InvalidDataException)
+        {
+            IsStopped = true;
+            Problem = error.Message;
+            Stopped?.Invoke(this, error);
+            throw;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
 }

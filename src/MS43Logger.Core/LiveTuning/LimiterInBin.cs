@@ -20,4 +20,29 @@ public static class LimiterInBin
         var mode = xdf.Constants.FirstOrDefault(c => At(c.Data, ModeAt, 1));
         return gears is null || hysteresis is null || mode is null ? null : new Items(gears, hysteresis, mode);
     }
+
+    /// <summary>The flashed limiter as the bin holds it (the bin carries no "use live settings" flag).</summary>
+    public static LimiterSettings Read(BinImage image)
+    {
+        ArgumentNullException.ThrowIfNull(image);
+        return new LimiterSettings(image.Bytes.Slice(GearsAt, 6).ToArray(), image.Bytes[HysteresisAt], image.Bytes[ModeAt] != 0, false);
+    }
+
+    /// <summary>
+    /// Writes the settings into the document through its history, one step per changed item; <see cref="LimiterSettings.Payload"/>
+    /// checks them first (each limit above the hysteresis).
+    /// </summary>
+    public static void Write(CalibrationDocument document, EditHistory history, Items items, LimiterSettings settings, string label)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(history);
+        ArgumentNullException.ThrowIfNull(items);
+        ArgumentNullException.ThrowIfNull(settings);
+        settings.Payload();
+        var source = document.Image.ToArray(); settings.GearLimits.CopyTo(source, GearsAt);
+        var plans = new[] { TableEdits.CopyFrom(document, items.Gears, BinImage.FromBytes(source)),
+            TableEdits.SetConstantRaw(document, items.Hysteresis, settings.Hysteresis),
+            TableEdits.SetConstantRaw(document, items.Mode, settings.IgnitionCut ? 1 : 0) };
+        foreach (var plan in plans.Where(p => p.Changes.Count > 0)) history.Apply(plan, $"{label}: {plan.Item.Title}");
+    }
 }
