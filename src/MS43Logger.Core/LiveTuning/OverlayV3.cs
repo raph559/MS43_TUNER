@@ -66,6 +66,30 @@ public static class OverlayV3
         }
     }
 
+    public static OverlayStatus ParseStatus(IReadOnlyList<byte> reply)
+    {
+        OverlayContract.ValidateFrame(reply);
+        if (reply.Count != 60 || reply[2] != 0xA0 || !reply.Skip(3).Take(5).SequenceEqual(new byte[] { 76, 84, 79, 86, 3 })
+            || (reply[8] & ~1) != 0)
+            throw new InvalidDataException("Invalid protocol 3 status.");
+        var p = reply.Skip(3).ToArray();
+        var entries = new OverlayEntry[5];
+        var free = CopyBytes;
+        for (var i = 0; i < 5; i++)
+        {
+            var at = 6 + 8 * i;
+            var state = (OverlayState)p[at];
+            var offset = BinaryPrimitives.ReadUInt16BigEndian(p.AsSpan(at + 2));
+            if (state > OverlayState.On || p[at + 1] != 0 || (state != OverlayState.Free && offset != Offset(i)))
+                throw new InvalidDataException("Invalid fixed map location.");
+            entries[i] = new OverlayEntry(state, offset, Get(p, at + 4));
+            if (state != OverlayState.Free) free -= OverlayContract.Maps[i].Bytes;
+        }
+        if (BinaryPrimitives.ReadUInt16BigEndian(p.AsSpan(46)) != free)
+            throw new InvalidDataException("Invalid map byte count.");
+        return new OverlayStatus(3, (p[5] & 1) != 0, false, entries, free, Get(p, 48), Get(p, 52));
+    }
+
     public static (OverlayReason? Reason, uint Revision) Response(byte[] response)
     {
         OverlayContract.ValidateFrame(response);

@@ -37,6 +37,10 @@ public enum OverlayReason : byte
 /// <summary>One map's state, place in the copy area, and CRC-32 of its last verified complete content.</summary>
 public sealed record OverlayEntry(OverlayState State, int Offset, uint ContentCrc32, int DirectorySlot = -1);
 
+/// <summary>The status reply's fields: the version, whether the engine runs, the richer-only rule, the five entries, the free bytes.</summary>
+public sealed record OverlayStatus(int Version, bool Running, bool RicherOnly, IReadOnlyList<OverlayEntry> Tables, int FreeBytes,
+    uint Session = 0, uint Revision = 0, LimiterSettings? Limiter = null);
+
 /// <summary>A live map: its index in the overlay, its key, its group on the page, its address in the flash and its size.</summary>
 /// <summary>A setting with no XDF entry carries its own definition: how the app shows, scales and limits it.</summary>
 public sealed record OverlayScalarDefinition(string Title, string Description, string Units, string Equation,
@@ -221,6 +225,57 @@ public static class OverlayContract
         }
 
         return outside;
+    }
+
+    /// <summary>The fields of a whole v2 status reply, <c>12 34 A0 …</c>.</summary>
+    public static OverlayStatus ParseStatus(IReadOnlyList<byte> reply)
+    {
+        if (reply.Count > 7 && reply[7] == OverlayV4.Version) return OverlayV4.ParseStatus(reply);
+        if (reply.Count > 7 && reply[7] == OverlayV3.Version) return OverlayV3.ParseStatus(reply);
+        ValidateFrame(reply);
+        if (reply.Count != 52 || reply[2] != 0xA0
+            || reply[3] != 'L' || reply[4] != 'T' || reply[5] != 'O' || reply[6] != 'V')
+        {
+            throw new InvalidDataException("not the overlay's status reply: " + Convert.ToHexString(reply.ToArray()));
+        }
+
+        var p = reply.Skip(3).ToArray();
+        if (p[4] != SupportedVersion)
+        {
+            throw new InvalidDataException($"Unsupported live-tuning overlay version {p[4]}; version {SupportedVersion} is required.");
+        }
+
+        int Word(int at) => p[at] << 8 | p[at + 1];
+        uint DWord(int at) => (uint)p[at] << 24 | (uint)p[at + 1] << 16 | (uint)p[at + 2] << 8 | p[at + 3];
+        var tables = Enumerable.Range(0, Maps.Count)
+            .Select(i => new OverlayEntry((OverlayState)p[6 + 8 * i], Word(8 + 8 * i), DWord(10 + 8 * i)))
+            .ToArray();
+        for (var i = 0; i < tables.Length; i++)
+        {
+            var entry = tables[i];
+            if ((byte)entry.State > (byte)OverlayState.On || p[7 + 8 * i] != 0
+                || (entry.State != OverlayState.Free && entry.Offset + Maps[i].Bytes > CopyBytes))
+            {
+                throw new InvalidDataException("Invalid overlay table directory.");
+            }
+
+            for (var j = 0; j < i; j++)
+            {
+                if (entry.State != OverlayState.Free && tables[j].State != OverlayState.Free
+                    && entry.Offset < tables[j].Offset + Maps[j].Bytes && tables[j].Offset < entry.Offset + Maps[i].Bytes)
+                {
+                    throw new InvalidDataException("Overlapping overlay table directory.");
+                }
+            }
+        }
+
+        var free = CopyBytes - tables.Select((entry, i) => entry.State == OverlayState.Free ? 0 : Maps[i].Bytes).Sum();
+        if (Word(46) != free)
+        {
+            throw new InvalidDataException("Invalid overlay free-byte count.");
+        }
+
+        return new OverlayStatus(p[4], (p[5] & 1) != 0, (p[5] & 2) != 0, tables, free);
     }
 
     /// <summary>The reason of a B0/B1 refusal; null for an A0 reply. Anything else is not the overlay's reply.</summary>

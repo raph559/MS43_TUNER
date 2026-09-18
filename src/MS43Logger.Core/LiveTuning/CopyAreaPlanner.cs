@@ -4,6 +4,11 @@ namespace MS43Logger.Core.LiveTuning;
 public static class CopyAreaPlanner
 {
 
+    private static IEnumerable<(int Table, int Start, int End)> Extents(OverlayStatus status, int except) =>
+        OverlayContract.Maps
+            .Where(m => m.Index != except && status.Tables[m.Index].State != OverlayState.Free)
+            .Select(m => (m.Index, status.Tables[m.Index].Offset, status.Tables[m.Index].Offset + m.Bytes));
+
     private static int? FirstFit(int bytes, IEnumerable<(int Table, int Start, int End)> taken)
     {
         var at = 0;

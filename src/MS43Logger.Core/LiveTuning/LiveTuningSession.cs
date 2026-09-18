@@ -29,15 +29,29 @@ public sealed class LiveTuningSession(IDs2Line line)
     private LimiterSettings? _limiterFlash;
     private bool _adopted;
 
+    public event EventHandler<OverlayStatus>? StatusChanged;
+
     public event EventHandler<Exception>? Stopped;
 
     public OverlayDetection? Detection { get; private set; }
     public IReadOnlyList<OverlayMap> Maps => Detection?.Catalogue ?? OverlayContract.Maps;
 
+    public OverlayStatus? Last { get; private set; }
+
     public bool IsStopped { get; private set; }
 
     /// <summary>The last thing that went wrong, for the page to show; null when nothing has.</summary>
     public string? Problem { get; private set; }
+
+    /// <summary>Moves the session to a new line (the app reconnected): it must detect again before anything is sent.</summary>
+    public void Rebind(IDs2Line line)
+    {
+        _client = new OverlayClient(line);
+        _line = line;
+        Detection = null;
+        Last = null;
+        _adopted = false;
+    }
 
     public MapIntent Intent(int table) => _intent[table];
 
