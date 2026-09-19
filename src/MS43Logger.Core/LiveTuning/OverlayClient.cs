@@ -19,9 +19,16 @@ public sealed class OverlayClient(IDs2Line line)
     private readonly IDs2Line _line = line ?? throw new ArgumentNullException(nameof(line));
     private IReadOnlyList<byte[]>? _flash;
     private OverlayV3Client? _v3;
+    private OverlayV4Client? _v4;
     private int _version;
     private int _minor;
     private IReadOnlyList<OverlayMap> _maps = OverlayContract.Maps;
+
+    public OverlayReason? SendLimiter(LimiterSettings settings)
+    {
+        RequireSupported();
+        return (_v4 ?? throw new InvalidOperationException("Limiter editing requires overlay 4, 5 or 6.")).SendLimiter(settings);
+    }
 
     private void RequireSupported()
     {
