@@ -5,7 +5,39 @@ namespace MS43Logger.Core.LiveTuning;
 internal sealed class OverlayV4Client(IDs2Line line, int version = 4)
 {
     private uint _session, _revision;
+    private readonly byte[]?[] _copies = new byte[(version >= 5 ? OverlayV5.Catalogue(version) : OverlayV4.Maps).Count][];
     private long? _lastPatchEnded;
+
+    public OverlayStatus Status()
+    {
+        var status = version is 5 or 6 or 7 or 8 or 9 or 10 ? OverlayV5.ReadStatus(line, version) : OverlayV4.ParseStatus(line.Request(OverlayContract.Status()));
+        if (status.Session == 0 && status.Tables.All(t => t.State == OverlayState.Free))
+        {
+            _session = 0; Array.Clear(_copies);
+        }
+        if (_session != 0 && status.Session != _session) throw new InvalidDataException("The ECU's live session changed. Reconnect before editing.");
+        _revision = status.Revision; return status;
+    }
+
+    public OverlayReason? Run(byte[] command)
+    {
+        EnsureSession();
+        if (_revision == uint.MaxValue) throw new InvalidOperationException("Live revision exhausted; reconnect before editing.");
+        var session = _session; var revision = _revision;
+        var packet = OverlayV3.Mutation(command, session, revision);
+        try { return Accept(OverlayV3.Response(line.Request(packet))); }
+        catch (Exception error) when (error is TimeoutException or InvalidDataException)
+        {
+            // A missing reply can mean either a lost request or a completed command. Read the
+            // revision and the command's result before deciding whether it is safe to repeat.
+            var status = Status();
+            if (status.Session != session) throw new InvalidDataException("The ECU's live session changed during the command.");
+            if (status.Revision == revision)
+                return Accept(OverlayV3.Response(line.Request(packet)));
+            if (status.Revision == revision + 1 && HasResult(command, status)) return null;
+            throw new InvalidDataException("The interrupted live command could not be confirmed. Reconnect to read the ECU's state.");
+        }
+    }
 
     private bool HasResult(byte[] command, OverlayStatus status)
     {
@@ -25,6 +57,54 @@ internal sealed class OverlayV4Client(IDs2Line line, int version = 4)
             8 => status.Tables.All(e => e.State == OverlayState.Free) && status.Limiter is not { Confirmed: true },
             _ => false,
         };
+    }
+
+    public SendResult Send(int table, byte[] desired, byte[] flash, OverlayStatus status)
+    {
+        EnsureSession();
+        var entry = status.Tables[table];
+        if (entry.State == OverlayState.On)
+        {
+            var current = _copies[table];
+            if (current is null || OverlayContract.Crc32(current) != entry.ContentCrc32)
+            {
+                current = line.Read(OverlayV4.Physical(entry.Offset), desired.Length);
+                if (OverlayContract.Crc32(current) != entry.ContentCrc32) throw new InvalidDataException("The active map differs from its confirmed CRC.");
+            }
+            foreach (var at in OverlayV3.ChangedWindows(current, desired).ToArray())
+            {
+                var next = current.ToArray(); desired.AsSpan(at, 8).CopyTo(next.AsSpan(at));
+                try
+                {
+                    if (Patch(OverlayV4.Patch(table, at, _session, _revision, next.AsSpan(at, 8), version >= 5 ? OverlayV5.Catalogue(version) : OverlayV4.Maps)) is { } reason)
+                    {
+                        _copies[table] = null; return new(reason, null);
+                    }
+                }
+                catch { _copies[table] = null; throw; }
+                current = next; _copies[table] = current;
+            }
+            return new(null, null);
+        }
+        var placement = version is 5 or 6 or 7 or 8 or 9 or 10 ? OverlayV5.Place(table, status) : null;
+        var plannedOffset = version is 5 or 6 or 7 or 8 or 9 or 10 ? placement?.Offset : OverlayV4.Place(table, status);
+        if (plannedOffset is not { } offset) return new(OverlayReason.Overlap, CopyAreaPlanner.FreeFirst(table, status));
+        if (Run(version is 5 or 6 or 7 or 8 or 9 or 10 ? OverlayV5.Load(table, placement!) : OverlayContract.Load(table, offset)) is { } load) return new(load, null);
+        // The firmware takes an inactive write to a settings group only as the whole group (V6 and later).
+        var wholeGroup = version >= 6 && OverlayV5.Catalogue(version)[table].ScalarGroup is not null;
+        if (wholeGroup && Run(OverlayContract.Write(table, 0, desired)) is { } group) return new(group, null);
+        for (var at = 0; !wholeGroup && at < desired.Length;)
+        {
+            if (desired[at] == flash[at]) { at++; continue; }
+            var end = at;
+            while (end < desired.Length && desired[end] != flash[end] && end - at < OverlayV3.MostWrite) end++;
+            if (Run(OverlayContract.Write(table, at, desired.AsSpan(at, end - at))) is { } write) return new(write, null);
+            at = end;
+        }
+        if (!line.Read(OverlayV4.Physical(offset), desired.Length).AsSpan().SequenceEqual(desired)) return new(OverlayReason.Integrity, null);
+        var on = Run(OverlayContract.On(table, OverlayContract.Crc32(desired)));
+        if (on is null) _copies[table] = desired.ToArray();
+        return new(on, null);
     }
 
     public OverlayReason? SendLimiter(LimiterSettings settings)

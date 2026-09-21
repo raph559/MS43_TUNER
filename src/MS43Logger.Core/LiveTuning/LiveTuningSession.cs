@@ -85,6 +85,120 @@ public sealed class LiveTuningSession(IDs2Line line)
         return Detection = detection;
     }, fatalOnly: false);
 
+    /// <summary>Puts <paramref name="copy"/> live (spec 5.2); on success the map's intent is Live.</summary>
+    public Task<SendResult> SendAsync(int table, byte[] copy)
+    {
+        var snapshot = (byte[])copy.Clone();
+        return Run(() =>
+        {
+            // A fresh status: the last one can be a second old, from before a key cycle emptied the ECU.
+            SendResult result;
+            try
+            {
+                result = _client.Send(table, snapshot, Flash(table), _client.Status());
+            }
+            catch (Exception error) when (Detection?.Header?.Version is 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10
+                && error is TimeoutException or InvalidDataException)
+            {
+                Problem = "The update was interrupted. Completed groups remain applied; reconnecting will read back the active map.";
+                throw;
+            }
+            if (result is { Refused: null, FreeFirst: null })
+            {
+                _sent[table] = snapshot;
+                _intent[table] = MapIntent.Live;
+            }
+            else
+            {
+                Problem = Describe(table, result);
+            }
+
+            Publish(_client.Status());
+            return result;
+        }, fatalOnly: true);
+    }
+
+    /// <summary>The per-map switch: on with the complete copy's CRC, or off.</summary>
+    public Task<OverlayReason?> SetOnAsync(int table, bool on) => Command(() =>
+    {
+        var refused = on ? _client.On(table, Crc(table)) : _client.Off(table);
+        if (refused is null && _intent[table] != MapIntent.None)
+        {
+            _intent[table] = on ? MapIntent.Live : MapIntent.SentOff;
+        }
+
+        return refused;
+    });
+
+    /// <summary>The big A/B switch: every map sent goes on (all on), or off (all off).</summary>
+    public Task<OverlayReason?> SetAllAsync(bool on) => Command(() =>
+    {
+        var refused = on ? _client.AllOn() : _client.AllOff();
+        if (refused is null)
+        {
+            for (var table = 0; table < _intent.Length; table++)
+            {
+                if (_intent[table] != MapIntent.None)
+                {
+                    _intent[table] = on ? MapIntent.Live : MapIntent.SentOff;
+                }
+            }
+            if (_limiterIntent is not null) _limiterIntent = _limiterIntent with { Enabled = on };
+        }
+
+        return refused;
+    });
+
+    /// <summary>Every map back to Free in the ECU; nothing is put back after it.</summary>
+    public Task<OverlayReason?> RevertAsync() => Command(() =>
+    {
+        var refused = _client.Revert();
+        if (refused is null)
+        {
+            Array.Fill(_intent, MapIntent.None);
+            Array.Fill(_sent, null);
+            _limiterIntent = null;
+        }
+
+        return refused;
+    });
+
+    public Task<OverlayReason?> FreeAsync(int table) => Command(() =>
+    {
+        var refused = _client.Free(table);
+        if (refused is null)
+        {
+            _intent[table] = MapIntent.None;
+            _sent[table] = null;
+        }
+
+        return refused;
+    });
+
+    public Task<OverlayReason?> SendLimiterAsync(LimiterSettings settings)
+    {
+        var snapshot = settings with { GearLimits = settings.GearLimits.ToArray() };
+        return Command(() =>
+        {
+            _client.Status();
+            var refused = _client.SendLimiter(snapshot);
+            if (refused is null) _limiterIntent = snapshot;
+            return refused;
+        });
+    }
+
+    private Task<OverlayReason?> Command(Func<OverlayReason?> command) => Run(() =>
+    {
+        var refused = command();
+        if (refused is { } reason)
+        {
+            Problem = $"The ECU refused: {reason}.";
+        }
+
+        Publish(_client.Status());
+        return refused;
+    }, fatalOnly: true);
+
     private void Adopt(OverlayStatus status)
     {
         if (_limiterIntent is null && status.Limiter is { Confirmed: true } limiter)
@@ -108,6 +222,74 @@ public sealed class LiveTuningSession(IDs2Line line)
             _intent[table] = entry.State == OverlayState.On ? MapIntent.Live : MapIntent.SentOff;
         }
     }
+
+    /// <summary>
+    /// With the engine running, every map the session sent is brought back to what was wanted: one that is Free (a key cycle
+    /// wiped it) or Loaded (a send refused or cut short) is sent again, and switched off again if it was off; a live map the
+    /// ECU switched off (a stall, a silence) goes back on; a map wanted off that is on (its off was lost) goes off. A refusal
+    /// drops the map's intent, so it is not tried every second.
+    /// </summary>
+    private OverlayStatus Restore(OverlayStatus status)
+    {
+        ReconcileV3(status);
+        if (!status.Running)
+        {
+            return status;
+        }
+
+        for (var table = 0; table < _intent.Length; table++)
+        {
+            if (_intent[table] == MapIntent.None || _sent[table] is not { } copy)
+            {
+                continue;
+            }
+
+            var state = status.Tables[table].State;
+            OverlayReason? refused = null;
+            if (state is OverlayState.Free or OverlayState.Loaded)
+            {
+                var result = _client.Send(table, copy, Flash(table), status);
+                refused = result.Refused ?? (result.FreeFirst is not null ? OverlayReason.Overlap : null);
+                if (refused is null && _intent[table] == MapIntent.SentOff)
+                {
+                    refused = _client.Off(table);
+                }
+            }
+            else if (state == OverlayState.Ready && _intent[table] == MapIntent.Live)
+            {
+                refused = _client.On(table, OverlayContract.Crc32(copy));
+            }
+            else if (state == OverlayState.On && _intent[table] == MapIntent.SentOff)
+            {
+                refused = _client.Off(table);
+            }
+            else
+            {
+                continue;
+            }
+
+            if (refused is { } reason)
+            {
+                Problem = $"{Maps[table].Key} could not be put back: {reason}.";
+                _intent[table] = MapIntent.None;
+            }
+
+            status = _client.Status();
+        }
+
+        if (_limiterIntent is { } wanted && status.Limiter is { } actual
+            && (!actual.Confirmed || !actual.Payload().AsSpan().SequenceEqual(wanted.Payload())))
+        {
+            var refused = _client.SendLimiter(wanted);
+            if (refused is not null) { Problem = $"Limiter settings could not be restored: {refused}."; _limiterIntent = null; }
+            status = _client.Status();
+        }
+        return status;
+    }
+
+    private uint Crc(int table) => _sent[table] is { } copy
+        ? OverlayContract.Crc32(copy)
+        : (Last ?? _client.Status()).Tables[table].ContentCrc32;
 
     private byte[] Flash(int table) => Detection?.Flash is { } flash
         ? flash[table]

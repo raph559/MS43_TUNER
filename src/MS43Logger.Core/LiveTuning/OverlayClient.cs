@@ -72,6 +72,101 @@ public sealed class OverlayClient(IDs2Line line)
         return new OverlayDetection(header, _flash.Select(bytes => (byte[])bytes.Clone()).ToArray(), null, _maps, limiter);
     }
 
+    public OverlayStatus Status()
+    {
+        RequireSupported();
+        return _v4?.Status() ?? _v3?.Status() ?? OverlayContract.ParseStatus(_line.Request(OverlayContract.Status()));
+    }
+
+    /// <summary>
+    /// Puts <paramref name="copy"/> live. Protocol 3 patches an active copy in checked eight-cell groups. Protocol 2
+    /// switches it off, loads and writes the copy, verifies readback and activates it with its CRC, retrying a mismatch
+    /// once. Protocol 2's bounded-edit policy remains in force only for that version.
+    /// </summary>
+    public SendResult Send(int table, byte[] copy, byte[] flash, OverlayStatus current)
+    {
+        RequireSupported();
+        if (table < 0 || table >= _maps.Count || copy.Length != _maps[table].Bytes
+            || !_flash![table].AsSpan().SequenceEqual(flash) || current.Version != _version)
+        {
+            throw new ArgumentException("The table, flashed baseline, size or overlay version is invalid.");
+        }
+
+        if (_version is 6 or 7 or 8 or 9 or 10 && OverlayV9.ValidateFor(_version, table, copy, flash, _minor) is { } invalid)
+            return new SendResult(invalid, null);
+
+        copy = (byte[])copy.Clone();
+        flash = (byte[])flash.Clone();
+        if (_v4 is not null) return _v4.Send(table, copy, flash, current);
+        if (_v3 is not null) return _v3.Send(table, copy, flash, current);
+        if (OverlayContract.LeanerCells(table, copy, flash).Count > 0)
+        {
+            return new SendResult(OverlayReason.Leaner, null);
+        }
+
+        if (OverlayContract.EditLimitCells(table, copy, flash).Count > 0)
+        {
+            return new SendResult(OverlayReason.EditLimit, null);
+        }
+
+        if (current.Tables[table].State == OverlayState.On && Off(table) is { } off)
+        {
+            return new SendResult(off, null);
+        }
+
+        if (CopyAreaPlanner.Place(table, current) is not { } offset)
+        {
+            return new SendResult(null, CopyAreaPlanner.FreeFirst(table, current));
+        }
+
+        var crc = OverlayContract.Crc32(copy);
+        for (var attempt = 0; ; attempt++)
+        {
+            if (Run(OverlayContract.Load(table, offset)) is { } load)
+            {
+                return new SendResult(load, null);
+            }
+
+            foreach (var write in OverlayContract.Writes(table, copy, flash))
+            {
+                if (Run(write) is { } refused)
+                {
+                    return new SendResult(refused, null);
+                }
+            }
+
+            if (!ReadCopy(table, new OverlayEntry(OverlayState.Loaded, offset, 0)).AsSpan().SequenceEqual(copy))
+            {
+                if (attempt == 0)
+                {
+                    continue;
+                }
+
+                return new SendResult(OverlayReason.Integrity, null);
+            }
+
+            var on = On(table, crc);
+            if (on == OverlayReason.Integrity && attempt == 0)
+            {
+                continue;
+            }
+
+            return new SendResult(on, null);
+        }
+    }
+
+    public OverlayReason? On(int table, uint crc) => Run(OverlayContract.On(table, crc));
+
+    public OverlayReason? Off(int table) => Run(OverlayContract.Off(table));
+
+    public OverlayReason? AllOn() => Run(OverlayContract.AllOn());
+
+    public OverlayReason? AllOff() => Run(OverlayContract.AllOff());
+
+    public OverlayReason? Free(int table) => Run(OverlayContract.Free(table));
+
+    public OverlayReason? Revert() => Run(OverlayContract.Revert());
+
     /// <summary>The bytes of a map's copy in the ECU, read back with DS2 command 06.</summary>
     public byte[] ReadCopy(int table, OverlayEntry entry)
     {
@@ -95,6 +190,12 @@ public sealed class OverlayClient(IDs2Line line)
         }
 
         return _line.Read(OverlayContract.CopyRamAddress + entry.Offset, OverlayContract.Maps[table].Bytes);
+    }
+
+    private OverlayReason? Run(byte[] payload)
+    {
+        RequireSupported();
+        return _v4 is not null ? _v4.Run(payload) : _v3 is not null ? _v3.Run(payload) : OverlayContract.Refusal(_line.Request(payload));
     }
 
     public OverlayReason? SendLimiter(LimiterSettings settings)
