@@ -3,14 +3,14 @@ using MS43Logger.Core.Tuning;
 
 namespace MS43Logger.Core.Performance;
 
-/// <summary>One figure of both runs; <see cref="Delta"/> is B − A, null when either is missing or they are not the same quantity.</summary>
+/// <summary>One figure of both runs; <see cref="Delta"/> is A − B (with the newer run as A, what the change did), null when either is missing or they are not the same quantity.</summary>
 public sealed record FigureDelta(string Key, string Label, double? A, double? B, double? Delta, string Unit, int Decimals);
 
 /// <summary>What differs between the runs besides the tune: "test", "gear", "intake", "pressure" or "coolant".</summary>
 public sealed record Mismatch(string Code, string Message);
 
 /// <summary>
-/// Two results recomputed with the same inputs (performance spec 9.2). <see cref="SharedFrom"/> and <see cref="SharedTo"/> are
+/// Two results recomputed with the same inputs. <see cref="SharedFrom"/> and <see cref="SharedTo"/> are
 /// the rpm band (km/h for roll-ons) both runs share, null when they share none. <see cref="TableDifferences"/> are the XDF items
 /// that differ between the two calibration snapshots. <see cref="Recomputed"/> says the stored figures differ from the ones
 /// recomputed now; <see cref="DefinitionChanged"/> says a run is decoded with another logging definition than it was saved
@@ -38,7 +38,7 @@ public static class PerfCompare
     private static readonly Dictionary<string, AdxDefinition> Definitions = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Recomputes both from their samples with <paramref name="current"/> (spec 9.2), so other car values or another speed
+    /// Recomputes both from their samples with <paramref name="current"/>, so other car values or another speed
     /// calibration never show up as a tune gain, over the band both runs share: a pull or roll-on is cut at the shared end, so
     /// nothing above it counts. <paramref name="xdf"/> reads the tables that differ between the snapshots when it is the XDF
     /// the runs were saved with (none without it);
@@ -65,7 +65,7 @@ public static class PerfCompare
 
     /// <summary>
     /// The result's figures recomputed from its samples with <paramref name="inputs"/> over its own band, the flags only the run
-    /// could see carried over: what it reads with these car values and this speed calibration (spec 9.2). Throws
+    /// could see carried over: what it reads with these car values and this speed calibration. Throws
     /// <see cref="InvalidDataException"/> when it cannot be decoded again.
     /// </summary>
     public static RunFigures Recompute(PerfResult result, AnalysisInputs inputs)
@@ -111,7 +111,7 @@ public static class PerfCompare
 
     /// <summary>
     /// Sample standard deviation of <paramref name="figureKey"/> as stored, over the results that share the first one's test,
-    /// band, gear and saved-image SHA-256 and are not cold (spec 9.2); null under three.
+    /// band, gear and saved-image SHA-256 and are not cold; null under three.
     /// </summary>
     public static double? Noise(IReadOnlyList<PerfResult> results, string figureKey)
     {
@@ -236,7 +236,7 @@ public static class PerfCompare
         {
             var figureB = b.Figures.FirstOrDefault(f => f.Key == figureA.Key);
             var delta = figureA.Value is { } x && figureB?.Value is { } y && figureA.Label == figureB.Label && figureA.Key != "knock-cyl"
-                ? y - x
+                ? x - y
                 : (double?)null;
             deltas.Add(new FigureDelta(figureA.Key, figureA.Label, figureA.Value, figureB?.Value, delta, figureA.Unit, figureA.Decimals));
         }
@@ -247,8 +247,8 @@ public static class PerfCompare
         return deltas;
     }
 
-    // Two tests or two gears, then the conditions each run started with (spec 7); a missing reading is no mismatch. They are
-    // named, not refused: the owner may mean to compare them.
+    // Two tests or two gears, then the conditions each run started with; a missing reading is no mismatch. They are
+    // named, not refused: the user may mean to compare them.
     private static IReadOnlyList<Mismatch> Mismatches(PerfResult a, PerfResult b)
     {
         var mismatches = new List<Mismatch>();
@@ -315,6 +315,7 @@ public static class PerfCompare
 
         try
         {
+            // A − B, as in Compare: with the newer run as A it is what the change did.
             return (BinComparer.Compare(xdf, TuneIdentity.Restore(snapshotA), TuneIdentity.Restore(snapshotB)).Items, null);
         }
         catch (InvalidDataException)
@@ -324,7 +325,7 @@ public static class PerfCompare
         }
     }
 
-    // The definition the payloads decode with now is not the one the result was saved with (spec 8: its file and SHA-256).
+    // The definition the payloads decode with now is not the one the result was saved with (its file and SHA-256).
     private static bool DefinitionChanged(PerfResult result)
     {
         try
@@ -338,7 +339,7 @@ public static class PerfCompare
         }
     }
 
-    // The spread over the shared band of A's test on the same tune, recomputed as A and B are (spec 9.2).
+    // The spread over the shared band of A's test on the same tune, recomputed as A and B are.
     private static double? SameTuneNoise(PerfResult a, IReadOnlyList<PerfResult> sameTune, double? from, double? to, AnalysisInputs current)
     {
         var key = HeadlineKeys(a.Spec.Kind).FirstOrDefault();
@@ -378,7 +379,7 @@ public static class PerfCompare
     private static bool SameTune(PerfResult a, PerfResult b) =>
         a.Tune?.SavedSha256 is { Length: > 0 } hash && string.Equals(hash, b.Tune?.SavedSha256, StringComparison.OrdinalIgnoreCase);
 
-    // Cold runs are not comparable (spec 5).
+    // Cold runs are not comparable.
     private static bool Cold(PerfResult result) => result.Figures.Flags.Any(flag => flag.Severity == FlagSeverity.Cold);
 
     private static double? Value(RunFigures figures, string key) => figures.Figures.FirstOrDefault(f => f.Key == key)?.Value;

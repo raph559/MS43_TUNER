@@ -17,7 +17,7 @@ public sealed record AxisDifference(string Direction, AxisValues A, AxisValues B
         axis.Labels.Count == 0 ? "nothing" : $"{axis.Labels[0]} to {axis.Labels[^1]}";
 }
 
-/// <summary>How a difference is read: in the map's units, in stored counts, or as a percentage of A.</summary>
+/// <summary>How a difference is read: in the map's units, in stored counts, or as a percentage of B.</summary>
 public enum DeltaMode
 {
     Units,
@@ -25,7 +25,10 @@ public enum DeltaMode
     Percent,
 }
 
-/// <summary>One table in A and B; <see cref="Delta"/> holds B − A in raw and physical units on A's axes.</summary>
+/// <summary>
+/// One table in A and B; <see cref="Delta"/> holds A − B in raw and physical units on A's axes: how far A (the bin tuned)
+/// is from B (the one compared with).
+/// </summary>
 public sealed record TableComparison(
     TableValues A,
     TableValues B,
@@ -34,7 +37,7 @@ public sealed record TableComparison(
     IReadOnlyList<AxisDifference> Axes,
     double? LargestChange);
 
-/// <summary>An XDF item whose bytes differ. <see cref="LargestChange"/> is the signed B − A with the largest magnitude.</summary>
+/// <summary>An XDF item whose bytes differ. <see cref="LargestChange"/> is the signed A − B with the largest magnitude.</summary>
 public sealed record ItemDifference(
     XdfItem Item,
     ItemKind Kind,
@@ -151,8 +154,8 @@ public static class BinComparer
         {
             for (var c = 0; c < a.Cols; c++)
             {
-                raw[r, c] = b.Raw[r, c] - a.Raw[r, c];
-                physical[r, c] = b.Physical[r, c] - a.Physical[r, c];
+                raw[r, c] = a.Raw[r, c] - b.Raw[r, c];
+                physical[r, c] = a.Physical[r, c] - b.Physical[r, c];
                 if (raw[r, c] != 0)
                 {
                     changed.Add((r, c));
@@ -179,12 +182,12 @@ public static class BinComparer
     }
 
     /// <summary>
-    /// Signed text for one B − A value: "+1.50", "-0.38" (ASCII minus: Bahnschrift has no U+2212), and no change as
+    /// Signed text for one A − B value: "+1.50", "-0.38" (ASCII minus: Bahnschrift has no U+2212), and no change as
     /// the item's own zero ("0.00"). Hex and ASCII items show raw counts.
     /// </summary>
     /// <summary>
-    /// B − A of a table read as <paramref name="mode"/>: in the map's units (<see cref="TableComparison.Delta"/> itself), in
-    /// stored counts, or as a percentage of A. The raw differences stay in <see cref="TableValues.Raw"/> either way.
+    /// A − B of a table read as <paramref name="mode"/>: in the map's units (<see cref="TableComparison.Delta"/> itself), in
+    /// stored counts, or as a percentage of B. The raw differences stay in <see cref="TableValues.Raw"/> either way.
     /// </summary>
     public static TableValues Difference(TableComparison table, DeltaMode mode)
     {
@@ -211,8 +214,8 @@ public static class BinComparer
         return delta with { Physical = physical };
     }
 
-    /// <summary>B − A as a percentage of A's size; 0 when both are 0, and undefined (NaN) when only A is.</summary>
-    public static double PercentOf(double a, double b) => a == 0 ? (b == 0 ? 0 : double.NaN) : (b - a) / Math.Abs(a) * 100;
+    /// <summary>A − B as a percentage of B's size (how much more or less A has); 0 when both are 0, undefined (NaN) when only B is.</summary>
+    public static double PercentOf(double a, double b) => b == 0 ? (a == 0 ? 0 : double.NaN) : (a - b) / Math.Abs(b) * 100;
 
     /// <summary>A difference as <paramref name="mode"/> prints it: "+2.0", "+4" (counts), "+40.0 %".</summary>
     public static string FormatDelta(double delta, long rawDelta, XdfZ z, DeltaMode mode)

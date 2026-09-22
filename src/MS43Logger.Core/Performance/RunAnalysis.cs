@@ -3,9 +3,9 @@ using System.Globalization;
 namespace MS43Logger.Core.Performance;
 
 /// <summary>
-/// Turns the frames of a run into its figures, traces and flags (performance spec 6, 7). A figure the run did not reach is
+/// Turns the frames of a run into its figures, traces and flags. A figure the run did not reach is
 /// null, a figure outside the band is left out, and a channel the definition lacks gives null figures and no trace, never
-/// zeros (spec 4.3b).
+/// zeros.
 /// </summary>
 public static class RunAnalysis
 {
@@ -19,7 +19,7 @@ public static class RunAnalysis
     private const double SlipFromKmh = 30;
     // VS lags N a little under hard acceleration; a run of samples, not one, is slip.
     private const int SlipSamples = 3;
-    // Full throttle is the pedal at 90 % of its calibrated full value (spec 4.4). A throttle body under 30 % of the pedal's
+    // Full throttle is the pedal at 90 % of its calibrated full value. A throttle body under 30 % of the pedal's
     // degrees for three samples in a row is held back, not catching up: a limp-home throttle sits near 10°, while at low rpm
     // the DME may open it only part way under a floored pedal, so the margin is wide.
     private const double FlooredShare = 90;
@@ -31,7 +31,7 @@ public static class RunAnalysis
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
     /// <summary>
-    /// Pure: the same window and inputs always give the same figures (spec 9: Compare recomputes with it). The window is a
+    /// Pure: the same window and inputs always give the same figures (Compare recomputes with it). The window is a
     /// run's frames as it keeps them, from before its start to its end: the start is found in them (the last upward crossing
     /// of the start rpm or speed, the last stop before a standing start), so the frames kept before it change nothing.
     /// <paramref name="complete"/> false adds the flag "incomplete".
@@ -73,7 +73,7 @@ public static class RunAnalysis
     internal static string Whole(double value) => value.ToString("0", Invariant);
 
     /// <summary>
-    /// True speed per km/h the speedometer reads: the GPS correction of the speed calibration (spec 6.5), the median over the
+    /// True speed per km/h the speedometer reads: the GPS correction of the speed calibration, the median over the
     /// gears whose corrected ratio differs from the speedometer's own; 1 when no gear was GPS-checked.
     /// </summary>
     internal static double SpeedFactor(AnalysisInputs inputs)
@@ -91,7 +91,7 @@ public static class RunAnalysis
         return factor > 0 && double.IsFinite(factor) ? factor : 1;
     }
 
-    /// <summary>What a roll-on times (spec 4.5, 6.3): speed from rpm with the gear's calibration, else VS with any GPS correction.</summary>
+    /// <summary>What a roll-on times: speed from rpm with the gear's calibration, else VS with any GPS correction.</summary>
     internal static Func<PerfFrame, double?> RollOnSpeed(int? gear, AnalysisInputs inputs)
     {
         ArgumentNullException.ThrowIfNull(inputs);
@@ -130,8 +130,8 @@ public static class RunAnalysis
                 }
             }
 
-            // Power from the rpm slope in this gear (spec 7); the band starts at the crossing, the slope may use the sample before.
-            // The run's own ratio reads VS, so a GPS check corrects it as it does the calibration (spec 6.5).
+            // Power from the rpm slope in this gear; the band starts at the crossing, the slope may use the sample before.
+            // The run's own ratio reads VS, so a GPS check corrects it as it does the calibration.
             var calibrated = Calibrated(spec.Gear, inputs);
             var ratio = calibrated ?? RunRatio(spec.Gear, frames) * SpeedFactor(inputs);
             if (calibrated is null)
@@ -156,7 +156,7 @@ public static class RunAnalysis
             var (peakTorque, peakTorqueRpm) = Peak(torqueBins);
             figures.Add(Fig("peak-power", "Peak power, wheels (estimate)", peakPower, "kW", 0));
             figures.Add(Fig("peak-power-rpm", "Peak power at", peakPowerRpm, "rpm", 0));
-            figures.Add(Fig("peak-torque", "Peak torque, wheels (estimate)", peakTorque, "Nm", 0));
+            figures.Add(Fig("peak-torque", "Peak torque, crank, from wheel power (estimate)", peakTorque, "Nm", 0));
             figures.Add(Fig("peak-torque-rpm", "Peak torque at", peakTorqueRpm, "rpm", 0));
             figures.Add(Fig("knock-max", "Most knock retard", knock.Max, "°CRK", 1));
             figures.Add(Fig("knock-cyl", "Knock on cylinder", knock.Cylinder, "", 0));
@@ -164,7 +164,7 @@ public static class RunAnalysis
             figures.Add(Fig("iat-end", "Intake air at the end", band.LastOrDefault()?.IntakeC, "°C", 0));
 
             AddTrace(traces, "power", "Power, wheels (estimate)", "kW", powerBins);
-            AddTrace(traces, "torque", "Torque, wheels (estimate)", "Nm", torqueBins);
+            AddTrace(traces, "torque", "Torque, crank, from wheel power (estimate)", "Nm", torqueBins);
             AddTrace(traces, "ignition", "Ignition", "°CRK", RunMath.Bin(bandRpm, Values(band, IgnitionOf), start, end, BinWidth));
             AddTrace(traces, "knock", "Knock retard", "°CRK", RunMath.Bin(bandRpm, knock.Worst, start, end, BinWidth, max: true));
             AddTrace(traces, "knock-cyl", "Knock on cylinder", "", WorstCylinder(bandRpm, knock, start, end));
@@ -190,7 +190,7 @@ public static class RunAnalysis
                 figures.Add(Fig($"knock-max-{c + 1}", $"Cylinder {c + 1}", knock.PerCylinder[c], "°CRK", 1));
             }
 
-            // A rising RON adaptation means the DME is learning poor fuel or knock (spec 6.2).
+            // A rising RON adaptation means the DME is learning poor fuel or knock.
             figures.Add(Fig("ron-start", "RON adaptation at the start", band.FirstOrDefault()?.RonAdaptation, "", 2));
             figures.Add(Fig("ron-end", "RON adaptation at the end", band.LastOrDefault()?.RonAdaptation, "", 2));
 
@@ -227,7 +227,7 @@ public static class RunAnalysis
         var end = spec.EndKmh ?? double.NaN;
         var flags = new List<RunFlag>();
         // Speed from rpm with the calibration, else VS itself with any GPS correction: the measure the run started and ended
-        // on (spec 6.3).
+        // on.
         var ratio = Calibrated(spec.Gear, inputs);
         if (ratio is null)
         {
@@ -279,7 +279,7 @@ public static class RunAnalysis
 
     private static RunFigures Standing(IReadOnlyList<PerfFrame> frames, AnalysisInputs inputs, bool complete)
     {
-        // True speed: VS with any GPS correction of the speed calibration (spec 6.5).
+        // True speed: VS with any GPS correction of the speed calibration.
         var factor = SpeedFactor(inputs);
         double? Speed(PerfFrame f) => f.SpeedKmh * factor;
         var t = Times(frames);
@@ -289,7 +289,7 @@ public static class RunAnalysis
         var from = Math.Max(stop, 0);
         var tA = t[from..];
         var vA = v[from..];
-        // Time zero is back-extrapolated over 3 to 20 km/h (spec 6.4).
+        // Time zero is back-extrapolated over 3 to 20 km/h.
         var t0 = RunMath.BackExtrapolatedStart(tA, vA);
         double? Cross(double level) => RunMath.CrossingTime(tA, vA, level);
         double? FromZero(double level) => t0 is { } zero && Cross(level) is { } c ? c - zero : null;
@@ -311,7 +311,7 @@ public static class RunAnalysis
         Reached("t-50-100", "50 to 100 km/h", Between(50, 100));
         figures.Add(Fig("launch-rpm", "Launch", frames.Count > 0 ? frames[from].Rpm : null, "rpm", 0));
 
-        // Each clutch press after time zero is a shift, timed from press to release (spec 6.4).
+        // Each clutch press after time zero is a shift, timed from press to release.
         var origin = t0 ?? (tA.Length > 0 ? tA[0] : double.NaN);
         var shift = 0;
         bool? previous = null;
@@ -381,7 +381,7 @@ public static class RunAnalysis
             p95 = intervals[Math.Clamp((int)Math.Ceiling(0.95 * intervals.Length) - 1, 0, intervals.Length - 1)];
             longest = intervals[^1];
             var span = t[^1] - t[0];
-            // Samples per second from the median interval (spec 6.6); the mean when bursts make the median zero.
+            // Samples per second from the median interval; the mean when bursts make the median zero.
             rate = median > 0 ? 1 / median : span > 0 ? (t.Length - 1) / span : null;
         }
 
@@ -393,7 +393,7 @@ public static class RunAnalysis
             Fig("interval-p95", "95th percentile interval", p95 * 1000, "ms", 0),
             Fig("interval-max", "Longest interval", longest * 1000, "ms", 0),
             Fig("gaps", "Gaps over 300 ms", intervals.Length > 0 ? intervals.Count(d => d > GapSeconds) : null, "", 0),
-            // Requests sent again after a timeout (spec 6.6); unknown when the source does not count them.
+            // Requests sent again after a timeout; unknown when the source does not count them.
             Fig("retries", "Retries", frames.Any(f => f.Retries is not null) ? frames.Sum(f => f.Retries ?? 0) : null, "", 0),
         };
 
@@ -433,8 +433,8 @@ public static class RunAnalysis
         }
     }
 
-    // A gap over 300 ms, or under 10 samples/s, can hide a knock event between samples (spec 11); samples at one instant or
-    // out of order (retry bursts, review focus 4) make the timing itself doubtful.
+    // A gap over 300 ms, or under 10 samples/s, can hide a knock event between samples; samples at one instant or
+    // out of order (retry bursts) make the timing itself doubtful.
     private static IEnumerable<RunFlag> LinkFlags(double[] t)
     {
         var times = t.Where(double.IsFinite).ToArray();
@@ -465,7 +465,7 @@ public static class RunAnalysis
         }
     }
 
-    // km/h per rpm in this gear from the speed calibration (spec 6.5); null without one.
+    // km/h per rpm in this gear from the speed calibration; null without one.
     private static double? Calibrated(int? gear, AnalysisInputs inputs) =>
         gear is { } g && inputs.KmhPerRpm.TryGetValue(g, out var ratio) && ratio > 0 && double.IsFinite(ratio) ? ratio : null;
 
@@ -476,7 +476,7 @@ public static class RunAnalysis
             ? ratio
             : Calibrated(gear, inputs);
 
-    // Without a calibration, the median VS/N of the run in this gear at 30 km/h or more (spec 4.5); null when it has none.
+    // Without a calibration, the median VS/N of the run in this gear at 30 km/h or more; null when it has none.
     private static double? RunRatio(int? gear, IReadOnlyList<PerfFrame> frames)
     {
         var median = RunMath.Median(frames
@@ -488,7 +488,7 @@ public static class RunAnalysis
     private static RunFlag Uncalibrated(int? gear, string consequence) =>
         new("uncalibrated", FlagSeverity.Info, $"No speed calibration for {(gear is { } g ? Ordinal(g) : "this")} gear: {consequence}.");
 
-    // Slip, wheelspin or a slipping clutch: VS more than 3 % away from the speedometer's calibrated ratio × N at 30 km/h or more (spec 4.5).
+    // Slip, wheelspin or a slipping clutch: VS more than 3 % away from the speedometer's calibrated ratio × N at 30 km/h or more.
     private static RunFlag? Slip(IReadOnlyList<PerfFrame> frames, Func<PerfFrame, double?> ratio)
     {
         var run = 0;
@@ -521,7 +521,7 @@ public static class RunAnalysis
             : null;
     }
 
-    // DSC acting on the engine torque, with the speeds (or the engine speeds, in 50 rpm steps as for knock) it acted at (spec 6.4).
+    // DSC acting on the engine torque, with the speeds (or the engine speeds, in 50 rpm steps as for knock) it acted at.
     private static RunFlag? Dsc(IReadOnlyList<PerfFrame> frames, Func<PerfFrame, double?> measure, string unit)
     {
         var acting = frames.Where(f => f.TorqueIntervention == true).ToArray();
@@ -544,7 +544,7 @@ public static class RunAnalysis
     }
 
     /// <summary>
-    /// What held the engine back at full throttle (spec 4.4): the throttle body far behind a floored pedal (limp-home or a
+    /// What held the engine back at full throttle: the throttle body far behind a floored pedal (limp-home or a
     /// torque cut), the malfunction light, DSC on the engine torque.
     /// </summary>
     private static IEnumerable<RunFlag> Limits(IReadOnlyList<PerfFrame> frames, AnalysisInputs inputs, Func<PerfFrame, double?> measure, string unit)
@@ -596,7 +596,7 @@ public static class RunAnalysis
             : null;
     }
 
-    // The cylinder of the worst retard in each rpm bin where a cylinder pulled timing (spec 6.1: worst knock and which cylinder).
+    // The cylinder of the worst retard in each rpm bin where a cylinder pulled timing (worst knock and which cylinder).
     private static IReadOnlyList<(double Rpm, double Value)> WorstCylinder(double[] rpm, KnockSummary knock, double from, double to)
     {
         if (!double.IsFinite(from) || !double.IsFinite(to) || to < from)

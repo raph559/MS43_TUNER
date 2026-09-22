@@ -82,7 +82,7 @@ public sealed class CalibrationDocument
     /// Writes the working image to <paramref name="path"/> (default: the open file). The first time an existing file is
     /// overwritten in this session its previous bytes go to <c>&lt;file&gt;.bak</c>. The image is written to a temporary
     /// file and moved into place, so a failure leaves the target as it was. Changed items are appended to the edit log.
-    /// <paramref name="options"/> can turn the .bak and the edit log off. A log that cannot be written throws
+    /// <paramref name="options"/> can turn the.bak and the edit log off. A log that cannot be written throws
     /// <see cref="EditLogException"/> after the save has completed and <see cref="Changed"/> has been raised.
     /// </summary>
     public void Save(string? path = null, DateTime? now = null, SaveOptions? options = null)
@@ -95,10 +95,18 @@ public sealed class CalibrationDocument
         var temp = target + ".tmp";
         try
         {
-            File.WriteAllBytes(temp, Image.ToArray());
-            if (options.KeepBackup && File.Exists(target) && MarkBackedUp(target))
+            // The new bytes reach the disk before the move, so a power cut just after it cannot leave a short bin.
+            using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                stream.Write(Image.ToArray());
+                stream.Flush(flushToDisk: true);
+            }
+
+            // The file counts as backed up only once its.bak is written: a failed copy is tried again on the next save.
+            if (options.KeepBackup && File.Exists(target) && !IsBackedUp(target))
             {
                 File.Copy(target, target + ".bak", overwrite: true);
+                MarkBackedUp(target);
                 BackupWritten = true;
             }
 
@@ -135,14 +143,22 @@ public sealed class CalibrationDocument
         }
     }
 
-    // Files already backed up while this app runs: reopening a file must not replace the .bak of its original bytes.
+    // Files already backed up while this app runs: reopening a file must not replace the.bak of its original bytes.
     private static readonly HashSet<string> BackedUpThisRun = new(StringComparer.OrdinalIgnoreCase);
 
-    private static bool MarkBackedUp(string path)
+    private static bool IsBackedUp(string path)
     {
         lock (BackedUpThisRun)
         {
-            return BackedUpThisRun.Add(path);
+            return BackedUpThisRun.Contains(path);
+        }
+    }
+
+    private static void MarkBackedUp(string path)
+    {
+        lock (BackedUpThisRun)
+        {
+            BackedUpThisRun.Add(path);
         }
     }
 
