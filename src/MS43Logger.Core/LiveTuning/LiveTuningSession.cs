@@ -85,6 +85,43 @@ public sealed class LiveTuningSession(IDs2Line line)
         return Detection = detection;
     }, fatalOnly: false);
 
+    /// <summary>One keep-alive: a status, then the first time the adoption, then whatever needs putting back.</summary>
+    public async Task TickAsync()
+    {
+        if (IsStopped || Detection is not { Problem: null })
+        {
+            return;
+        }
+
+        try
+        {
+            await Run(() =>
+            {
+                var status = _client.Status();
+                if (!_adopted)
+                {
+                    Adopt(status);
+                    _adopted = true;
+                }
+
+                Publish(Restore(status));
+                return 0;
+            }, fatalOnly: true);
+        }
+        catch (TimeoutException)
+        {
+            // The link may be reconnecting: the next tick tries again.
+        }
+        catch (InvalidDataException)
+        {
+            // A frame that was not the overlay's reply (late, or garbled past its xor): the next tick asks again.
+        }
+        catch (Exception) when (IsStopped)
+        {
+            // Reported through Stopped and Problem.
+        }
+    }
+
     /// <summary>Puts <paramref name="copy"/> live (spec 5.2); on success the map's intent is Live.</summary>
     public Task<SendResult> SendAsync(int table, byte[] copy)
     {
