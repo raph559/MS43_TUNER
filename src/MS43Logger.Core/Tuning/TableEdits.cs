@@ -60,6 +60,40 @@ public static class TableEdits
     public static EditPlan Scale(CalibrationDocument d, XdfTable t, CellRange r, double percent) =>
         Map(d, t, r, (v, _, _) => v * (1 + percent / 100));
 
+    /// <summary>Stores a raw count in every selected cell, for a grid shown in raw. A count the element cannot hold is refused.</summary>
+    public static EditPlan SetRaw(CalibrationDocument d, XdfTable t, CellRange r, long raw) => MapRaw(d, t, r, _ => raw);
+
+    /// <summary>Adds a raw count to every selected cell, for a grid shown in raw. A result the element cannot hold is refused.</summary>
+    public static EditPlan AddRaw(CalibrationDocument d, XdfTable t, CellRange r, long delta) => MapRaw(d, t, r, old => old + delta);
+
+    private static EditPlan MapRaw(CalibrationDocument d, XdfTable t, CellRange r, Func<long, long> target)
+    {
+        var values = Read(d, t);
+        if (r.Row0 < 0 || r.Col0 < 0 || r.Row1 >= values.Rows || r.Col1 >= values.Cols)
+        {
+            throw new EditRefusedException($"The selection lies outside '{t.Title}'.");
+        }
+
+        var (min, max) = RawRange(t.Z.Data);
+        var changes = new List<CellChange>();
+        ForEach(values, r, (row, col) =>
+        {
+            var old = values.Raw[row, col];
+            var raw = target(old);
+            if (raw < min || raw > max)
+            {
+                throw new EditRefusedException($"'{t.Title}' cannot hold the raw value {raw} ({min}…{max}). Nothing was changed.");
+            }
+
+            if (raw != old)
+            {
+                changes.Add(new CellChange(row, col, old, raw));
+            }
+        });
+
+        return Finish(d, t, values, changes);
+    }
+
     /// <summary>
     /// Fills the selection linearly by cell position, keeping its ends: XY blends the four corners; X fills each row between
     /// its first and last cell; Y fills each column between its top and bottom cell.
@@ -125,7 +159,8 @@ public static class TableEdits
         }
 
         var range = new CellRange(row, col, row + pasted.GetLength(0) - 1, col + pasted.GetLength(1) - 1);
-        return Map(d, t, range, (_, r, c) => pasted[r - row, c - col]);
+        // A cell copied as "n/a" (a value the codec could not show) keeps what it holds.
+        return Map(d, t, range, (_, r, c) => pasted[r - row, c - col], (r, c) => double.IsNaN(pasted[r - row, c - col]));
     }
 
     public static EditPlan Step(CalibrationDocument d, XdfTable t, CellRange r, int rawSteps)
@@ -197,6 +232,22 @@ public static class TableEdits
     /// table (an axis copy that would make the axis go down is refused), a value, or a flag's own bit.
     /// </summary>
     /// <summary>Writes <paramref name="source"/>'s raw values into the cells of <paramref name="range"/> only (Tune's Copy from B).</summary>
+    /// <summary>
+    /// Refuses a copy from a bin of other firmware: its items are read at this XDF's addresses, where that bin may hold
+    /// something else entirely. Compare's and Tune's Copy from B call this first.
+    /// </summary>
+    public static void EnsureSameFirmware(CalibrationDocument d, BinImage source)
+    {
+        ArgumentNullException.ThrowIfNull(d);
+        ArgumentNullException.ThrowIfNull(source);
+        var a = d.Firmware.SoftwareId;
+        var b = FirmwareIdentifier.Identify(source).SoftwareId;
+        if (a != b)
+        {
+            throw new EditRefusedException($"Not copied: B is firmware {b ?? "unknown"} and A is {a ?? "unknown"}, so B's values are not at A's addresses.");
+        }
+    }
+
     public static EditPlan CopyFrom(CalibrationDocument d, XdfTable table, CellRange range, BinImage source)
     {
         ArgumentNullException.ThrowIfNull(d);

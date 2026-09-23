@@ -145,7 +145,7 @@ public sealed class MapUseBinding
                 .OrderBy(share => share.Data == _data ? 0 : 1)
                 .ThenByDescending(share => share.Weight)
                 .ToList();
-            var list = string.Join(" · ", used.Select(share => $"{share.Label} {Percent(share.Weight)}"));
+            var list = ShareList(used);
             if (own <= 0)
             {
                 return new MapUse(MapUseState.NotInUse, used.Count > 0 ? "Not in use · " + list : "Not in use", used, null);
@@ -162,6 +162,42 @@ public sealed class MapUseBinding
             return MapUse.Unknown($"The sample could not be read ({error.Message}).");
         }
     }
+
+    /// <summary>
+    /// "Not in use" with the maps that count, when this map's own share of its blend is 0 whatever the rule's case: the ECU
+    /// may read the map, but its value is multiplied by 0 (an E85 map with the bin's flex-fuel substitute at 0 %, for
+    /// example). Null when the share is above 0 or cannot be told.
+    /// </summary>
+    public MapUse? ZeroShare(AdxDefinition adx, ReadOnlySpan<byte> payload)
+    {
+        ArgumentNullException.ThrowIfNull(adx);
+        if (Rule is not { } rule || _rules is not { } rules || _calibrationProblem is not null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var shares = Weights(rule, new SelectorReader(rules, adx, payload.ToArray()));
+            if (shares.Single(share => share.Data == _data).Weight > 0)
+            {
+                return null;
+            }
+
+            var used = shares.Where(share => share.Weight > 0).OrderByDescending(share => share.Weight).ToList();
+            return new MapUse(MapUseState.NotInUse, used.Count > 0 ? "Not in use · " + ShareList(used) : "Not in use", used, null);
+        }
+        catch (CannotTellException)
+        {
+            return null;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    private static string ShareList(IEnumerable<MapShare> used) => string.Join(" · ", used.Select(share => $"{share.Label} {Percent(share.Weight)}"));
 
     private List<MapShare> Weights(MapUseRule rule, SelectorReader reader)
     {

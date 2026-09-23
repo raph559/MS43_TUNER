@@ -50,6 +50,22 @@ public sealed partial class XdfCatalog
     };
 
     /// <summary>The "n: label" lines of a configuration switch's description, or null when it has fewer than two.</summary>
+    /// <summary>
+    /// The choices as a bin with overlay <paramref name="overlayVersion"/> reads them: from V9, the activation bytes of launch
+    /// control, no-lift shift and rolling anti-lag also take triggers, listed by name; otherwise the description's lines.
+    /// </summary>
+    public IReadOnlyList<(long Value, string Label)>? Choices(XdfConstant constant, int overlayVersion)
+    {
+        ArgumentNullException.ThrowIfNull(constant);
+        if (overlayVersion >= LiveTuning.OverlayV9.Version && constant.Title switch
+            {
+                "c_conf_lc" => LiveTuning.OverlayV6.LaunchControl, "c_conf_nls" => LiveTuning.OverlayV6.NoLiftShift,
+                "c_conf_ral" => LiveTuning.OverlayV6.RollingAntiLag, _ => 0,
+            } is var table and > 0)
+            return LiveTuning.OverlayV9.TriggersFor(table).Select(t => ((long)t.Value, t.Label)).ToList();
+        return Choices(constant);
+    }
+
     public IReadOnlyList<(long Value, string Label)>? Choices(XdfConstant constant)
     {
         ArgumentNullException.ThrowIfNull(constant);
@@ -187,6 +203,13 @@ public sealed partial class XdfCatalog
         }
 
         return text;
+    }
+
+    /// <summary>The item's categories, or <see cref="OtherCategory"/> when the XDF gives it none.</summary>
+    public IReadOnlyList<string> CategoriesOf(XdfItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        return CategoryNames(item).ToList();
     }
 
     private IEnumerable<string> CategoryNames(XdfItem item)

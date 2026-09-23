@@ -100,6 +100,8 @@ public static class BinComparer
         var catalog = new XdfCatalog(xdf);
         var readerA = new CalibrationReader(xdf, a);
         var readerB = new CalibrationReader(xdf, b);
+        // Each side names a trigger as its own overlay reads it (V9's LC/NLS/RAL triggers).
+        var (versionA, versionB) = (LiveTuning.OverlayHeader.VersionIn(a.Bytes), LiveTuning.OverlayHeader.VersionIn(b.Bytes));
         var items = new List<ItemDifference>();
 
         foreach (var table in xdf.Tables)
@@ -118,9 +120,9 @@ public static class BinComparer
             {
                 var valueA = readerA.ReadConstant(constant);
                 var valueB = readerB.ReadConstant(constant);
-                var delta = valueB.Physical - valueA.Physical;
+                var delta = valueA.Physical - valueB.Physical;
                 items.Add(new ItemDifference(constant, catalog.Kind(constant), Category(xdf, constant), 1, 1,
-                    double.IsFinite(delta) ? delta : null, Show(catalog, constant, valueA), Show(catalog, constant, valueB), Array.Empty<AxisDifference>()));
+                    double.IsFinite(delta) ? delta : null, Show(catalog, constant, valueA, versionA), Show(catalog, constant, valueB, versionB), Array.Empty<AxisDifference>()));
             }
         }
 
@@ -269,9 +271,9 @@ public static class BinComparer
         item.CategoryIds.Select(id => xdf.Categories.TryGetValue(id, out var name) ? name : null).OfType<string>().FirstOrDefault()
         ?? XdfCatalog.OtherCategory;
 
-    private static string Show(XdfCatalog catalog, XdfConstant constant, ConstantValue value)
+    private static string Show(XdfCatalog catalog, XdfConstant constant, ConstantValue value, int overlayVersion)
     {
-        if (catalog.Choices(constant) is { } choices && choices.FirstOrDefault(choice => choice.Value == value.Raw) is { Label: { } label })
+        if (catalog.Choices(constant, overlayVersion) is { } choices && choices.FirstOrDefault(choice => choice.Value == value.Raw) is { Label: { } label })
         {
             return label;
         }
