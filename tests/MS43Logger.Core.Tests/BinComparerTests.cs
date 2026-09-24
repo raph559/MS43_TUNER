@@ -134,23 +134,24 @@ public class BinComparerTests
         Assert.Equal("Fuel", item.Category);
         Assert.Equal(2, item.ChangedCells);
         Assert.Equal(6, item.Cells);
-        Assert.Equal(-5.0, item.LargestChange);
+        // A − B: how far A (the bin tuned) is from B (the one compared with).
+        Assert.Equal(5.0, item.LargestChange);
         Assert.Null(item.ValueA);
         Assert.Empty(item.Axes);
 
         var table = BinComparer.CompareTable(xdf, a, b, (XdfTable)item.Item);
-        Assert.Equal(2.0, table.Delta.Physical[0, 1]);
-        Assert.Equal(4, table.Delta.Raw[0, 1]);
+        Assert.Equal(-2.0, table.Delta.Physical[0, 1]);
+        Assert.Equal(-4, table.Delta.Raw[0, 1]);
         Assert.Equal(0.0, table.Delta.Physical[0, 0]);
         Assert.Equal(new HashSet<(int, int)> { (0, 1), (1, 2) }, table.Changed);
         Assert.Equal(5.0, table.A.Physical[0, 1]);
         Assert.Equal(7.0, table.B.Physical[0, 1]);
     }
 
-    // The difference can be read three ways, as in TunerPro's compare: in the map's units, in stored counts, or as a
-    // percentage of A.
+    // The difference A − B can be read three ways, as in TunerPro's compare: in the map's units, in stored counts, or as
+    // a percentage of B (how much more or less A has than the bin it is compared with).
     [Fact]
-    public void DifferencesInUnitsRawCountsOrPercentOfA()
+    public void DifferencesInUnitsRawCountsOrPercentOfB()
     {
         var xdf = Synthetic();
         var a = Base();
@@ -160,12 +161,12 @@ public class BinComparerTests
         Assert.Same(table.Delta, BinComparer.Difference(table, DeltaMode.Units));
 
         var raw = BinComparer.Difference(table, DeltaMode.Raw);
-        Assert.Equal(4.0, raw.Physical[0, 1]);
+        Assert.Equal(-4.0, raw.Physical[0, 1]);
         Assert.Equal(0.0, raw.Physical[0, 0]);
 
-        // Cell (0, 1): A 5.0, B 7.0, so +40 %.
+        // Cell (0, 1): A 5.0, B 7.0, so (5 − 7) / 7 = -28.6 %.
         var percent = BinComparer.Difference(table, DeltaMode.Percent);
-        Assert.Equal(40.0, percent.Physical[0, 1], 9);
+        Assert.Equal(-200.0 / 7, percent.Physical[0, 1], 9);
         Assert.Equal(0.0, percent.Physical[0, 0]);
 
         var z = table.A.Table.Z;
@@ -177,11 +178,11 @@ public class BinComparerTests
     }
 
     [Fact]
-    public void PercentOfAZeroIsUndefinedUnlessBIsZeroToo()
+    public void PercentOfAZeroBIsUndefinedUnlessAIsZeroToo()
     {
         Assert.Equal(0.0, BinComparer.PercentOf(0, 0));
-        Assert.True(double.IsNaN(BinComparer.PercentOf(0, 3)));
-        Assert.Equal(-50.0, BinComparer.PercentOf(-4, -6));
+        Assert.True(double.IsNaN(BinComparer.PercentOf(3, 0)));
+        Assert.Equal(-50.0, BinComparer.PercentOf(-6, -4));
     }
 
     // Tune's Copy from B: only the selected cells take B's raw values.
@@ -212,7 +213,7 @@ public class BinComparerTests
         Assert.Equal(ItemKind.Value, value.Kind);
         Assert.Equal("4544", value.ValueA);
         Assert.Equal("3488", value.ValueB);
-        Assert.Equal(-1056.0, value.LargestChange);
+        Assert.Equal(1056.0, value.LargestChange);
         Assert.Equal(1, value.ChangedCells);
 
         var choice = items.Single(item => item.Item.Title == "c_switch");
@@ -337,7 +338,7 @@ public class BinComparerTests
         Assert.Contains("\nFuel\n", text);
         Assert.Contains("fuel_map", text);
         Assert.Contains("1 of 6 cells", text);
-        Assert.Contains("+2.00 ms", text);
+        Assert.Contains("largest A - B -2.00 ms", text);
         Assert.Contains("Bytes outside the XDF", text);
         Assert.Contains("0x03C43 to 0x03C43", text);
         Assert.DoesNotContain("differ)", text);

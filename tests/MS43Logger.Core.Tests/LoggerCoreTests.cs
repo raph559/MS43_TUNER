@@ -31,7 +31,7 @@ public class LoggerCoreTests
         Assert.DoesNotContain(definition.Values, value => value.Id == "CHSTATE");
     }
 
-    // Tests read clutch, brake and warm-up bits by id; a bit the definition lacks is unknown, never off (performance spec 4.3).
+    // Tests read clutch, brake and warm-up bits by id; a bit the definition lacks is unknown, never off.
     [Fact]
     public void BitmasksDecodeFromThePayload()
     {

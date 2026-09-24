@@ -22,6 +22,27 @@ public class LiveLoggerTests
 
     private static Func<byte[]> Timeout() => () => throw new TimeoutException("no reply");
 
+    // KLinePauseTests measured 23.4 samples/s without a pause and 16.2 with one; removing the pause preserved
+    // the emulator's schedule.
+    [Fact]
+    public void TheLoggerPollsWithoutAPauseByDefault() => Assert.Equal(TimeSpan.Zero, new LiveLogger().Pause);
+
+    // A source that answers at once (a test's fake ECU) must not be polled flat out: at most 100 polls a second, far above the
+    // car's 23 or so, so the screen's dispatcher is never flooded.
+    [Fact]
+    public async Task ASourceThatAnswersAtOnce_IsPolledAtMostAHundredTimesASecond()
+    {
+        var logger = new LiveLogger();
+        var samples = 0;
+        logger.SampleReceived += (_, _) => Interlocked.Increment(ref samples);
+        using var stop = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
+        var source = new FakeSource(Enumerable.Repeat<Func<byte[]>>(() => Payload(1), 100_000).ToArray());
+
+        await logger.RunAsync(source, Ms43x, Ms43x.MatchChannels(["N"]), stop.Token);
+
+        Assert.InRange(samples, 10, 60);
+    }
+
     [Fact]
     public async Task LoggerPublishesDecodedSamples()
     {
@@ -113,7 +134,7 @@ public class LiveLoggerTests
         Assert.Equal(Payload(2), samples[1].Payload.ToArray());
     }
 
-    // Tests time a run on the request's monotonic stamp, not the wall clock after decoding (performance spec 4.2).
+    // Tests time a run on the request's monotonic stamp, not the wall clock after decoding.
     [Fact]
     public async Task SamplesCarryRequestAndReplyTimes()
     {
@@ -135,7 +156,7 @@ public class LiveLoggerTests
     }
 
     // A poll the source retried inside its call is stamped at the request that got the reply, not at the first one, which
-    // timed out 400 ms earlier on the ms43x definition (final review, finding 2).
+    // timed out 400 ms earlier on the ms43x definition.
     [Fact]
     public async Task ARetriedPollIsStampedAtTheRequestThatReplied()
     {
@@ -188,7 +209,7 @@ public class LiveLoggerTests
         Assert.Equal(angle, GaugeMath.Angle(0, 8000, value), 9);
     }
 
-    // Disconnect cancels the run, then closes the port under a poll still waiting for its reply (final review, Important 2).
+    // Disconnect cancels the run, then closes the port under a poll still waiting for its reply.
     [Fact]
     public async Task APortClosedByDisconnectIsNotAFailure()
     {
