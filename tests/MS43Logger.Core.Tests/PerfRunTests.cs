@@ -2,12 +2,12 @@ using MS43Logger.Core.Performance;
 
 namespace MS43Logger.Core.Tests;
 
-// The run state machine and its analysis are performance spec 6 and 7; the figure keys and flags are the plan's (Task 6).
+// The run state machine and its analysis are performance spec 6 and 7; the figure keys and flags are the plan's.
 public class PerfRunTests
 {
     private static readonly AdxDefinition Ms43x = BundledDefinitions.Load("ms43x");
 
-    // The shared monitor, fed every frame before the run sees it, as Live feeds it (spec 5).
+    // The shared monitor, fed every frame before the run sees it, as Live feeds it.
     private readonly WarmUpMonitor warmUp = new();
 
     private static AnalysisInputs Inputs(double fullPedal = SyntheticRuns.FullPedal, bool calibrated = true) =>
@@ -80,8 +80,7 @@ public class PerfRunTests
         Drive(run, hold);
         Assert.Equal(RunStage.Waiting, run.Stage);
         Assert.Equal("Waiting for full throttle…", run.Status);
-        // Full throttle is not a check: it cannot be met with the pedal released, and the status asks for it (minor review,
-        // finding 38).
+        // Full throttle is not a check: it cannot be met with the pedal released, and the status asks for it.
         Assert.Equal(new[] { "Engine warm", "Pedal calibrated", "3rd gear", "Between 1300 and 1800 rpm", "Pedal released" },
             run.Checks.Select(c => c.Label));
         Assert.All(run.Checks, c => Assert.True(c.Met, c.Label));
@@ -109,7 +108,7 @@ public class PerfRunTests
         Assert.True(power.Value > 0);
         Assert.InRange(Fig(outcome.Figures, "peak-power-rpm").Value!.Value, 2000, 6400);
         var torque = Fig(outcome.Figures, "peak-torque");
-        Assert.Equal(("Peak torque, wheels (estimate)", "Nm"), (torque.Label, torque.Unit));
+        Assert.Equal(("Peak torque, crank, from wheel power (estimate)", "Nm"), (torque.Label, torque.Unit));
         Assert.True(torque.Value > 0);
         Assert.InRange(Fig(outcome.Figures, "peak-torque-rpm").Value!.Value, 2000, 6400);
         Assert.Equal(0, Fig(outcome.Figures, "knock-max").Value);
@@ -213,7 +212,7 @@ public class PerfRunTests
         Assert.Equal("Knock retard on cylinder 4 reached 1.5 °CRK between 5000 and 5600 rpm.", flag.Message);
         var knock = Assert.Single(figures.Traces, t => t.Key == "knock");
         Assert.Equal(1.5, knock.Y.Max(), 3);
-        // Which cylinder pulled the most, bin by bin, where any did (spec 6.1; minor review, finding 5).
+        // Which cylinder pulled the most, bin by bin, where any did.
         var cylinder = Assert.Single(figures.Traces, t => t.Key == "knock-cyl");
         Assert.Equal(("rpm", ""), (cylinder.XUnit, cylinder.YUnit));
         Assert.Equal(new double[] { 5000, 5250, 5500 }, cylinder.X);
@@ -239,7 +238,7 @@ public class PerfRunTests
         Assert.Equal(("ron-start", 2), (Fig(figures, "ron-start").Key, Fig(figures, "ron-start").Decimals));
         Assert.NotNull(Fig(figures, "ron-end").Value);
         Assert.Equal("1.5 °CRK on cylinder 4", figures.Headline);
-        // Angles in crank degrees, as the ADX names them (minor review, finding 36).
+        // Angles in crank degrees, as the ADX names them.
         Assert.Equal("°CRK", Fig(figures, "knock-max").Unit);
         Assert.Equal("Knock retard on cylinder 4 reached 1.5 °CRK between 3000 and 3500 rpm.", Flag(figures, "knock").Message);
         foreach (var key in new[] { "ignition", "knock", "knock-1", "knock-2", "knock-3", "knock-4", "knock-5", "knock-6" })
@@ -251,7 +250,7 @@ public class PerfRunTests
         Assert.Equal(0, Assert.Single(figures.Traces, t => t.Key == "knock-1").Y.Max());
     }
 
-    // Stock definitions log no knock per cylinder and no AFR target: n/a, never zero (review focus 2).
+    // Stock definitions log no knock per cylinder and no AFR target: n/a, never zero.
     [Fact]
     public void PullOnAStockDefinitionHasNoKnockFigures()
     {
@@ -300,8 +299,7 @@ public class PerfRunTests
         AllFinite(outcome.Figures);
     }
 
-    // DSC cutting torque on the launch is said with its speeds: the times are then traction-limited (spec 6.4; final review,
-    // finding 4).
+    // DSC cutting torque on the launch is said with its speeds: the times are then traction-limited.
     [Fact]
     public void DscInterventionFlagsAStandingStart()
     {
@@ -363,7 +361,7 @@ public class PerfRunTests
     }
 
     // A GPS-corrected calibration holds true km/h per rpm while VS is still the speedometer's reading: the slip check compares
-    // VS with the speedometer's own ratio, so a speedometer 3.5 % fast is no slip (final review, finding 3).
+    // VS with the speedometer's own ratio, so a speedometer 3.5 % fast is no slip.
     [Fact]
     public void AGpsCorrectedCalibrationIsNoSlip()
     {
@@ -422,8 +420,8 @@ public class PerfRunTests
         Assert.Equal(5.5, Fig(figures, "time").Value!.Value, 0.02);
     }
 
-    // Review focus 4: retry bursts give several samples at one instant, and a stamp may step back; the figures stay finite and
-    // the run says its timing is uneven (minor review, finding 55).
+    // Retry bursts give several samples at one instant, and a stamp may step back; the figures stay finite and
+    // the run says its timing is uneven.
     [Fact]
     public void BurstyStampsStayFinite()
     {
@@ -497,7 +495,7 @@ public class PerfRunTests
             Assert.Equal(a.Traces[i].Y, b.Traces[i].Y);
         }
 
-        // A run's figures are the analysis of the samples it keeps, so a stored result can be recomputed (spec 9.1).
+        // A run's figures are the analysis of the samples it keeps, so a stored result can be recomputed.
         var run = new PerfRun(spec, Inputs(), warmUp);
         Drive(run, ThirdPull(knockCyl4: 1.5));
         var kept = run.Outcome!.Samples.Select(Decode).ToArray();
@@ -648,7 +646,7 @@ public class PerfRunTests
         Assert.Null(run.Outcome);
     }
 
-    // Spec 5: oil that is not reported marks a run suspect, as cold oil does (minor review, findings 3 and 50).
+    // Spec 5: oil that is not reported marks a run suspect, as cold oil does.
     [Fact]
     public void UnreportedOilMarksTheRunSuspect()
     {
@@ -665,7 +663,7 @@ public class PerfRunTests
     }
 
     // Oil at 80 °C or more that has not held there for 10 s yet is still amber, and the flag says so: it never calls a
-    // reading above the target "below" it (minor review, finding 66).
+    // reading above the target "below" it.
     [Fact]
     public void OilStillInItsHoldIsNotCalledBelow()
     {
@@ -680,7 +678,7 @@ public class PerfRunTests
     }
 
     // A standing start that reached 100 km/h keeps its times when the link drops later; only what it never reached is
-    // missing. Before 100 km/h it is still incomplete (minor review, finding 4).
+    // missing. Before 100 km/h it is still incomplete.
     [Fact]
     public void LinkLostAfterAHundredKeepsTheStandingStart()
     {
@@ -709,7 +707,7 @@ public class PerfRunTests
     }
 
     // Floored only once the revs were past the start, the pull cannot be timed from 2000 rpm: the run says so and waits for a
-    // lift, then a proper pull runs (minor review, finding 8).
+    // lift, then a proper pull runs.
     [Fact]
     public void FullThrottleAboveTheStartSaysWhy()
     {
@@ -726,7 +724,7 @@ public class PerfRunTests
     }
 
     // The ready checks hold from the failing side too: held outside its window a pull or roll-on never starts, a standing
-    // start stopped for under 1 s never arms, and a calibration held for 2.5 s captures nothing (minor review, finding 52).
+    // start stopped for under 1 s never arms, and a calibration held for 2.5 s captures nothing.
     [Fact]
     public void ReadyChecksRefuseOutsideTheirWindow()
     {
@@ -764,8 +762,8 @@ public class PerfRunTests
         Assert.False(Assert.Single(calibration.Checks, c => c.Label == "Steady for 3 s").Met);
     }
 
-    // A roll-on waits for a steady speed 5 to 15 km/h below its start (spec 6.3): still climbing through that window at a
-    // light pedal, it does not start when floored (minor review, finding 7).
+    // A roll-on waits for a steady speed 5 to 15 km/h below its start: still climbing through that window at a
+    // light pedal, it does not start when floored.
     [Fact]
     public void RollOnNeedsASteadySpeed()
     {
@@ -781,8 +779,7 @@ public class PerfRunTests
         Assert.Null(run.Outcome);
     }
 
-    // Conditions are kept from when the ready checks were met, beside those at the start and the end (spec 8; minor review,
-    // finding 7).
+    // Conditions are kept from when the ready checks were met, beside those at the start and the end.
     [Fact]
     public void ConditionsAreKeptFromTheArm()
     {
@@ -796,8 +793,7 @@ public class PerfRunTests
     }
 
     // Spec 4.4: full throttle is the pedal with the throttle body not far behind. A floored pedal over a nearly shut throttle
-    // (limp-home, a torque cut), the malfunction light or DSC acting makes a pull doubtful, and the flag says why (minor
-    // review, finding 56).
+    // (limp-home, a torque cut), the malfunction light or DSC acting makes a pull doubtful, and the flag says why.
     [Fact]
     public void ALimitedPullIsFlagged()
     {
@@ -824,7 +820,7 @@ public class PerfRunTests
     }
 
     // A GPS-checked calibration corrects the speedometer, so a standing start and an uncalibrated roll-on are timed on true
-    // speed (minor review, finding 57).
+    // speed.
     [Fact]
     public void GpsCorrectionAppliesToTheSpeedometer()
     {
@@ -848,7 +844,7 @@ public class PerfRunTests
     }
 
     // At 23 samples/s and 777 rpm/s the marks fall at different points between samples, so a time read from a sample's stamp
-    // would be up to 43 ms off; interpolated crossings give the analytic times (spec 4.6; minor review, finding 72).
+    // would be up to 43 ms off; interpolated crossings give the analytic times.
     [Fact]
     public void CrossingsAreInterpolatedAtAnyPhase()
     {
@@ -862,10 +858,10 @@ public class PerfRunTests
         Assert.Equal(2000 / 777.0, Fig(figures, "t-4000-6000").Value!.Value, 0.005);
     }
 
-    // The power estimate against the hand-worked figure (spec 7). The synthetic 3rd-gear pull: 800 rpm/s, 1480 kg, 205/55 R16
+    // The power estimate against the hand-worked figure. The synthetic 3rd-gear pull: 800 rpm/s, 1480 kg, 205/55 R16
     // (r 0.3065 m), k 0.0223 km/h per rpm, 101.9 kPa and 25 °C. At 4000 rpm v = 24.78 m/s and a = 4.956 m/s²; m_eff = 1480 +
     // 4.5 / r² + 0.20 × (2π / 60 × 3.6 / k)² = 1585 kg; F = 7855 + 219 drag + 160 rolling = 8234 N, so P = 204.0 kW and
-    // T = 487 Nm (minor review, finding 73).
+    // T = 487 Nm.
     [Fact]
     public void PowerMatchesTheWorkedExample()
     {
@@ -894,7 +890,7 @@ public class PerfRunTests
     }
 
     // Pressing the clutch or the brake ends a pull as incomplete on the sample before the press; revs falling 100 rpm below
-    // their peak end it at the peak (spec 6; minor review, finding 74).
+    // their peak end it at the peak.
     [Fact]
     public void ClutchBrakeAndARevDropEndThePull()
     {
@@ -925,7 +921,7 @@ public class PerfRunTests
         Assert.Equal(top.At, drop.Outcome.Samples[^1].At);
     }
 
-    // The flags that guard the figures (minor review, finding 75): slip takes three samples in a row with VS more than 3 % from
+    // The flags that guard the figures: slip takes three samples in a row with VS more than 3 % from
     // k × N at 30 km/h or more; a slow link, a link test under 15 samples/s and hot intake air are each named.
     [Fact]
     public void GuardFlagsFire()
@@ -958,8 +954,7 @@ public class PerfRunTests
         Assert.Matches(@"^Intake air reached 5\d °C, above 45 °C\.$", intake.Message);
     }
 
-    // The link test gives the interval spread from its shortest interval, and the retries the logger made (spec 6.6; minor
-    // review, finding 6).
+    // The link test gives the interval spread from its shortest interval, and the retries the logger made.
     [Fact]
     public void LinkTestCountsRetries()
     {
