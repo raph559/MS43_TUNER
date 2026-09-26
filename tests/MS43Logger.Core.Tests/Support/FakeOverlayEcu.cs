@@ -26,6 +26,13 @@ internal sealed class FakeOverlayEcu : IDs2Line
     private TimeSpan _now;
     private TimeSpan _seen;
 
+    public FakeOverlayEcu(byte[] flashImage, bool hasOverlay = true)
+    {
+        _flash = flashImage;
+        _hasOverlay = hasOverlay;
+        Wipe();
+    }
+
     public bool Running { get; set; }
     public int Version { get; set; } = 2;
     public long MonotonicMilliseconds => (long)_now.TotalMilliseconds;
@@ -52,12 +59,48 @@ internal sealed class FakeOverlayEcu : IDs2Line
     /// <summary>Every payload sent, in order.</summary>
     public List<byte[]> Requests { get; } = new();
 
+    /// <summary>A flash image whose five maps hold distinct values; the λ map's cells sit at 128–188, so a cell can go leaner.</summary>
+    public static byte[] Image(int seed = 0)
+    {
+        var image = new byte[524288];
+        foreach (var map in OverlayContract.Maps)
+        {
+            for (var i = 0; i < map.Bytes; i++)
+            {
+                image[(map.Address & 0x7FFFF) + i] = (byte)(map.RicherOnly ? 128 + (i + seed) % 60 : 20 + (i * 7 + map.Index + seed) % 200);
+            }
+        }
+
+        return image;
+    }
+
     /// <summary>The ECU's own clock moves; housekeeping switches everything off after 3 s without a 0x6D frame or while stopped.</summary>
     public void Advance(TimeSpan time)
     {
         _now += time;
         Housekeeping();
     }
+
+    /// <summary>The engine stalls with the key on: not running, and housekeeping switches everything off.</summary>
+    public void Stall()
+    {
+        Running = false;
+        Housekeeping();
+    }
+
+    /// <summary>A key cycle: the boot's RAM test wipes the window, and the engine is stopped.</summary>
+    public void KeyCycle()
+    {
+        Running = false;
+        Wipe();
+        _initialised = false;
+        _session = _revision = 0;
+    }
+
+    /// <summary>The status the ECU would give now, without sending anything.</summary>
+    public OverlayStatus Peek() => OverlayContract.ParseStatus(StatusReply());
+
+    public void CorruptCopy(int table, int index, byte value) => _copy[Storage(table) + index] = value;
     private int Storage(int table) => Version == 3 ? V3Storage[table] : _entries[table].Offset;
 
     public byte[] Request(IReadOnlyList<byte> payload, int listenMilliseconds = 400)
