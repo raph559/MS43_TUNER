@@ -237,8 +237,71 @@ public class LiveTuningSessionTests
     }
 
     [Fact]
+    public async Task AMalformedReply_DoesNotStopTheSession()                   // final review I6
+    {
+        var (ecu, session) = await Started();
+        ecu.ReplyNext = new byte[] { 0x12, 0x04, 0xA0, 0xB6 };              // a late accept where the status should be
+
+        await session.TickAsync();
+
+        Assert.False(session.IsStopped);
+        await session.TickAsync();
+        Assert.NotNull(session.Last);
+    }
+
+    [Fact]
     public void AnAcceptOfTheWrongLength_IsNotTheOverlays()
     {
         Assert.Throws<InvalidDataException>(() => OverlayContract.Refusal(new byte[] { 0x12, 0x05, 0xA0, 0x00, 0xB7 }));
+    }
+
+    [Fact]
+    public async Task Send_RightAfterAKeyCycle_UsesAFreshStatus()               // raised minor 5
+    {
+        var (ecu, session) = await Started();
+        await session.SendAsync(2, session.Detection!.Flash[2]);
+        await session.SendAsync(3, Plus(session, 3, 1));
+        await session.SendAsync(4, Plus(session, 4, 1));                       // 576 bytes used: a 320-byte map would not fit
+        ecu.KeyCycle();
+        ecu.Running = true;
+
+        var result = await session.SendAsync(0, Plus(session, 0, 1));          // no tick since: the last status is stale
+
+        Assert.Equal(new SendResult(null, null), result);
+        Assert.Equal(OverlayState.On, ecu.Peek().Tables[0].State);
+    }
+
+    [Fact]
+    public async Task ARebind_KeepsWhatWasSent_WhenTheFlashIsTheSame()          // final review C1
+    {
+        var (ecu, session) = await Started();
+        var copy = Plus(session, 1, 2);
+        await session.SendAsync(1, copy);
+        ecu.KeyCycle();
+
+        session.Rebind(ecu);
+        await session.StartAsync();
+        ecu.Running = true;
+        await session.TickAsync();
+
+        Assert.Equal(MapIntent.Live, session.Intent(1));
+        Assert.Equal(OverlayState.On, ecu.Peek().Tables[1].State);
+        Assert.Equal(copy, new OverlayClient(ecu).ReadCopy(1, ecu.Peek().Tables[1]));
+    }
+
+    [Fact]
+    public async Task ARebind_ForgetsWhatWasSent_WhenAnotherBinIsFlashed()
+    {
+        var (ecu, session) = await Started();
+        await session.SendAsync(1, Plus(session, 1, 2));
+        var other = new FakeOverlayEcu(FakeOverlayEcu.Image(seed: 3)) { Running = true };
+
+        session.Rebind(other);
+        await session.StartAsync();
+        await session.TickAsync();
+
+        Assert.Equal(MapIntent.None, session.Intent(1));
+        Assert.Null(session.SentCopy(1));
+        Assert.All(other.Peek().Tables, t => Assert.Equal(OverlayState.Free, t.State));
     }
 }
