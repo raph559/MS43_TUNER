@@ -16,7 +16,7 @@ using MS43Logger.Core.Tuning;
 namespace MS43Logger.AvaloniaApp.Controls;
 
 /// <summary>
-/// The table editor (system 2.4): cells coloured on the map ramp over the working range, axis headers that stay in
+/// The table editor: cells coloured on the map ramp over the working range, axis headers that stay in
 /// place while the grid scrolls, mouse and keyboard selection, typing to set values, + and - to step the shown value up or down by one stored step,
 /// copy and paste, and the live cursor.
 /// </summary>
@@ -26,7 +26,7 @@ public sealed class MapGrid : Control
 
     public static readonly TimeSpan FlashTime = TimeSpan.FromMilliseconds(450);
 
-    /// <summary>How long the selection box takes to glide to a new cell or range (system 10.3).</summary>
+    /// <summary>How long the selection box takes to glide to a new cell or range.</summary>
     public static readonly TimeSpan SelectionGlide = TimeSpan.FromMilliseconds(120);
 
     private const double RowHeaderWidth = 48;
@@ -154,7 +154,7 @@ public sealed class MapGrid : Control
         return row >= 0 && row < values.Rows && col >= 0 && col < values.Cols;
     }
 
-    /// <summary>The exact text drawn in a cell: the raw value, the B - A difference, or the value with an ASCII minus.</summary>
+    /// <summary>The exact text drawn in a cell: the raw value, the A - B difference, or the value with an ASCII minus.</summary>
     public string CellText(int row, int col)
     {
         if (Editor is not TableEditorViewModel editor)
@@ -171,7 +171,7 @@ public sealed class MapGrid : Control
     }
 
     /// <summary>
-    /// The fill of a just-edited cell (system 10.3): frame 0 is the cell's final text colour, so start and end differ by
+    /// The fill of a just-edited cell: frame 0 is the cell's final text colour, so start and end differ by
     /// 4.58:1 or more, easing out (cubic) to the new fill.
     /// </summary>
     public static Color FlashColour(Color textColour, Color finalFill, double t)
@@ -401,8 +401,8 @@ public sealed class MapGrid : Control
 
         DrawHeaders(context, values, editor, data, dataBold, pane, fillColour, ink1, ink2, ink3);
 
-        // The rings sit above the headers' bands, which reach 2 px into the gap and used to cut a first-row or first-column
-        // ring; clipped at the headers themselves, a ring scrolled under them still hides.
+        // Draw rings above the header bands' 2 px overhang so edge cells retain the whole outline.
+        // Clip at the headers themselves to hide rings that scroll underneath.
         using (context.PushClip(new Rect(Scroll.X + RowHeaderWidth, Scroll.Y + HeaderHeight, Math.Max(0, Bounds.Width - RowHeaderWidth), Math.Max(0, Bounds.Height - HeaderHeight))))
         {
             _drawnBox = SelectionBox;
@@ -428,7 +428,7 @@ public sealed class MapGrid : Control
 
     }
 
-    // Row and column headers and the corner, drawn at the scroll offset so they stay in view (system 8).
+    // Row and column headers and the corner, drawn at the scroll offset so they stay in view.
     private void DrawHeaders(DrawingContext context, TableValues values, TableEditorViewModel editor, Typeface data, Typeface dataBold,
         Color pane, Color fill, Color ink1, Color ink2, Color ink3)
     {
@@ -467,7 +467,7 @@ public sealed class MapGrid : Control
     }
 
     /// <summary>
-    /// The engine's position (system 2.4): an 8 px Now dot with a Pane halo and a trail thinning with age; all in Ink3 when the ECU
+    /// The engine's position: an 8 px Now dot with a Pane halo and a trail thinning with age; all in Ink3 when the ECU
     /// is not reading this map, so orange stays on what the engine uses.
     /// </summary>
     private void DrawLive(DrawingContext context, LiveCursorState live, TableValues values, Color pane, Color ink3)
@@ -532,7 +532,7 @@ public sealed class MapGrid : Control
         return new Point(col < 0 ? first.Left : col > 0 ? last.Right : at.X, row < 0 ? first.Top : row > 0 ? last.Bottom : at.Y);
     }
 
-    // Storage limit (system 2.2): 1 px Fill lines every 4 px at 45 degrees on Pane, inside the cell's shape.
+    // Storage limit: 1 px Fill lines every 4 px at 45 degrees on Pane, inside the cell's shape.
     private static void Hatch(DrawingContext context, RoundedRect shape, Color fill)
     {
         var bounds = shape.Rect;
@@ -689,9 +689,17 @@ public sealed class MapGrid : Control
         switch (e.Key)
         {
             case Key.Enter when editor.TypedText.Length > 0:
-                if (double.TryParse(editor.TypedText, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+                if (editor.TypedText == "-")
+                {
+                    editor.Apply(new EditRequest(EditKind.Step, -1));
+                }
+                else if (double.TryParse(editor.TypedText, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
                 {
                     editor.Apply(new EditRequest(EditKind.Set, value));
+                }
+                else
+                {
+                    editor.Message = $"'{editor.TypedText}' is not a number. Nothing was changed.";
                 }
 
                 editor.TypedText = string.Empty;
@@ -720,6 +728,11 @@ public sealed class MapGrid : Control
         // The moving corner is the one away from the anchor.
         var focus = (Row: selection.Row0 == _anchor.Row ? selection.Row1 : selection.Row0, Col: selection.Col0 == _anchor.Col ? selection.Col1 : selection.Col0);
         var (dr, dc) = key switch { Key.Up => (-1, 0), Key.Down => (1, 0), Key.Left => (0, -1), _ => (0, 1) };
+        if (values.Rows == 0 || values.Cols == 0)
+        {
+            return;
+        }
+
         var next = (Row: Math.Clamp(focus.Row + dr, 0, values.Rows - 1), Col: Math.Clamp(focus.Col + dc, 0, values.Cols - 1));
         if (!extend)
         {

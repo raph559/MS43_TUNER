@@ -7,8 +7,8 @@ using MS43Logger.AvaloniaApp.Theme;
 namespace MS43Logger.AvaloniaApp.Controls;
 
 /// <summary>
-/// The B − A key under the Compare grid (system 2.5, 5.15): a 10 px bar with an Edge border showing only the diverging
-/// mixes the item uses, from its lowest B − A to its highest, through the Pane colour at zero.
+/// The A − B key under the Compare grid: a 10 px bar with an Edge border showing only the diverging
+/// mixes the item uses, from its lowest A − B to its highest, through the Pane colour at zero.
 /// </summary>
 public sealed class DeltaScale : Control
 {
@@ -27,7 +27,7 @@ public sealed class DeltaScale : Control
         ActualThemeVariantChanged += (_, _) => InvalidateVisual();
     }
 
-    /// <summary>The lowest B − A as a signed fraction of the largest difference, -1 to 1.</summary>
+    /// <summary>The lowest A − B as a signed fraction of the largest difference, -1 to 1.</summary>
     public double Low { get => GetValue(LowProperty); set => SetValue(LowProperty, value); }
 
     public double High { get => GetValue(HighProperty); set => SetValue(HighProperty, value); }
