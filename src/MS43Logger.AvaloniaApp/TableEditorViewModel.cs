@@ -65,12 +65,12 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
         Mark = mark;
     }
 
-    /// <summary>A read-only grid of fixed values (a comparison's A, B or B − A); <paramref name="marked"/> get the changed-cell dot.</summary>
+    /// <summary>A read-only grid of fixed values (a comparison's A, B or A − B); <paramref name="marked"/> get the changed-cell dot.</summary>
     public static TableEditorViewModel Snapshot(TableValues values, IReadOnlySet<(int Row, int Col)> marked, bool isDelta = false, CellMark mark = CellMark.Changed,
         DeltaMode deltaMode = DeltaMode.Units) =>
         new(values ?? throw new ArgumentNullException(nameof(values)), marked ?? throw new ArgumentNullException(nameof(marked)), isDelta, mark, deltaMode);
 
-    /// <summary>How a B − A grid's cells read (its values are already in that measure): units, counts or percent.</summary>
+    /// <summary>How a A − B grid's cells read (its values are already in that measure): units, counts or percent.</summary>
     public DeltaMode DeltaMode { get; }
 
     /// <summary>Cells that differ from the compare bin B, ringed in their top-left corner on Tune's A view.</summary>
@@ -78,10 +78,10 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
 
     private IReadOnlySet<(int Row, int Col)> _differsCells = new HashSet<(int Row, int Col)>();
 
-    /// <summary>What the marked cells wear: the changed triangle, or the differs ring on Compare's A and B (system 2.4).</summary>
+    /// <summary>What the marked cells wear: the changed triangle, or the differs ring on Compare's A and B.</summary>
     public CellMark Mark { get; } = CellMark.Changed;
 
-    /// <summary>The working cells' range the map colours span, and the cells hatched at the storage limit (system 2.2).</summary>
+    /// <summary>The working cells' range the map colours span, and the cells hatched at the storage limit.</summary>
     public MapColourRange ColourRange { get => _colourRange; private set => SetField(ref _colourRange, value); }
 
     /// <summary>The digits typed into the active cell; Enter sets the selection to them, Esc drops them.</summary>
@@ -100,10 +100,46 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
 
     public bool IsTyping => TypedText.Length > 0;
 
-    /// <summary>The key line while typing: "Enter sets 12 cells to 27.8 °CRK. Esc cancels."</summary>
+    /// <summary>The key line while typing: "Enter sets 12 cells to 27.8 °CRK. Esc cancels." In raw view the count is raw.</summary>
     public string? TypingHint => TypedText.Length == 0 || Selection is not CellRange range
         ? null
-        : $"Enter sets {Count(range.Rows * range.Cols, "cell")} to {WithUnits(TypedText, Units)}. Esc cancels.";
+        : TypedText == "-"
+            ? $"Type a negative value, or Enter steps {Count(range.Rows * range.Cols, "cell")} down one. Esc cancels."
+            : ShowRaw
+                ? $"Enter sets {Count(range.Rows * range.Cols, "cell")} to raw {TypedText}. Esc cancels."
+                : $"Enter sets {Count(range.Rows * range.Cols, "cell")} to {WithUnits(TypedText, Units)}. Esc cancels.";
+
+    /// <summary>
+    /// True when the map can hold a value below zero as shown (raw in raw view): then "-" starts a negative number
+    /// instead of stepping the selection down.
+    /// </summary>
+    public bool TakesNegatives
+    {
+        get
+        {
+            var data = Table.Z.Data;
+            if (!data.Signed && ShowRaw)
+            {
+                return false;
+            }
+
+            if (ShowRaw)
+            {
+                return true;
+            }
+
+            var bits = Math.Min(data.ElementBits, 63);
+            var (min, max) = data.Signed ? (-(1L << (bits - 1)), (1L << (bits - 1)) - 1) : (0L, (1L << bits) - 1);
+            var codec = _document?.Reader.Codec;
+            if (codec is null)
+            {
+                return Values.Physical.Cast<double>().Any(value => value < 0);
+            }
+
+            var ends = new[] { codec.ToPhysical(Table.Z.Math, min), codec.ToPhysical(Table.Z.Math, max) };
+            return ends.Any(value => double.IsFinite(value) && value < 0) || Values.Physical.Cast<double>().Any(value => value < 0);
+        }
+    }
 
     /// <summary>An axis's breakpoints are numbered 1 to n instead of labelled by an axis of their own.</summary>
     public bool NumberRows { get; init; }
@@ -114,7 +150,7 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
     /// <summary>True for snapshots: edits are refused with <see cref="ReadOnlyMessage"/>.</summary>
     public bool IsReadOnly => _document is null;
 
-    /// <summary>True when the values are B − A differences, drawn on the diverging scale.</summary>
+    /// <summary>True when the values are A − B differences, drawn on the diverging scale.</summary>
     public bool IsDelta { get; }
 
     /// <summary>Raised after an edit was written, with the cells it touched.</summary>
@@ -166,7 +202,17 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
     /// <summary>The cell the inspector describes: inside the selection, its first cell unless the grid puts it elsewhere.</summary>
     public (int Row, int Col) ActiveCell { get => _active; set => SetField(ref _active, value); }
 
-    public bool ShowRaw { get => _showRaw; set => SetField(ref _showRaw, value); }
+    public bool ShowRaw
+    {
+        get => _showRaw;
+        set
+        {
+            if (SetField(ref _showRaw, value))
+            {
+                OnPropertyChanged(nameof(TypingHint));
+            }
+        }
+    }
 
     public string? Message { get => _message; set => SetField(ref _message, value); }
 
@@ -189,7 +235,7 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
     public string Units => Table.Z.Units.Length > 0 ? Table.Z.Units : Values.Cols == 1 ? Values.X.Units : string.Empty;
 
     /// <summary>
-    /// The key line's selection (system 8): "4 rows × 3 columns: 3750 to 4500 rpm, 130.0 to 200.0 mg/stk", or for one
+    /// The key line's selection: "4 rows × 3 columns: 3750 to 4500 rpm, 130.0 to 200.0 mg/stk", or for one
     /// cell "4000 rpm × 165.0 mg/stk: 33.4 °CRK, raw 152 (0x98)".
     /// </summary>
     public string SelectionText
@@ -225,7 +271,7 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>"2 cells changed since the last save" (system 9.3: cells in the grid, items in the rail); null when none.</summary>
+    /// <summary>"2 cells changed since the last save" (cells in the grid, items in the rail); null when none.</summary>
     public string? ChangedText => ChangedCells.Count switch
     {
         0 => null,
@@ -398,6 +444,20 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
 
     private static string WithUnits(string text, string units) => units.Length > 0 && units != "-" ? $"{text} {units}" : text;
 
+    /// <summary>A toolbar operation on the selection; Set, Add and Scale % read <paramref name="typed"/>, the toolbar's value box.</summary>
+    public bool ApplyTool(EditKind kind, string typed)
+    {
+        var value = 0.0;
+        if (kind is EditKind.Set or EditKind.Add or EditKind.Scale &&
+            !double.TryParse(typed.Replace('−', '-').Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out value))
+        {
+            Message = typed.Trim().Length == 0 ? "Type a value first." : $"'{typed}' is not a number.";
+            return false;
+        }
+
+        return Apply(new EditRequest(kind, value));
+    }
+
     /// <summary>Writes the edit through the history; a refused edit leaves the bin unchanged and explains why in <see cref="Message"/>.</summary>
     public bool Apply(EditRequest request)
     {
@@ -414,10 +474,20 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
             return false;
         }
 
+        // A grid shown in raw takes raw counts for Set and Add: 152 typed there is raw 152, not 152 of the map's unit.
+        if (ShowRaw && !IsDelta && request.Kind is EditKind.Set or EditKind.Add && request.Value != Math.Round(request.Value))
+        {
+            Message = $"The map is shown in raw: type a whole raw count, not {request.Value.ToString(CultureInfo.InvariantCulture)}.";
+            return false;
+        }
+
         try
         {
+            var raw = ShowRaw && !IsDelta;
             var plan = request.Kind switch
             {
+                EditKind.Set when raw => TableEdits.SetRaw(document, Table, range, (long)request.Value),
+                EditKind.Add when raw => TableEdits.AddRaw(document, Table, range, (long)request.Value),
                 EditKind.Set => TableEdits.Set(document, Table, range, request.Value),
                 EditKind.Add => TableEdits.Add(document, Table, range, request.Value),
                 EditKind.Scale => TableEdits.Scale(document, Table, range, request.Value),
