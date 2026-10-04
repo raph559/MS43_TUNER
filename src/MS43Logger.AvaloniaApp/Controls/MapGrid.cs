@@ -649,9 +649,18 @@ public sealed class MapGrid : Control
             {
                 editor.Apply(new EditRequest(EditKind.Step, 1));
             }
-            else if (ch is '-' && editor.TypedText.Length == 0)
+            else if (ch is '-' or '−' && editor.TypedText.Length == 0)
             {
-                editor.Apply(new EditRequest(EditKind.Step, -1));
+                // On a map that can go below zero, "-" starts a negative number ("-" then Enter still steps down one);
+                // elsewhere it steps the selection down at once.
+                if (editor.TakesNegatives)
+                {
+                    editor.TypedText = "-";
+                }
+                else
+                {
+                    editor.Apply(new EditRequest(EditKind.Step, -1));
+                }
             }
         }
 

@@ -11,6 +11,69 @@
         <FocusAdornerTemplate x:Key="FocusRing">
             <Border BorderBrush="{DynamicResource Ink1Brush}" BorderThickness="2" CornerRadius="12" Margin="-4" />
         </FocusAdornerTemplate>
+        <ControlTheme x:Key="SidebarExpanderHeader" TargetType="ToggleButton">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="MinHeight" Value="44" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="True" />
+            <Setter Property="FocusAdorner" Value="{x:Null}" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Panel>
+                        <Border Name="HeaderSurface" Background="{TemplateBinding Background}" CornerRadius="8"
+                                Padding="{TemplateBinding Padding}" Margin="4">
+                            <Grid ColumnDefinitions="16,*" VerticalAlignment="Center">
+                                <controls:StrokeIcon Name="Chevron" Data="{StaticResource Icon.ChevronRight}"
+                                                     Foreground="{DynamicResource Ink2Brush}" />
+                                <ContentPresenter Grid.Column="1" Margin="8,0,0,0" Content="{TemplateBinding Content}"
+                                                  ContentTemplate="{TemplateBinding ContentTemplate}" RecognizesAccessKey="True"
+                                                  Foreground="{TemplateBinding Foreground}" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+                        <Border Name="HeaderFocus" BorderBrush="{DynamicResource Ink1Brush}" BorderThickness="2"
+                                CornerRadius="12" IsVisible="False" IsHitTestVisible="False" />
+                    </Panel>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#HeaderSurface">
+                <Setter Property="Background" Value="{DynamicResource HoverOverlayBrush}" />
+            </Style>
+            <Style Selector="^:pressed /template/ Border#HeaderSurface">
+                <Setter Property="Background" Value="{DynamicResource PressedOverlayBrush}" />
+            </Style>
+            <Style Selector="^:checked /template/ controls|StrokeIcon#Chevron">
+                <Setter Property="RenderTransform" Value="rotate(90deg)" />
+            </Style>
+            <Style Selector="^:focus-visible /template/ Border#HeaderFocus">
+                <Setter Property="IsVisible" Value="True" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+                <Setter Property="Cursor" Value="Arrow" />
+            </Style>
+        </ControlTheme>
+        <ControlTheme x:Key="SidebarExpander" TargetType="Expander">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <StackPanel>
+                        <Border Height="1" Background="{DynamicResource HairlineBrush}" Margin="0,4,0,8" />
+                        <ToggleButton Name="PART_ToggleButton" Theme="{StaticResource SidebarExpanderHeader}"
+                                      Content="{TemplateBinding Header}" ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                      IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" />
+                        <ContentPresenter Name="PART_ExpandSite" IsVisible="{TemplateBinding IsExpanded}" Margin="0,12,0,0"
+                                          Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                    </StackPanel>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
     </Styles.Resources>
 
     <Style Selector="Window">
@@ -296,6 +359,41 @@
     </Style>
     <Style Selector="ToggleButton.tab:checked /template/ Border#Indicator">
         <Setter Property="RenderTransform" Value="scaleX(1)" />
+    </Style>
+
+    <!-- The tab column (owner, 2026-10-28): one row per screen, the current one marked by a 2 px bar on its left. -->
+    <Style Selector="ToggleButton.navtab">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Padding" Value="14,0" />
+        <Setter Property="Height" Value="40" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusAdorner" Value="{StaticResource FocusRing}" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Panel Background="{TemplateBinding Background}">
+                    <Border Name="PART_Overlay" Background="Transparent" />
+                    <ContentPresenter Content="{TemplateBinding Content}" Padding="{TemplateBinding Padding}"
+                                      VerticalAlignment="Center" HorizontalAlignment="Left" Foreground="{TemplateBinding Foreground}" />
+                    <Border Name="Indicator" Width="2" HorizontalAlignment="Left" Margin="0,8" Background="{DynamicResource Ink1Brush}"
+                            RenderTransform="scaleY(0)" />
+                </Panel>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="ToggleButton.navtab:pointerover /template/ Border#PART_Overlay">
+        <Setter Property="Background" Value="{DynamicResource HoverOverlayBrush}" />
+    </Style>
+    <Style Selector="ToggleButton.navtab:checked">
+        <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="ToggleButton.navtab:checked /template/ Border#Indicator">
+        <Setter Property="RenderTransform" Value="scaleY(1)" />
     </Style>
 
     <!-- Segmented control (system 5.4): a Fill track with a 2 px inset; the selected segment is raised, with a soft edge
