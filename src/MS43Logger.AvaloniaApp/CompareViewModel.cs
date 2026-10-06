@@ -25,10 +25,13 @@ public sealed record CompareRow(ItemDifference Difference, bool IsCurrent) : Com
     /// <summary>The hover card's facts line, as on the Tune rail: "Map, 20 × 16, °CRK, at 0x77315".</summary>
     public string Detail => ItemFacts.Line(Difference.Item, Difference.Kind);
 
-    /// <summary>"12 of 320" for tables, "4512 → 3520" for values, switches and flags.</summary>
+    /// <summary>
+    /// "12 of 320" for tables; "3520 → 4512" for values, switches and flags, read as "was, now": B (the bin compared with)
+    /// then A (the bin tuned), the way A − B reads.
+    /// </summary>
     public string Summary => Difference.Item is XdfTable
         ? $"{Difference.ChangedCells} of {Difference.Cells}"
-        : $"{Difference.ValueA} → {Difference.ValueB}";
+        : $"{Difference.ValueB} → {Difference.ValueA}";
 
     public string Units => CompareViewModel.UnitsOf(Difference.Item);
 }
@@ -105,7 +108,7 @@ public sealed class CompareViewModel : ViewModelBase, ISidePanel
                 Refresh();
             }
 
-            // One B − A setting for both screens: a change made in Tune redraws Compare's grid too.
+            // One A − B setting for both screens: a change made in Tune redraws Compare's grid too.
             if (e.PropertyName == nameof(TuneViewModel.DeltaMode))
             {
                 foreach (var name in new[] { nameof(DeltaMode), nameof(IsDeltaUnits), nameof(IsDeltaRaw), nameof(IsDeltaPercent), nameof(LargestText) })
@@ -232,7 +235,7 @@ public sealed class CompareViewModel : ViewModelBase, ISidePanel
     /// <summary>A switch's values are its choices, sentences that wrap as text instead of a number reading.</summary>
     public bool ValuesAreChoices => ShowsValue && Selected?.Kind == ItemKind.Switch;
 
-    /// <summary>The grid shown: "delta" (B − A), "a" or "b".</summary>
+    /// <summary>The grid shown: "delta" (A − B), "a" or "b".</summary>
     public string View
     {
         get => _view;
@@ -252,7 +255,7 @@ public sealed class CompareViewModel : ViewModelBase, ISidePanel
 
     public AppSettings Settings => _tune.Settings;
 
-    /// <summary>How B − A reads, as in TunerPro's compare: in the map's units, in stored counts, or as a percentage of A. Remembered.</summary>
+    /// <summary>How A − B reads, as in TunerPro's compare: in the map's units, in stored counts, or as a percentage of B. Remembered.</summary>
     public DeltaMode DeltaMode
     {
         get => _tune.DeltaMode;
@@ -311,7 +314,7 @@ public sealed class CompareViewModel : ViewModelBase, ISidePanel
         ? $"{item.ChangedCells} of {item.Cells} {(item.Cells == 1 ? "cell differs" : "cells differ")}"
         : null;
 
-    /// <summary>"largest change +61.1 °CRK", in counts ("+163") or as a percentage of A ("+190.4 %") by <see cref="DeltaMode"/>.</summary>
+    /// <summary>"largest change +61.1 °CRK", in counts ("+163") or as a percentage of B ("+190.4 %") by <see cref="DeltaMode"/>.</summary>
     public string? LargestText
     {
         get
@@ -338,12 +341,12 @@ public sealed class CompareViewModel : ViewModelBase, ISidePanel
     }
 
     /// <summary>
-    /// The line under the grid (system 2.5, 5.15): "B − A: -21.0 to +61.1 °CRK, 293 of 320 cells differ" on B − A, and
+    /// The line under the grid (system 2.5, 5.15): "A − B: -21.0 to +61.1 °CRK, 293 of 320 cells differ" on A − B, and
     /// "Colour: -23.6 to 72.0 °CRK." on A or B, whose cells take the map colours.
     /// </summary>
     public string? ScaleCaption { get => _scaleCaption; private set => SetField(ref _scaleCaption, value); }
 
-    /// <summary>The B − A bar's ends as signed fractions of the largest difference, so it shows only the mixes in use.</summary>
+    /// <summary>The A − B bar's ends as signed fractions of the largest difference, so it shows only the mixes in use.</summary>
     public double ScaleLow => _scaleSpan.Low;
 
     public double ScaleHigh => _scaleSpan.High;
@@ -355,9 +358,9 @@ public sealed class CompareViewModel : ViewModelBase, ISidePanel
 
     public string? ScaleMaxLabel => _scaleLabels.Max;
 
-    /// <summary>"B − A: -992 rpm" under a value's two readings; null for tables, switches and flags.</summary>
+    /// <summary>"A − B: -992 rpm" under a value's two readings; null for tables, switches and flags.</summary>
     public string? ValueDeltaText => Selected is { Item: XdfConstant constant, Kind: ItemKind.Value, LargestChange: double delta } && !_showsBytes
-        ? $"B − A: {Signed(delta, constant.DecimalPlaces)}{(Units.Length > 0 ? " " + Units : string.Empty)}"
+        ? $"A − B: {Signed(delta, constant.DecimalPlaces)}{(Units.Length > 0 ? " " + Units : string.Empty)}"
         : null;
 
     public bool IsVisible
@@ -608,7 +611,7 @@ public sealed class CompareViewModel : ViewModelBase, ISidePanel
             {
                 "a" => TableEditorViewModel.Snapshot(table.A, table.Changed, mark: CellMark.Differs),
                 "b" => TableEditorViewModel.Snapshot(table.B, table.Changed, mark: CellMark.Differs),
-                // Colour already shows every change on B − A; the changed-cell dots would only add noise.
+                // Colour already shows every change on A − B; the changed-cell dots would only add noise.
                 _ => TableEditorViewModel.Snapshot(BinComparer.Difference(table, DeltaMode), new HashSet<(int Row, int Col)>(), isDelta: true, deltaMode: DeltaMode),
             };
             var z = table.A.Table.Z;
@@ -616,15 +619,15 @@ public sealed class CompareViewModel : ViewModelBase, ISidePanel
             var finite = Grid.Values.Physical.Cast<double>().Where(double.IsFinite).ToList();
             if (finite.Count > 0 && Grid.IsDelta)
             {
-                // The range of B − A in this item, signed as the cells print it, then how many cells differ.
+                // The range of A − B in this item, signed as the cells print it, then how many cells differ.
                 var (low, high) = (finite.Min(), finite.Max());
                 var largest = finite.Max(Math.Abs);
                 _scaleSpan = largest > 0 ? (low / largest, high / largest) : (0, 0);
                 ScaleCaption = DeltaMode switch
                 {
-                    DeltaMode.Raw => $"B − A in counts: {BinComparer.FormatDelta(low, (long)low, z, DeltaMode.Raw)} to {BinComparer.FormatDelta(high, (long)high, z, DeltaMode.Raw)}, {CellsText}",
-                    DeltaMode.Percent => $"B − A as % of A: {BinComparer.FormatDelta(low, 0, z, DeltaMode.Percent)} to {BinComparer.FormatDelta(high, 0, z, DeltaMode.Percent)}, {CellsText}",
-                    _ => $"B − A: {BinComparer.FormatDelta(low, 0, z, raw: false)} to {BinComparer.FormatDelta(high, 0, z, raw: false)}{units}, {CellsText}",
+                    DeltaMode.Raw => $"A − B in counts: {BinComparer.FormatDelta(low, (long)low, z, DeltaMode.Raw)} to {BinComparer.FormatDelta(high, (long)high, z, DeltaMode.Raw)}, {CellsText}",
+                    DeltaMode.Percent => $"A − B as % of B: {BinComparer.FormatDelta(low, 0, z, DeltaMode.Percent)} to {BinComparer.FormatDelta(high, 0, z, DeltaMode.Percent)}, {CellsText}",
+                    _ => $"A − B: {BinComparer.FormatDelta(low, 0, z, raw: false)} to {BinComparer.FormatDelta(high, 0, z, raw: false)}{units}, {CellsText}",
                 };
             }
             else if (finite.Count > 0)

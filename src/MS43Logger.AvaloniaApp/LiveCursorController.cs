@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Avalonia.Threading;
 using MS43Logger.Core;
+using MS43Logger.Core.LiveTuning;
 using MS43Logger.Core.Tuning;
 
 namespace MS43Logger.AvaloniaApp;
@@ -46,12 +47,18 @@ public sealed class LiveCursorController : ViewModelBase
     private string? _use;
     private string? _useDetail;
     private bool _useIsDim;
+    private uint? _watchFor;
+    private byte _watchCount;
+    private DateTimeOffset _watchCountAt;
 
     public LiveCursorController(TimeProvider? time = null)
     {
         _time = time ?? TimeProvider.System;
         _start = _time.GetUtcNow();
     }
+
+    /// <summary>The data address of the table this controller shows, for the V9 watch; null without one.</summary>
+    public uint? WatchAddress => _editor?.Table.Z.Data.Address is long address and >= 0 and < 0x80000 ? (uint)address : null;
 
     /// <summary>Run <see cref="Tick"/> from a timer once samples arrive. Tests turn it off and tick by hand.</summary>
     public bool AutoTick { get; set; } = true;
@@ -166,7 +173,19 @@ public sealed class LiveCursorController : ViewModelBase
 
     public void Tick()
     {
-        if (!IsVisible || _editor is not { } editor || Binding is not { HasInput: true } binding || _sample is not { } sample || sample.Payload.IsEmpty)
+        if (!IsVisible || _editor is not { } editor || _sample is not { } sample || sample.Payload.IsEmpty)
+        {
+            return;
+        }
+
+        // With a V9 ECU watching this table, the record places the cursor, whatever the logger carries.
+        if (sample is { Watch: { } record, WatchedAddress: { } watched } && watched == WatchAddress && Binding is { } watchedBinding)
+        {
+            TickWatched(editor, watchedBinding, sample, record);
+            return;
+        }
+
+        if (Binding is not { HasInput: true } binding)
         {
             return;
         }
@@ -222,6 +241,86 @@ public sealed class LiveCursorController : ViewModelBase
         UseIsDim = stale || fix.Use.State == MapUseState.NotInUse;
     }
 
+    /// <summary>
+    /// The record's cell. While its count moves the use line is the rules' text where they say the table is used, else
+    /// "In use", except that a table whose share of its blend is 0 % stays "Not in use", dimmed: the count proves a read,
+    /// not a use. When the count has not moved for <see cref="StaleAfter"/>, "Not read now" with the time since the last
+    /// read, and the last read's cell dimmed; "not read since connect" before any read.
+    /// </summary>
+    private void TickWatched(TableEditorViewModel editor, LiveTableBinding binding, LiveSample sample, WatchRecord record)
+    {
+        var now = _time.GetUtcNow();
+        if (_watchFor != sample.WatchedAddress)
+        {
+            (_watchFor, _watchCount, _watchCountAt) = (sample.WatchedAddress, record.Count, now);
+            _trail?.Clear();
+        }
+        else if (record.Count != _watchCount)
+        {
+            (_watchCount, _watchCountAt) = (record.Count, now);
+        }
+
+        if (record.Kind == WatchKind.None)
+        {
+            editor.Live = null;
+            Readout = NotReadSinceConnect;
+            ReadoutIsLive = false;
+            (Use, UseDetail, UseIsDim) = (NotReadSinceConnect, null, true);
+            _pending = false;
+            return;
+        }
+
+        CursorFix fix;
+        try
+        {
+            fix = binding.LocateWatched(record, editor.Values.Physical);
+        }
+        catch (Exception error)
+        {
+            editor.Live = null;
+            Readout = $"No live input: the watch record could not be placed ({error.Message})";
+            ReadoutIsLive = false;
+            ClearUse();
+            return;
+        }
+
+        var reading = now - _watchCountAt <= StaleAfter;
+        var zero = reading && _definition is not null ? binding.Use.ZeroShare(_definition, sample.Payload.Span) : null;
+        if (zero is not null)
+        {
+            fix = fix with { Use = zero };                              // read, but counted for nothing: drawn as unused
+        }
+
+        var at = now - _start;
+        if (_pending) _trail?.Add(fix.Row?.Position ?? 0, fix.Col?.Position ?? 0, at);
+        _pending = false;
+        editor.Live = new LiveCursorState(fix, _trail?.Points(at) ?? Array.Empty<TrailPoint>(), !reading);
+        Readout = Format(fix, editor.Table, !reading);
+        ReadoutIsLive = reading;
+        if (zero is not null)
+        {
+            Use = zero.Text;
+            UseDetail = ZeroShareDetail;
+            UseIsDim = true;
+        }
+        else if (reading)
+        {
+            var rules = _definition is null ? null : binding.Use.Evaluate(_definition, sample.Payload.Span);
+            Use = rules is { State: MapUseState.InUse or MapUseState.Possible } ? rules.Text : "In use";
+            UseDetail = rules is { State: MapUseState.InUse or MapUseState.Possible } ? rules.Detail ?? binding.Use.Rule?.Caveat : null;
+            UseIsDim = false;
+        }
+        else
+        {
+            Use = $"Not read now \u00B7 last read {(int)Math.Round((now - _watchCountAt).TotalSeconds)} s ago";
+            (UseDetail, UseIsDim) = (null, true);
+        }
+    }
+
+    private const string NotReadSinceConnect = "Not read now \u00B7 not read since connect";
+
+    private const string ZeroShareDetail = "The ECU reads this map, but its share of the blend is 0 %, so it changes nothing.";
+
     private void ClearUse()
     {
         Use = null;
@@ -273,18 +372,20 @@ public sealed class LiveCursorController : ViewModelBase
     }
 
     /// <summary>
-    /// "Live 2480 rpm · 112.4 mg/stk · map 27.5 °CRK" (system 7.1); "map about" for an approximate value, since Bahnschrift
-    /// has no "≈" (system 3.3); then " (off the map)" or " (stale)".
+    /// "Live 2480 rpm · 112.4 mg/stk · map 27.5 °CRK"; "map about" for an approximate value, since Bahnschrift
+    /// has no "≈"; then " (off the map)" or " (stale)".
     /// </summary>
     private static string Format(CursorFix fix, XdfTable table, bool stale)
     {
         static string Number(double value, long raw, int? decimals) => ValueCodec.Format(value, raw, decimals, null, 16);
         static string WithUnits(string text, string units) => units.Length > 0 ? text + " " + units : text;
 
-        var inputs = fix.Inputs.Select(input => WithUnits(Number(input.Physical, input.Input, input.DecimalPlaces), input.Units));
+        var inputs = fix.Inputs.Select(input => WithUnits(Number(input.Physical, input.Input, input.DecimalPlaces), input.Units)).ToList();
         var z = table.Z;
         var value = ValueCodec.Format(fix.Value, 0, z.DecimalPlaces, z.OutputType == 2 ? 2 : null, z.Data.ElementBits);
-        var text = "Live " + string.Join(" · ", inputs) + " · map " + (fix.Approximate ? "about " : string.Empty) + WithUnits(value, z.Units);
+        // A watched read has no logged inputs: the record gives the cell itself.
+        var where = inputs.Count > 0 ? string.Join(" · ", inputs) : "exact cell";
+        var text = "Live " + where + " · map " + (fix.Approximate ? "about " : string.Empty) + WithUnits(value, z.Units);
         return text + (stale ? " (stale)" : fix.Inputs.Any(input => input.Clamped != 0) ? " (off the map)" : string.Empty);
     }
 }

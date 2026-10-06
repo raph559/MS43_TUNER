@@ -110,7 +110,7 @@ public sealed class AppSettings
 
     public bool CompareRailCollapsed { get; set; }
 
-    /// <summary>How Compare's B − A reads: in the map's units, in stored counts, or as a percentage of A.</summary>
+    /// <summary>How Compare's A − B reads: in the map's units, in stored counts, or as a percentage of B.</summary>
     public DeltaMode CompareDeltaMode { get; set; } = DeltaMode.Units;
 
     /// <summary>Which way Tune's Interpolate and Smooth work on a map: X, Y or both (TunerPro's choice).</summary>
@@ -118,22 +118,22 @@ public sealed class AppSettings
 
     /// <summary>
     /// The pedal reading (°PVS) with the pedal floored, from the Pedal step; null until calibrated. Full throttle and
-    /// every pedal percentage are relative to it (performance spec 4.4).
+    /// every pedal percentage are relative to it.
     /// </summary>
     public double? FullPedal { get; set; }
 
-    /// <summary>Speed per engine speed in each gear (km/h per rpm), from the speed calibration (performance spec 6.5).</summary>
+    /// <summary>Speed per engine speed in each gear (km/h per rpm), from the speed calibration.</summary>
     public Dictionary<int, double> KmhPerRpm { get; set; } = new();
 
     /// <summary>
     /// What the speedometer (VS) read per rpm in each gear as captured, before a GPS correction: the slip check compares VS
-    /// with it, since <see cref="KmhPerRpm"/> holds true speed once corrected (performance spec 4.5, 6.5).
+    /// with it, since <see cref="KmhPerRpm"/> holds true speed once corrected.
     /// </summary>
     public Dictionary<int, double> SpeedometerKmhPerRpm { get; set; } = new();
 
     /// <summary>
     /// Whether each calibrated gear was corrected against a GPS speed, not only the speedometer; a gear is saved with its own
-    /// capture, so each keeps its own (performance spec 6.5).
+    /// capture, so each keeps its own.
     /// </summary>
     public Dictionary<int, bool> GpsChecked { get; set; } = new();
 
@@ -141,7 +141,7 @@ public sealed class AppSettings
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? SpeedGpsChecked { get; set; }
 
-    /// <summary>The car with its driver, for the power estimate (performance spec 7).</summary>
+    /// <summary>The car with its driver, for the power estimate.</summary>
     public double TestMassKg { get; set; } = 1480;
 
     /// <summary>A size such as "205/55 R16": its rolling circumference turns rpm into speed.</summary>
@@ -155,8 +155,12 @@ public sealed class AppSettings
 
     public bool PerformanceRailCollapsed { get; set; }
 
-    /// <summary>The last rpm band (start, end) of each pull preset, so before and after runs compare (performance spec 9.2).</summary>
+    /// <summary>The last rpm band (start, end) of each pull preset, so before and after runs compare.</summary>
     public Dictionary<string, double[]> PerformanceBands { get; set; } = new();
+
+    /// <summary>Why the settings file could not be read at start-up, or null when it was read (or was not there).</summary>
+    [JsonIgnore]
+    public string? LoadProblem { get; private set; }
 
     /// <summary>Why the last <see cref="Save"/> failed, or null after a successful one.</summary>
     [JsonIgnore]
@@ -174,6 +178,22 @@ public sealed class AppSettings
         catch (Exception error) when (error is IOException or JsonException or UnauthorizedAccessException)
         {
             settings = new AppSettings();
+
+            // A file that could not be read is kept beside the new one, so the next Save does not erase the XDF choices
+            // and the speed calibration it held.
+            if (error is JsonException)
+            {
+                try
+                {
+                    var path = Path.Combine(folder, "settings.json");
+                    File.Copy(path, Path.Combine(folder, $"settings.unreadable-{DateTime.Now:yyyyMMdd-HHmmss}.json"), overwrite: false);
+                    settings.LoadProblem = "The settings file could not be read; it was kept as settings.unreadable-….json and the defaults are in use.";
+                }
+                catch (Exception copy) when (copy is IOException or UnauthorizedAccessException)
+                {
+                    settings.LoadProblem = "The settings file could not be read; the defaults are in use.";
+                }
+            }
         }
 
         settings.Folder = folder;
@@ -219,7 +239,7 @@ public sealed class AppSettings
         TrendSeconds = TrendSeconds is 10 or 30 or 60 ? TrendSeconds : Defaults.TrendSeconds;
         LogFolder = string.IsNullOrWhiteSpace(LogFolder) ? Defaults.LogFolder : LogFolder;
 
-        // Performance values (performance spec 4.4, 6.5, 7): each impossible one goes alone, so a bad entry never costs the rest.
+        // Performance values: each impossible one goes alone, so a bad entry never costs the rest.
         FullPedal = FullPedal is >= 10 and <= 130 ? FullPedal : null;
         TestMassKg = TestMassKg is >= 500 and <= 3500 ? TestMassKg : Defaults.TestMassKg;
         // The power estimate reads the size; one it cannot read would leave every run without power.

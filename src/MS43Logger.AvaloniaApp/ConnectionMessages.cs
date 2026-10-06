@@ -12,7 +12,7 @@ public enum LiveAction
     RescanPorts,
 }
 
-/// <summary>A banner's sentence (system 7.2) and the action beside it.</summary>
+/// <summary>A banner's sentence and the action beside it.</summary>
 public sealed record ConnectionMessage(string Text, LiveAction Action = LiveAction.None);
 
 /// <summary>What the stopped-logging message names: the port, the CSV file (null when none was written), the samples
@@ -58,6 +58,11 @@ public static class ConnectionMessages
             _ => new($"Logging stopped: {Reason(error)}.{closed}"),
         };
     }
+
+    /// <summary>The ECU went quiet after answering (a key-off): the app reconnects on its own and the log stays open.</summary>
+    public static ConnectionMessage Reconnecting(string port, string? csvFile, long rows) => new(
+        $"Reconnecting: the ECU stopped answering on {port}. Trying again every second" +
+        (csvFile is { } file ? $"; {file} stays open with {rows.ToString(CultureInfo.InvariantCulture)} rows." : "."));
 
     /// <summary>The stopped banner's second line, renewed every second while the values below are frozen.</summary>
     public static string StaleLine(int seconds) => $"The values below are from the last sample, {seconds.ToString(CultureInfo.InvariantCulture)} s ago.";
