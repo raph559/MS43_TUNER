@@ -139,13 +139,14 @@ public class MainWindowViewModel : INotifyPropertyChanged
             {
                 OnPropertyChanged(nameof(IsNotConnected));
                 OnPropertyChanged(nameof(ConnectionButtonText));
+                OnPropertyChanged(nameof(ShowsKnock));
             }
         }
     }
 
     public bool IsNotConnected => !IsConnected;
 
-    public string ConnectionButtonText => IsConnecting ? "Connecting…" : IsConnected ? "Disconnect" : "Connect";
+    public string ConnectionButtonText => IsConnecting ? "Connecting…" : IsConnected || IsReconnecting ? "Disconnect" : "Connect";
 
     /// <summary>
     /// True while the session dropped without Disconnect (a key-off: the ECU stopped answering after it had answered) and a
@@ -162,6 +163,27 @@ public class MainWindowViewModel : INotifyPropertyChanged
             }
         }
     }
+
+    /// <summary>How each session is made: a serial port by default; tests give one on a scripted port.</summary>
+    internal Func<AdxDefinition, string, Ds2Session> SessionFactory { get; init; } = Ds2Session.Create;
+
+    /// <summary>The pause between two reconnect attempts.</summary>
+    internal TimeSpan ReconnectInterval { get; init; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>The connected session's line for other requests (the live-tuning overlay); null while not connected.</summary>
+    internal MS43Logger.Core.LiveTuning.IDs2Line Line => IsConnected ? _session : null;
+
+    /// <summary>
+    /// The live maps' CSV cell, set by the shell: when set, each row's <c>live_maps</c> cell says which version of each map
+    /// was live (live tuning spec 5.7). One cell whatever the catalogue, so a row is never wider than the header.
+    /// </summary>
+    internal Func<string> LiveMaps { get; set; }
+
+    /// <summary>True while the log's extra reads must wait: a Performance run recording times its samples by the poll alone.</summary>
+    internal Func<bool> DiagnosticsPaused { get; set; }
+
+    /// <summary>Raised when <see cref="Line"/> comes or goes: a connect, a drop, a reconnect, a disconnect.</summary>
+    public event EventHandler LineChanged;
 
     /// <summary>True from Connect until the ECU answers or the attempt fails.</summary>
     public bool IsConnecting
@@ -280,6 +302,9 @@ public class MainWindowViewModel : INotifyPropertyChanged
         set => SetField(ref _enableCsvLogging, value);
     }
 
+    /// <summary>The header's log button while connected: what pressing it does.</summary>
+    public string LogButtonText => EnableCsvLogging ? "Stop log" : "Start log";
+
     public string CsvPath
     {
         get => _csvPath;
@@ -357,7 +382,10 @@ public class MainWindowViewModel : INotifyPropertyChanged
     /// <summary>The channel list's right column: the channels not pinned, through the filter; empty with Pinned only.</summary>
     public ObservableCollection<DecodedValueViewModel> OtherValues { get; } = new();
 
-    /// <summary>Every pinned channel, in title order, for the tiles under the band; the filter never hides a tile.</summary>
+    /// <summary>
+    /// Every pinned channel the band does not already show, in title order, for the tiles under the band; the filter never
+    /// hides a tile.
+    /// </summary>
     public ObservableCollection<DecodedValueViewModel> TileValues { get; } = new();
 
     /// <summary>"No channel matches "xyz"." while the filter leaves both columns empty (system 7.2); null otherwise.</summary>
@@ -366,7 +394,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
         : null;
 
     /// <summary>No channel is pinned: the Pinned column says how to pin one (system 5.6).</summary>
-    public bool ShowsNoPins => TileValues.Count == 0 && string.IsNullOrWhiteSpace(SearchText);
+    public bool ShowsNoPins => PinnedCount == 0 && string.IsNullOrWhiteSpace(SearchText);
 
     /// <summary>The trend window in seconds (Settings: 10, 30 or 60). A change keeps the samples that still fit.</summary>
     public int TrendSeconds
@@ -465,6 +493,11 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     public void ShowConnectionLog() => ShowConnectionLogRequested?.Invoke(this, EventArgs.Empty);
 
+    /// <summary>"Fault memory" on the Live tab: the window opens the read-only fault list.</summary>
+    public event EventHandler ShowFaultMemoryRequested;
+
+    public void ShowFaultMemory() => ShowFaultMemoryRequested?.Invoke(this, EventArgs.Empty);
+
     /// <summary>Connect failed: the banner names the cause and the fix.</summary>
     internal void ReportConnectFailure(Exception error)
     {
@@ -562,6 +595,9 @@ public class MainWindowViewModel : INotifyPropertyChanged
         {
             reading.Resolve(channels, SanitizeUnits);
         }
+
+        // The tiles leave out what the band shows, so they follow its channels.
+        ApplyFilter();
     }
 
     public bool ShowPinnedOnly
@@ -638,7 +674,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task ToggleConnectionAsync()
     {
-        if (IsConnected)
+        if (IsConnected || IsReconnecting)
         {
             Disconnect();
             return;
@@ -703,6 +739,39 @@ public class MainWindowViewModel : INotifyPropertyChanged
         {
             Disconnect();
             ReportConnectFailure(ex);
+        }
+    }
+
+    private void StartPolling(IReadOnlyList<AdxValueDefinition> channels)
+    {
+        _pollingCts = new CancellationTokenSource();
+        _ = PollSensorsAsync(channels, _pollingCts.Token);
+    }
+
+    private void Resume(Ds2Session session)
+    {
+        _session = session;
+        _reconnectCts = null;
+        IsReconnecting = false;
+        StopStaleTimer();
+        IsStale = false;
+        BannerDetail = null;
+        SetBanner(null);
+        IsConnected = true;
+        var channels = CurrentDefinition.MatchChannels(Array.Empty<string>());
+        StartPolling(channels);
+        StatusText = BuildConnectedStatus(channels.Count);
+        LineChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private static void Close(Ds2Session session)
+    {
+        try
+        {
+            session?.Dispose();
+        }
+        catch
+        {
         }
     }
 
@@ -781,7 +850,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
     public AdxDefinition CurrentDefinition
     {
         get => _currentDefinition;
-        internal set => SetField(ref _currentDefinition, value);
+        internal set { if (SetField(ref _currentDefinition, value)) OnPropertyChanged(nameof(ShowsKnock)); }
     }
 
     /// <summary>Raised on the UI thread after each sample has been shown.</summary>
@@ -801,8 +870,114 @@ public class MainWindowViewModel : INotifyPropertyChanged
     /// </summary>
     internal PerfFrame? LastFrame { get; private set; }
 
+    private IReadOnlyList<double?> _knock = Array.Empty<double?>();
+    private int _knockVersion;
+
+    /// <summary>Knock retard per cylinder from the last sample, degrees, positive; empty when not connected (owner, 2026-10-28).</summary>
+    public IReadOnlyList<double?> Knock
+    {
+        get => _knock;
+        private set
+        {
+            if (SetField(ref _knock, value))
+            {
+                OnPropertyChanged(nameof(KnockWarning));
+                OnPropertyChanged(nameof(KnockShort));
+            }
+        }
+    }
+
+    /// <summary>Raised with each sample so the bars draw again.</summary>
+    public int KnockVersion { get => _knockVersion; private set => SetField(ref _knockVersion, value); }
+
+    /// <summary>"Knock retard: cylinder 4 at 1.6 °CRK." for every cylinder at or past 1.5 °CRK, as in Performance.</summary>
+    public string? KnockWarning => ResultText.KnockLine(Knock, 1.5);
+
+    /// <summary>The same cylinders for the knock cell's title line: "cyl 4 · 1.5°", "cyl 2 · 1.9°, cyl 4 · 1.5°".</summary>
+    public string? KnockShort
+    {
+        get
+        {
+            var knocking = Knock.Select((value, index) => (Value: value, Cylinder: index + 1))
+                .Where(pair => pair.Value is { } retard && double.IsFinite(retard) && retard >= 1.5)
+                .Select(pair => $"cyl {pair.Cylinder} · {NumberFormat.Format(pair.Value!.Value, 1)}°").ToArray();
+            return knocking.Length > 0 ? string.Join(", ", knocking) : null;
+        }
+    }
+
+    /// <summary>The bars show unless the connected definition has no knock per cylinder (the stock ones).</summary>
+    public bool ShowsKnock => !IsConnected || CurrentDefinition is null
+        || !Core.Performance.PerfChannels.Missing(CurrentDefinition, Core.Performance.PerfTestKind.KnockCheck).Contains("knock per cylinder");
+
     /// <summary>The clock this screen reads; the Performance tab names its results by it.</summary>
     internal TimeProvider Time => _time;
+
+    // Faster logging (owner, 2026-10-28): numbers change at most five times a second, the latest one shown; the knock bars
+    // hold each cylinder's highest retard of the last second, so a one-sample knock cannot flash by.
+    private static readonly TimeSpan NumberInterval = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan KnockHold = TimeSpan.FromSeconds(1);
+    private readonly Dictionary<DecodedValueViewModel, string> _pendingRows = new();
+    private readonly Queue<(DateTimeOffset At, IReadOnlyList<double?> Retard)> _knockSeen = new();
+    private DateTimeOffset? _numbersShownAt;
+    private ITimer? _numbersTimer;
+
+    private IReadOnlyList<double?> HoldKnock(IReadOnlyList<double?>? retard)
+    {
+        if (retard is null)
+        {
+            _knockSeen.Clear();
+            return Array.Empty<double?>();
+        }
+
+        var now = _time.GetUtcNow();
+        _knockSeen.Enqueue((now, retard));
+        while (_knockSeen.Peek().At <= now - KnockHold)
+        {
+            _knockSeen.Dequeue();
+        }
+
+        return Enumerable.Range(0, retard.Count)
+            .Select(cylinder => _knockSeen.Select(seen => cylinder < seen.Retard.Count ? seen.Retard[cylinder] : null).OfType<double>()
+                .Where(double.IsFinite).Select(value => (double?)value).DefaultIfEmpty(null).Max())
+            .ToArray();
+    }
+
+    private void SetRow(DecodedValueViewModel row, string text, bool show)
+    {
+        if (show)
+        {
+            row.Value = text;
+        }
+        else
+        {
+            _pendingRows[row] = text;
+        }
+    }
+
+    /// <summary>The numbers held back since the last ones shown; armed when a sample's numbers wait.</summary>
+    private void ShowNumbers()
+    {
+        foreach (var reading in Readings)
+        {
+            reading.ShowLatest();
+        }
+
+        foreach (var (row, text) in _pendingRows)
+        {
+            row.Value = text;
+        }
+
+        _pendingRows.Clear();
+        _numbersShownAt = _time.GetUtcNow();
+    }
+
+    private void ResetNumbers()
+    {
+        _numbersTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        _pendingRows.Clear();
+        _numbersShownAt = null;
+        _knockSeen.Clear();
+    }
 
     internal void ShowSample(LiveSample sample)
     {
@@ -822,6 +997,9 @@ public class MainWindowViewModel : INotifyPropertyChanged
         {
             WarmUp.Push(frame);
         }
+
+        Knock = HoldKnock(LastFrame?.KnockRetard);
+        KnockVersion++;
 
         SampleShown?.Invoke(this, sample);
     }

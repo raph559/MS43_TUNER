@@ -179,6 +179,9 @@ public sealed class LiveTuningViewModel : ViewModelBase
     public string CsvCell => Maps.Zip(Tags).Where(pair => pair.Second != "flashed").Select(pair => pair.First.Map.Key + "=" + pair.Second)
         .ToArray() is { Length: > 0 } live ? string.Join(";", live) : "flashed";
 
+    /// <summary>The tags while any map is live; null while every map is the flashed one.</summary>
+    public IReadOnlyList<string>? LiveTagsIfAnyLive => Tags is var tags && tags.Any(tag => tag != "flashed") ? tags : null;
+
     /// <summary>The toolbar's value box, read by Set, Add and Scale %.</summary>
     public string ToolValue { get => _toolValue; set => SetField(ref _toolValue, value ?? string.Empty); }
 
@@ -192,7 +195,24 @@ public sealed class LiveTuningViewModel : ViewModelBase
     /// <summary>The engine's position for the live cursor, fed by the shell on every tab.</summary>
     public void Push(LiveSample sample, AdxDefinition? definition) => LiveCursor.Push(sample, definition);
 
+    public Task SendSelectedAsync() => Selected is { } row ? SendAsync(row) : Task.CompletedTask;
+
+    public async Task SendAllAsync()
+    {
+        foreach (var row in Maps.Where(row => row.HasUnsent).ToList())
+        {
+            await SendAsync(row);
+        }
+    }
+
     public Task SetAllEditedAsync(bool on) => Act(session => session.SetAllAsync(on));
+
+    public Task RevertAllAsync() => Act(session => session.RevertAsync());
+
+    public Task FreeAsync(LiveMapRow row) => Act(session => session.FreeAsync(row.Map.Index));
+
+    /// <summary>Frees the selected map in the ECU (its room in the copy area); its edits stay here, unsent.</summary>
+    public Task FreeSelectedAsync() => Selected is { } row ? FreeAsync(row) : Task.CompletedTask;
 
     /// <summary>The per-map switch. The row's switch is told its state again afterwards, so a refusal shows as off.</summary>
     internal async Task SetOnAsync(LiveMapRow row, bool on)
@@ -258,6 +278,68 @@ public sealed class LiveTuningViewModel : ViewModelBase
             + (warning is null ? string.Empty : " " + warning);
     }
 
+    /// <summary>One keep-alive, then the page follows the ECU's status.</summary>
+    internal async Task TickAsync()
+    {
+        if (_session is not { } session || _ticking || _line is null)
+        {
+            return;
+        }
+
+        _ticking = true;
+        try
+        {
+            await session.TickAsync();
+        }
+        finally
+        {
+            _ticking = false;
+        }
+
+        AfterTick();
+    }
+
+    private void AfterTick()
+    {
+        if (!_pageAdopted && _session?.Last is not null)
+        {
+            AdoptWhatTheEcuHolds();
+            _pageAdopted = true;
+        }
+
+        // A reason the session found by itself (a map it could not put back) is shown once.
+        if (_session?.Problem is { } problem && problem != _sessionProblemShown)
+        {
+            Problem = problem;
+            _sessionProblemShown = problem;
+        }
+
+        Refresh();
+    }
+
+    /// <summary>Sends one map or group, with every refusal of the page's own Send (the Fun tab sends this way).</summary>
+    public async Task SendAsync(LiveMapRow row)
+    {
+        if (_session is null || _pageFlash is null || IsReadOnly || _page is null)
+        {
+            return;
+        }
+
+        if (RefusalFor(row) is { } refused) { Problem = refused; return; }
+        var index = row.Map.Index;
+        var copy = PageCopy(row.Map);
+        await Act(async session =>
+        {
+            var result = await session.SendAsync(index, copy);
+            return result.Refused;
+        }, clearProblem: true);
+        if (_session?.Problem is { } problem && _session.Intent(index) != MapIntent.Live)
+        {
+            Problem = problem;
+            _sessionProblemShown = problem;
+        }
+    }
+
     /// <summary>
     /// Why the page's copy of <paramref name="row"/> would be refused before anything is sent (a missing definition, the
     /// overlay's rules, protocol 2's edit limits), or null when it may be sent; the Fun tab checks every group of a page
@@ -314,6 +396,53 @@ public sealed class LiveTuningViewModel : ViewModelBase
         Refresh();
     }
 
+    private void BuildPage(OverlayDetection detection)
+    {
+        if (_page is not null)
+        {
+            _page.Changed -= OnPageChanged;
+        }
+
+        var bin = _tune.Document!;
+        var bytes = bin.Image.ToArray();
+        foreach (var map in MapDefinitions)
+        {
+            detection.Flash[map.Index].CopyTo(bytes, map.Address & 0x7FFFF);
+        }
+
+        BinDiffers = MapDefinitions.Any(map => !bin.Image.Bytes.Slice(map.Address & 0x7FFFF, map.Bytes).SequenceEqual(detection.Flash[map.Index]))
+            ? "The ECU's maps differ from the open bin: edits start from the ECU's."
+            : null;
+        _page = CalibrationDocument.FromParts(bin.Xdf, BinImage.FromBytes(bytes, "live"), null);
+        _pageBin = bin;
+        _pageFlash = detection.Flash;
+        _history = new EditHistory(_page);
+        _pageAdopted = false;
+
+        // Edits are kept per map, against that map's flashed bytes: flashing another bin keeps the edits of the maps it did
+        // not change, and those of the maps it did are kept apart and named, never applied over the new flash.
+        var other = new List<string>();
+        foreach (var map in MapDefinitions)
+        {
+            var key = MapFlashKey(map, detection.Flash[map.Index]);
+            if (_store.Load(key).TryGetValue(map.Key, out var copy) && copy.Length == map.Bytes)
+            {
+                WriteCopy(map, copy);
+            }
+
+            if (_store.KeysHolding(map.Key).Any(held => held != key))
+            {
+                other.Add(map.Key);
+            }
+        }
+
+        KeptForOtherFlash = other.Count > 0 ? $"Edits made against other flashed maps are kept, not applied: {string.Join(", ", other)}." : null;
+        _page.Changed += OnPageChanged;
+        PageRebuilt?.Invoke(this, EventArgs.Empty);
+        _limiterAdopted = false;
+        if (detection.LimiterFlash is { } limiter) ShowLimiter(limiter);
+    }
+
     /// <summary>A map the ECU holds that the page has no edit for shows what the ECU holds (the app was restarted).</summary>
     private void AdoptWhatTheEcuHolds()
     {
@@ -336,6 +465,30 @@ public sealed class LiveTuningViewModel : ViewModelBase
         {
             _page.RaiseChanged();
         }
+    }
+
+    private void OnPageChanged(object? sender, EventArgs e)
+    {
+        if (_page is null || _pageFlash is not { } flash)
+        {
+            return;
+        }
+
+        try
+        {
+            foreach (var map in MapDefinitions)
+            {
+                var copy = PageCopy(map);
+                _store.Save(MapFlashKey(map, flash[map.Index]),
+                    copy.AsSpan().SequenceEqual(flash[map.Index]) ? new Dictionary<string, byte[]>() : new Dictionary<string, byte[]> { [map.Key] = copy });
+            }
+        }
+        catch (Exception error) when (error is System.IO.IOException or UnauthorizedAccessException)
+        {
+            Problem = $"The edits could not be kept: {error.Message}";
+        }
+
+        Refresh();
     }
 
     private void Refresh()
@@ -519,6 +672,27 @@ public sealed class LiveTuningViewModel : ViewModelBase
     private static bool SameFlash(IReadOnlyList<byte[]>? a, IReadOnlyList<byte[]> b) =>
         a is not null && a.Count == b.Count && a.Zip(b).All(pair => pair.First.AsSpan().SequenceEqual(pair.Second));
 
+    private void ConfigureCatalogue(OverlayDetection detection)
+    {
+        var definitions = detection.Catalogue ?? OverlayContract.Maps;
+        if (!MapDefinitions.Select(m => m.Address).SequenceEqual(definitions.Select(m => m.Address)))
+        {
+            var selected = Selected?.Map.Address;
+            Maps.Clear();
+            foreach (var map in definitions) Maps.Add(new LiveMapRow(this, map));
+            Selected = Maps.FirstOrDefault(row => row.Map.Address == selected) ?? Maps[0];
+        }
+        OnPropertyChanged(nameof(CatalogueText));
+        UpdateFilteredMaps();
+    }
+
+    /// <summary>Opens or closes a category of the list.</summary>
+    public void ToggleCategory(string name)
+    {
+        if (!_expanded.Remove(name)) _expanded.Add(name);
+        RebuildRail();
+    }
+
     /// <summary>Gives each row its XDF categories, description and search text, once per bin and catalogue.</summary>
     private void DescribeMaps()
     {
@@ -637,6 +811,24 @@ public sealed class LiveTuningViewModel : ViewModelBase
         LimiterEnabled = settings.Enabled;
     }
 
+    public async Task SendLimiterAsync()
+    {
+        if (!IsV4 || IsReadOnly) return;
+        try
+        {
+            static byte Raw(string value)
+            {
+                if (!int.TryParse(value, out var rpm) || rpm < 0 || rpm > 8160 || rpm % 32 != 0)
+                    throw new ArgumentException("RPM values must be multiples of 32, between 0 and 8160.");
+                return (byte)(rpm / 32);
+            }
+            var settings = new LimiterSettings(LimiterGears.Select(g => Raw(g.Rpm)).ToArray(), Raw(LimiterHysteresis), LimiterMode == 1, LimiterEnabled);
+            settings.Payload();
+            await Act(session => session.SendLimiterAsync(settings), clearProblem: true);
+        }
+        catch (Exception error) when (error is ArgumentException or EditRefusedException) { Problem = error.Message; }
+    }
+
     public void CopyLimiterToTune()
     {
         if (_tune.Document is not { } bin || _tune.History is not { } history
@@ -658,6 +850,26 @@ public sealed class LiveTuningViewModel : ViewModelBase
                 Problem += " This bin has no live overlay; flashing it removes live tuning.";
         }
         catch (Exception error) when (error is ArgumentException or EditRefusedException) { Problem = error.Message; }
+    }
+
+    private void StopSession()
+    {
+        ClearScalarEditors();
+        _ticker?.Dispose();
+        _ticker = null;
+        _session = null;
+        if (_page is not null)
+        {
+            _page.Changed -= OnPageChanged;
+        }
+
+        _page = null;
+        _pageBin = null;
+        _pageFlash = null;
+        _history = null;
+        BinDiffers = null;
+        KeptForOtherFlash = null;
+        PageRebuilt?.Invoke(this, EventArgs.Empty);
     }
 
     private static string Describe(OverlayReason reason) => reason switch
