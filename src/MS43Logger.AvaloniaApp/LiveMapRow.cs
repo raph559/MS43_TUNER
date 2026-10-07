@@ -9,6 +9,7 @@ namespace MS43Logger.AvaloniaApp;
 /// </summary>
 public sealed class LiveMapRow : ViewModelBase
 {
+    private readonly LiveTuningViewModel _owner;
     private string _title;
     private OverlayState? _state;
     private MapIntent _intent;
@@ -16,6 +17,13 @@ public sealed class LiveMapRow : ViewModelBase
     private bool _canSwitch;
     private bool _canLoad;
     private string _capacityText = string.Empty;
+
+    internal LiveMapRow(LiveTuningViewModel owner, OverlayMap map)
+    {
+        _owner = owner;
+        Map = map;
+        _title = map.Key;
+    }
 
     public OverlayMap Map { get; }
 
@@ -52,10 +60,59 @@ public sealed class LiveMapRow : ViewModelBase
     /// <summary>Everything the search finds this map by: title, XDF name, categories, description, units, address.</summary>
     internal string Haystack { get; set; } = string.Empty;
 
+    /// <summary>The map's state in the ECU's last status; null before any status.</summary>
+    public OverlayState? State
+    {
+        get => _state;
+        internal set
+        {
+            if (SetField(ref _state, value))
+            {
+                OnPropertyChanged(nameof(StateText));
+                OnPropertyChanged(nameof(IsOn));
+            }
+        }
+    }
+
     /// <summary>Whether the switch can do anything now: the overlay found, the engine running, the map in the ECU (Ready or On).</summary>
     public bool CanSwitch { get => _canSwitch; internal set => SetField(ref _canSwitch, value); }
     public bool CanLoad { get => _canLoad; internal set => SetField(ref _canLoad, value); }
     public string CapacityText { get => _capacityText; internal set => SetField(ref _capacityText, value); }
 
+    /// <summary>Tells the switch its state again, so one the ECU refused goes back.</summary>
+    internal void NotifyIsOn() => OnPropertyChanged(nameof(IsOn));
+
     public MapIntent Intent { get => _intent; internal set => SetField(ref _intent, value); }
+
+    public bool HasUnsent
+    {
+        get => _hasUnsent;
+        internal set
+        {
+            if (SetField(ref _hasUnsent, value))
+            {
+                OnPropertyChanged(nameof(StateText));
+            }
+        }
+    }
+
+    public string StateText => (State switch
+    {
+        null or OverlayState.Free => "flashed",
+        OverlayState.On => "LIVE",
+        _ => "sent, off",
+    }) + (HasUnsent ? " · unsent changes" : string.Empty);
+
+    /// <summary>The per-map A/B: on reads the edit, off the flashed map. Setting it asks the ECU; the next status shows the outcome.</summary>
+    public bool IsOn
+    {
+        get => State == OverlayState.On;
+        set
+        {
+            if (value != IsOn)
+            {
+                _ = _owner.SetOnAsync(this, value);
+            }
+        }
+    }
 }

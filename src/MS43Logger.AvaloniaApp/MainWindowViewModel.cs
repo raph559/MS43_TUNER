@@ -30,11 +30,19 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private string _statusText = "Disconnected";
     private int _sampleCount;
     private Ds2Session _session;
+    private MS43Logger.Core.LiveTuning.WatchingPayloadSource _watching;
+    private DiagnosticPayloadSource _diagnostics;              // the log's fault and state columns, around the logger's source
+    private bool _overlayState;                               // the ECU runs overlay 10: its pops and blip state is logged
+    private uint? _watchAsked;
     private CancellationTokenSource _pollingCts;
+    private CancellationTokenSource _reconnectCts;
+    private bool _isReconnecting;
     private DispatcherTimer _uiTimer;
     private readonly Stopwatch _sessionStopwatch = new();
     private LiveLogger _logger;
     private StreamWriter _csvWriter;
+    private readonly object _csvLock = new();                 // the logger thread writes rows; the UI opens and closes the file
+    private IReadOnlyList<AdxValueDefinition> _csvChannels;   // the session's channels, for a log started while connected
     private static readonly HashSet<string> StatusInputs = new(StringComparer.Ordinal)
     {
         nameof(IsConnected), nameof(IsConnecting), nameof(SelectedPort), nameof(SelectedVariant),
@@ -138,6 +146,22 @@ public class MainWindowViewModel : INotifyPropertyChanged
     public bool IsNotConnected => !IsConnected;
 
     public string ConnectionButtonText => IsConnecting ? "Connecting…" : IsConnected ? "Disconnect" : "Connect";
+
+    /// <summary>
+    /// True while the session dropped without Disconnect (a key-off: the ECU stopped answering after it had answered) and a
+    /// connect is tried every <see cref="ReconnectInterval"/>; the log stays open (live tuning spec 5.4).
+    /// </summary>
+    public bool IsReconnecting
+    {
+        get => _isReconnecting;
+        private set
+        {
+            if (SetField(ref _isReconnecting, value))
+            {
+                OnPropertyChanged(nameof(ConnectionButtonText));
+            }
+        }
+    }
 
     /// <summary>True from Connect until the ECU answers or the attempt fails.</summary>
     public bool IsConnecting
