@@ -57,8 +57,14 @@ public sealed class LiveCursorController : ViewModelBase
         _start = _time.GetUtcNow();
     }
 
+    /// <summary>The app's one V9 watch: told when this controller's table comes to the front or leaves the screen.</summary>
+    public MapWatchCoordinator? Coordinator { get; set; }
+
     /// <summary>The data address of the table this controller shows, for the V9 watch; null without one.</summary>
     public uint? WatchAddress => _editor?.Table.Z.Data.Address is long address and >= 0 and < 0x80000 ? (uint)address : null;
+
+    /// <summary>The window showing this controller's table was brought to the front (a map window's focus).</summary>
+    public void Focused() => Coordinator?.Activate(this);
 
     /// <summary>Run <see cref="Tick"/> from a timer once samples arrive. Tests turn it off and tick by hand.</summary>
     public bool AutoTick { get; set; } = true;
@@ -72,6 +78,11 @@ public sealed class LiveCursorController : ViewModelBase
             if (SetField(ref _isVisible, value) && value)
             {
                 _pending = _sample is not null;
+                Coordinator?.Activate(this);
+            }
+            else if (!value)
+            {
+                Coordinator?.Hide(this);
             }
         }
     }
@@ -135,6 +146,10 @@ public sealed class LiveCursorController : ViewModelBase
 
             _editor = editor;
             _trail?.Clear();
+            Rebind();
+            if (editor is not null && IsVisible) Coordinator?.Activate(this);
+            else if (editor is null) Coordinator?.Hide(this);
+            return;
         }
 
         Rebind();

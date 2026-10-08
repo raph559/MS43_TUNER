@@ -19,7 +19,7 @@ namespace MS43Logger.AvaloniaApp;
 /// session putting back what had been sent after a key cycle or a stall. The session and the page outlive the line: when
 /// the app reconnects (a key cycle), the session is moved to the new line, detects again, and puts back what was sent.
 /// </summary>
-public sealed class LiveTuningViewModel : ViewModelBase
+public sealed class LiveTuningViewModel : ViewModelBase, IDisposable
 {
     public static readonly TimeSpan TickInterval = TimeSpan.FromSeconds(1);
 
@@ -61,6 +61,23 @@ public sealed class LiveTuningViewModel : ViewModelBase
     private bool _limiterAdopted;
     private CalibrationDocument? _scalarPage;
     private int _scalarMapIndex = -1;
+
+    public LiveTuningViewModel(MainWindowViewModel live, TuneViewModel tune, LiveEditStore store, TimeProvider? time = null,
+        Func<IDs2Line, LiveTuningSession>? sessionFactory = null)
+    {
+        _live = live ?? throw new ArgumentNullException(nameof(live));
+        _tune = tune ?? throw new ArgumentNullException(nameof(tune));
+        _store = store ?? throw new ArgumentNullException(nameof(store));
+        _time = time ?? TimeProvider.System;
+        _sessionFactory = sessionFactory ?? (line => new LiveTuningSession(line));
+        Maps = new ObservableCollection<LiveMapRow>(OverlayContract.Maps.Select(map => new LiveMapRow(this, map)));
+        LimiterGears = new ObservableCollection<LimiterRpmRow>(Enumerable.Range(0, 6).Select(i => new LimiterRpmRow(i)));
+        LiveCursor = new LiveCursorController(time);
+        _live.LineChanged += OnLineChanged;
+        _tune.PropertyChanged += OnTuneChanged;
+        _selected = Maps[0];
+        Refresh();
+    }
 
     public ObservableCollection<LiveMapRow> Maps { get; }
     private IEnumerable<OverlayMap> MapDefinitions => Maps.Select(row => row.Map);
@@ -278,6 +295,74 @@ public sealed class LiveTuningViewModel : ViewModelBase
             + (warning is null ? string.Empty : " " + warning);
     }
 
+    /// <summary>
+    /// Starts or moves the session onto <paramref name="line"/>. A line that goes (a drop, a disconnect) leaves the session
+    /// and the page as they are, read-only; a new line (a reconnect) moves the session onto it, which detects again before
+    /// anything is sent.
+    /// </summary>
+    internal async Task AttachLine(IDs2Line? line)
+    {
+        var attachment = ++_attachments;
+        _ticker?.Dispose();
+        _ticker = null;
+        _line = line;
+        if (_tune.Document is null)
+        {
+            StopSession();
+        }
+
+        if (line is null || _tune.Document is null)
+        {
+            Refresh();
+            return;
+        }
+
+        if (_session is null)
+        {
+            _session = _sessionFactory(line);
+            _live.QuietOverlay(false);
+            _session.Stopped += (_, _) => _live.QuietOverlay(true);       // from the session's thread: two plain writes
+        }
+        else
+        {
+            _session.Rebind(line);
+        }
+
+        var session = _session;
+        Refresh();
+        try
+        {
+            var detection = await session.StartAsync();
+            if (attachment != _attachments)
+            {
+                return;
+            }
+
+            if (detection.Problem is null)
+            {
+                ConfigureCatalogue(detection);
+                if (_page is null || !ReferenceEquals(_pageBin, _tune.Document) || !SameFlash(_pageFlash, detection.Flash))
+                {
+                    BuildPage(detection);
+                }
+
+                await session.TickAsync();
+                if (attachment != _attachments)
+                {
+                    return;
+                }
+
+                _ticker = _time.CreateTimer(_ => Dispatcher.UIThread.Post(() => _ = TickAsync()), null, TickInterval, TickInterval);
+            }
+        }
+        catch (Exception error)
+        {
+            Problem = error.Message;
+        }
+
+        AfterTick();
+    }
+
     /// <summary>One keep-alive, then the page follows the ECU's status.</summary>
     internal async Task TickAsync()
     {
@@ -297,6 +382,14 @@ public sealed class LiveTuningViewModel : ViewModelBase
         }
 
         AfterTick();
+    }
+
+    public void Dispose()
+    {
+        _live.LineChanged -= OnLineChanged;
+        _tune.PropertyChanged -= OnTuneChanged;
+        StopSession();
+        Editor?.Dispose();
     }
 
     private void AfterTick()
@@ -870,6 +963,16 @@ public sealed class LiveTuningViewModel : ViewModelBase
         BinDiffers = null;
         KeptForOtherFlash = null;
         PageRebuilt?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnLineChanged(object? sender, EventArgs e) => _ = AttachLine(_live.Line);
+
+    private void OnTuneChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(TuneViewModel.Document))
+        {
+            _ = AttachLine(_live.Line);
+        }
     }
 
     private static string Describe(OverlayReason reason) => reason switch
