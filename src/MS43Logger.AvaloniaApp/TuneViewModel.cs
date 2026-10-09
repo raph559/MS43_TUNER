@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using MS43Logger.Core;
 using MS43Logger.Core.Tuning;
 
 namespace MS43Logger.AvaloniaApp;
@@ -42,12 +43,17 @@ public sealed record RailItem(XdfItem Item, ItemKind Kind, bool IsPinned, bool I
     public string Description => Item.Description;
 
     public bool HasDescription => !string.IsNullOrWhiteSpace(Item.Description);
+
+    /// <summary>Maps, curves and axes open in a window of their own; values, switches and flags stay in the pane.</summary>
+    public bool OpensInWindow => Item is XdfTable;
 }
 
 /// <summary>The Tune screen: the open bin and XDF, the map rail, and the selected item.</summary>
 public sealed class TuneViewModel : ViewModelBase, ISidePanel
 {
     private readonly AppSettings _settings;
+    private readonly TimeProvider? _time;
+    private int _mapHolds;
     private readonly HashSet<string> _expanded = new(StringComparer.Ordinal);
     private CalibrationDocument? _document;
     private EditHistory? _history;
@@ -89,7 +95,83 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
         };
 
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _time = time;
         LiveCursor = new LiveCursorController(time);
+    }
+
+    /// <summary>
+    /// True from an open's save prompt until the new bin is read: the map windows edit the old bin, which is about to go,
+    /// and the file picker blocks only the main window, so they take no edits meanwhile.
+    /// </summary>
+    public bool MapWindowsHeld => _mapHolds > 0;
+
+    /// <summary>Holds the map windows until the returned handle is disposed; holds nest.</summary>
+    public IDisposable HoldMapWindows()
+    {
+        if (_mapHolds++ == 0)
+        {
+            OnPropertyChanged(nameof(MapWindowsHeld));
+        }
+
+        return new MapWindowHold(this);
+    }
+
+    private void ReleaseMapWindows()
+    {
+        if (--_mapHolds == 0)
+        {
+            OnPropertyChanged(nameof(MapWindowsHeld));
+        }
+    }
+
+    private sealed class MapWindowHold(TuneViewModel tune) : IDisposable
+    {
+        private bool _released;
+
+        public void Dispose()
+        {
+            if (!_released)
+            {
+                _released = true;
+                tune.ReleaseMapWindows();
+            }
+        }
+    }
+
+    /// <summary>A table was opened in a window of its own: the main window shows one for it.</summary>
+    public event EventHandler<MapWindowViewModel>? MapWindowOpened;
+
+    /// <summary>The tables open in windows of their own, in the order they were opened.</summary>
+    public ObservableCollection<MapWindowViewModel> MapWindows { get; } = new();
+
+    /// <summary>A logged sample for the cursor on the Tune tab and in every map window.</summary>
+    public void PushSample(LiveSample sample, AdxDefinition? definition)
+    {
+        LiveCursor.Push(sample, definition);
+        foreach (var map in MapWindows)
+        {
+            map.LiveCursor.Push(sample, definition);
+        }
+    }
+
+    /// <summary>The logger stopped: every cursor goes.</summary>
+    public void ClearLive()
+    {
+        LiveCursor.Clear();
+        foreach (var map in MapWindows)
+        {
+            map.LiveCursor.Clear();
+        }
+    }
+
+    /// <summary>The Settings trail, for the cursor on the Tune tab and in every map window.</summary>
+    public void SetCursorTrail(TrailMode trail)
+    {
+        LiveCursor.Trail = trail;
+        foreach (var map in MapWindows)
+        {
+            map.LiveCursor.Trail = trail;
+        }
     }
 
     public event EventHandler? DocumentOpened;
@@ -300,23 +382,7 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
     public string RedoTip => Undos.NextRedoLabel is { } label ? "Redo: " + label : "Nothing to redo";
 
     /// <summary>Runs a toolbar operation on the selected cells; Set, Add and Scale % use <see cref="ToolValue"/>.</summary>
-    public bool RunTool(EditKind kind)
-    {
-        if (Editor is not { } editor)
-        {
-            return false;
-        }
-
-        var value = 0.0;
-        if (kind is EditKind.Set or EditKind.Add or EditKind.Scale &&
-            !double.TryParse(ToolValue.Replace('−', '-').Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out value))
-        {
-            editor.Message = ToolValue.Trim().Length == 0 ? "Type a value first." : $"'{ToolValue}' is not a number.";
-            return false;
-        }
-
-        return editor.Apply(new EditRequest(kind, value));
-    }
+    public bool RunTool(EditKind kind) => Editor is { } editor && editor.ApplyTool(kind, ToolValue);
 
     public void Undo() => Undos.Undo();
 
@@ -444,14 +510,14 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
     private TableComparison? _comparison;
     private TableEditorViewModel? _compareGrid;
 
-    /// <summary>True while a B is open on Compare and an item is shown: Tune offers A, B and B − A and Copy from B.</summary>
+    /// <summary>True while a B is open on Compare and an item is shown: Tune offers A, B and A − B and Copy from B.</summary>
     public bool ShowsCompare => _compareImage is not null && (Editor is not null || Value is not null);
 
     public bool ShowsCompareGrid => _compareImage is not null && Editor is not null;
 
     public bool ShowsUseB => _compareImage is not null && Value is not null;
 
-    /// <summary>The grid shown on Tune: "a" (the bin edited), "b" (the compare bin) or "delta" (B − A); B and B − A are read-only.</summary>
+    /// <summary>The grid shown on Tune: "a" (the bin edited), "b" (the compare bin) or "delta" (A − B); B and A − B are read-only.</summary>
     public string GridView
     {
         get => _gridView;
@@ -475,7 +541,7 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
     public bool IsGridDelta { get => GridView == "delta"; set { if (value) { GridView = "delta"; } else { OnPropertyChanged(); } } }
 
     /// <summary>
-    /// How B − A reads, in Tune and on Compare alike (one setting): in the map's units, in stored counts, or as a percentage
+    /// How A − B reads, in Tune and on Compare alike (one setting): in the map's units, in stored counts, or as a percentage
     /// of A. Remembered.
     /// </summary>
     public DeltaMode DeltaMode
@@ -505,10 +571,10 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
 
     public bool IsDeltaPercent { get => DeltaMode == DeltaMode.Percent; set { if (value) { DeltaMode = DeltaMode.Percent; } else { OnPropertyChanged(); } } }
 
-    /// <summary>The Units, Raw and % choice shows with the B − A grid it changes.</summary>
+    /// <summary>The Units, Raw and % choice shows with the A − B grid it changes.</summary>
     public bool ShowsDeltaMode => ShowsCompareGrid && IsGridDelta;
 
-    /// <summary>"Compare with MS43X001.bin": the strip that holds A, B, B − A and Copy from B.</summary>
+    /// <summary>"Compare with MS43X001.bin": the strip that holds A, B, A − B and Copy from B.</summary>
     public string? CompareStripText => CompareFileB is { } b ? "Compare with " + b : null;
 
     /// <summary>Which way Interpolate and Smooth work on a map: X along each row, Y along each column, XY both. Remembered.</summary>
@@ -545,13 +611,13 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
     /// <summary>X, Y and XY show for a map; on a curve the tools work along it.</summary>
     public bool ShowsEditAxis => Editor is { IsMap: true };
 
-    /// <summary>The grid's editor: A's, or a read-only B or B − A over the same cells and selection.</summary>
+    /// <summary>The grid's editor: A's, or a read-only B or A − B over the same cells and selection.</summary>
     public TableEditorViewModel? ShownEditor => GridView != "a" && _compareGrid is not null ? _compareGrid : Editor;
 
     /// <summary>Where B's breakpoints differ from A's (cells are compared position by position), as the Compare tab says it.</summary>
     public string? CompareAxisNote => _comparison is { Axes.Count: > 0 } compared ? string.Join(" ", compared.Axes.Select(axis => axis.Describe())) : null;
 
-    /// <summary>B at the active cell (or B's value): "B 25.5 °CRK, B − A -1.5", for the key line.</summary>
+    /// <summary>B at the active cell (or B's value): "B 25.5 °CRK, A − B -1.5", for the key line.</summary>
     public string? CompareText
     {
         get
@@ -575,7 +641,7 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
                 var delta = BinComparer.Difference(compared, DeltaMode);
                 return compared.Delta.Raw[row, col] == 0
                     ? $"B {b}{units}, same as A"
-                    : $"B {b}{units}, B − A {BinComparer.FormatDelta(delta.Physical[row, col], delta.Raw[row, col], z, DeltaMode)}";
+                    : $"B {b}{units}, A − B {BinComparer.FormatDelta(delta.Physical[row, col], delta.Raw[row, col], z, DeltaMode)}";
             }
 
             return SelectedItem switch
@@ -634,7 +700,7 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
         }
     }
 
-    // B's view of the shown map: the differing cells ringed on A, and the B or B − A grid when one is picked.
+    // B's view of the shown map: the differing cells ringed on A, and the B or A − B grid when one is picked.
     private void RefreshCompare()
     {
         var old = _compareGrid;
@@ -658,7 +724,7 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
             grid.ActiveCell = source.ActiveCell;
             grid.PropertyChanged += (_, e) =>
             {
-                // A selection made on B or B − A is A's selection too: Copy from B and the tools act on it.
+                // A selection made on B or A − B is A's selection too: Copy from B and the tools act on it.
                 if (ReferenceEquals(grid, _compareGrid) && e.PropertyName is nameof(TableEditorViewModel.Selection) or nameof(TableEditorViewModel.ActiveCell))
                 {
                     source.Selection = grid.Selection;
@@ -707,7 +773,7 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
                             BuildFacts();
                             if (e.PropertyName == nameof(TableEditorViewModel.Values))
                             {
-                                // An edit to A changes what differs from B and B − A.
+                                // An edit to A changes what differs from B and A − B.
                                 RefreshCompare();
                             }
                             else
@@ -764,6 +830,7 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
     /// </summary>
     public async Task OpenAsync(string binPath, string? xdfPath)
     {
+        using var hold = HoldMapWindows();
         ShowError(null);
         MissingXdfPath = null;
         IsBusy = true;

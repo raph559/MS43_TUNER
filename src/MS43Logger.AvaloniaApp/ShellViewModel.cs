@@ -8,8 +8,13 @@ namespace MS43Logger.AvaloniaApp;
 /// <summary>The window: header tabs, theme, and the screens.</summary>
 public sealed class ShellViewModel : ViewModelBase
 {
+    /// <summary>The V9 watch's coordinator: the map in front is the one the ECU records.</summary>
+    public MapWatchCoordinator Watch { get; }
+
     public const string LiveTab = "Live";
     public const string TuneTab = "Tune";
+    public const string LiveTuningTab = "Live tuning";
+    public const string FunTab = "Fun";
     public const string CompareTab = "Compare";
     public const string PerformanceTab = "Performance";
 
@@ -105,7 +110,7 @@ public sealed class ShellViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Reopens the last bin at start when the Settings switch says so (system 5.12). A missing bin or XDF leaves the
+    /// Reopens the last bin at start when the Settings switch says so. A missing bin or XDF leaves the
     /// empty Tune screen with a banner naming the missing file; no file picker opens at start. Runs once: every caller
     /// gets the same task.
     /// </summary>
@@ -139,6 +144,8 @@ public sealed class ShellViewModel : ViewModelBase
     public CompareViewModel Compare { get; }
 
     public PerformanceViewModel Performance { get; }
+
+    public LiveTuningViewModel LiveTuning { get; }
 
     public string SelectedTab
     {
@@ -184,6 +191,38 @@ public sealed class ShellViewModel : ViewModelBase
             if (value)
             {
                 SelectedTab = TuneTab;
+            }
+            else
+            {
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool IsLiveTuning
+    {
+        get => SelectedTab == LiveTuningTab;
+        set
+        {
+            if (value)
+            {
+                SelectedTab = LiveTuningTab;
+            }
+            else
+            {
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool IsFun
+    {
+        get => SelectedTab == FunTab;
+        set
+        {
+            if (value)
+            {
+                SelectedTab = FunTab;
             }
             else
             {
@@ -259,7 +298,7 @@ public sealed class ShellViewModel : ViewModelBase
     public void SettingsChanged()
     {
         Tune.SettingsChanged();
-        Tune.LiveCursor.Trail = Tune.Settings.CursorTrail;
+        Tune.SetCursorTrail(Tune.Settings.CursorTrail);
         ApplyLiveSettings();
         SettingsApplied?.Invoke(this, EventArgs.Empty);
     }
@@ -274,7 +313,7 @@ public sealed class ShellViewModel : ViewModelBase
 
     /// <summary>
     /// Connect is the screen's one primary action on Live and on Performance, where a test needs the link, and only until
-    /// connected (system 5.1, performance spec 9.1); on Performance a finished run to save keeps Save result the primary.
+    /// connected; on Performance a finished run to save keeps Save result the primary.
     /// </summary>
     public bool ConnectIsPrimary => (IsLive || (IsPerformance && !Performance.Run.CanSave)) && !Live.IsConnected;
 
