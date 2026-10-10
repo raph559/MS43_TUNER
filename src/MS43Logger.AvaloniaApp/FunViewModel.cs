@@ -51,6 +51,18 @@ public sealed class FunViewModel : ViewModelBase, IDisposable
     private string? _problem;
     private bool _isVisible;
 
+    public FunViewModel(TuneViewModel tune, LiveTuningViewModel live)
+    {
+        _tune = tune;
+        LiveTuning = live;
+        OfflineGears = new ObservableCollection<LimiterRpmRow>(Enumerable.Range(0, 6).Select(i => new LimiterRpmRow(i)));
+        foreach (var key in FunFeatures.Order) Features.Add(new FunFeature(key, Titles[key]));
+        live.PropertyChanged += OnLiveChanged;
+        live.PageRebuilt += OnPageRebuilt;
+        tune.PropertyChanged += OnTuneChanged;
+        Refresh();
+    }
+
     public LiveTuningViewModel LiveTuning { get; }
     public ObservableCollection<FunFeature> Features { get; } = new();
     public ObservableCollection<LiveScalarRow> ScalarRows { get; } = new();
@@ -252,6 +264,60 @@ public sealed class FunViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanSwitch));
     }
 
+    // ---- connected ----
+
+    /// <summary>
+    /// Sends the chosen feature's groups once every one of them passes the checks, the main group (the feature's switch)
+    /// last, so a refusal never leaves the feature switched on with settings it was not sent with. A refusal stops the
+    /// sending, and the message says which groups went live.
+    /// </summary>
+    public async Task SendAsync()
+    {
+        if (!IsLive || LiveRows is not { Count: > 0 } rows) return;
+        if (rows.Select(LiveTuning.RefusalFor).OfType<string>().FirstOrDefault() is { } refused)
+        {
+            Problem = refused;
+            return;
+        }
+        var live = new List<string>();
+        foreach (var row in rows.Reverse())
+        {
+            await LiveTuning.SendAsync(row);
+            if (LiveTuning.Problem is { } problem)
+            {
+                Problem = live.Count == 0 ? problem : $"{problem} {string.Join(" and ", live)} went live; the rest, the switch included, was not sent.";
+                Refresh(rebuild: false);
+                return;
+            }
+            live.Add(row.Title);
+        }
+        Problem = null;
+        Refresh(rebuild: false);
+    }
+
+    public async Task WriteToBinAsync()
+    {
+        Problem = null;
+        if (!IsLive) return;
+        if (IsHardcut)
+        {
+            LiveTuning.CopyLimiterToTune();
+            Problem = LiveTuning.Problem;
+        }
+        else if (LiveRows is { Count: > 0 } rows)
+        {
+            var sent = rows.Where(row => row.State != OverlayState.Free).ToArray();
+            if (sent.Length == 0) { Problem = "Send these settings before writing them into the bin."; return; }
+            Problem = await LiveTuning.CopyToTuneAsync(sent) ?? "Written into the bin: save it with the Save button at the top.";
+        }
+    }
+
+    public async Task SendLimiterAsync()
+    {
+        await LiveTuning.SendLimiterAsync();
+        Problem = LiveTuning.Problem;
+    }
+
     // ---- offline ----
 
     private string _offlineHysteresis = string.Empty;
@@ -259,7 +325,46 @@ public sealed class FunViewModel : ViewModelBase, IDisposable
     public string OfflineHysteresis { get => _offlineHysteresis; set => SetField(ref _offlineHysteresis, value); }
     public int OfflineMode { get => _offlineMode; set => SetField(ref _offlineMode, value); }
 
+    /// <summary>Writes the hardcut fields into the open bin: RPM in multiples of 32 up to 8160, each limit above the hysteresis.</summary>
+    public void ApplyOfflineLimiter()
+    {
+        Problem = null;
+        if (!IsBin || _tune.Document is not { } bin || _tune.History is not { } history) return;
+        if (LimiterInBin.Find(bin.Xdf) is not { } items)
+        {
+            Problem = "The loaded XDF needs the manual gear limits, limiter hysteresis and cut-mode definitions.";
+            return;
+        }
+        try
+        {
+            static byte Raw(string value)
+            {
+                if (!int.TryParse(value, out var rpm) || rpm < 0 || rpm > 8160 || rpm % 32 != 0)
+                    throw new ArgumentException("RPM values must be multiples of 32, between 0 and 8160.");
+                return (byte)(rpm / 32);
+            }
+            var settings = new LimiterSettings(OfflineGears.Select(g => Raw(g.Rpm)).ToArray(), Raw(OfflineHysteresis), OfflineMode == 1, false);
+            var before = history.UndoCount;
+            LimiterInBin.Write(bin, history, items, settings, "Set hardcut");
+            _limiterSteps = history.UndoCount - before;
+            Refresh();
+        }
+        catch (Exception error) when (error is ArgumentException or EditRefusedException) { Problem = error.Message; }
+    }
+
     private int _limiterSteps;
+
+    public void Undo()
+    {
+        if (IsLive) LiveTuning.Undo();
+        else if (IsBin && IsHardcut && _limiterSteps > 0)
+        {
+            // One hardcut change can write three items (gears, hysteresis, mode): undo all of them.
+            for (; _limiterSteps > 0; _limiterSteps--) _tune.Undo();
+            Refresh();
+        }
+        else if (IsBin) _tune.Undo();
+    }
 
     public void Redo() { if (IsLive) LiveTuning.Redo(); else if (IsBin) _tune.Redo(); }
 

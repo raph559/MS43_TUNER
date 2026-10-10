@@ -21,23 +21,31 @@ public sealed class ShellViewModel : ViewModelBase
     private string _selectedTab = LiveTab;
     private System.Threading.Tasks.Task? _start;
 
-    public ShellViewModel(MainWindowViewModel live, TuneViewModel tune)
+    public ShellViewModel(MainWindowViewModel live, TuneViewModel tune, TimeProvider? time = null)
     {
         Live = live;
         Tune = tune;
         Compare = new CompareViewModel(tune);
         Performance = new PerformanceViewModel(live, tune);
+        // The edits are kept beside the settings, so a test's throw-away settings folder holds its own.
+        LiveTuning = new LiveTuningViewModel(live, tune, new MS43Logger.Core.LiveTuning.LiveEditStore(
+            System.IO.Path.Combine(tune.Settings.Folder, "live-edits.json")), time);
+        LiveTuning.LiveCursor.IsVisible = false;
+        Fun = new FunViewModel(tune, LiveTuning);
+        live.LiveMaps = () => LiveTuning.CsvCell;
+        live.DiagnosticsPaused = () => Performance.Run.IsRecording;
+        Performance.LiveTags = () => LiveTuning.LiveTagsIfAnyLive;
         Compare.ShowInTuneRequested += (_, item) =>
         {
             tune.SelectedItem = item;
             SelectedTab = TuneTab;
         };
         App.SetTheme(tune.Settings.Theme);
-        tune.LiveCursor.Trail = tune.Settings.CursorTrail;
+        tune.SetCursorTrail(tune.Settings.CursorTrail);
         live.Readouts = tune.Settings.Readouts;
         ApplyLiveSettings();
 
-        // The last port used is preselected while it is still plugged in (system 7.2); otherwise the first stays.
+        // The last port used is preselected while it is still plugged in; otherwise the first stays.
         if (tune.Settings.LastPort is { } port && live.AvailablePorts.Contains(port))
         {
             live.SelectedPort = port;
@@ -70,8 +78,8 @@ public sealed class ShellViewModel : ViewModelBase
                 OnPropertyChanged(nameof(ConnectIsPrimary));
                 if (!live.IsConnected)
                 {
-                    tune.LiveCursor.Clear();
-                    // A run ends incomplete with what it measured (review focus 1).
+                    tune.ClearLive();
+                    // A run ends incomplete with what it measured.
                     Performance.LinkLost();
                 }
                 else if (live.SelectedPort is { Length: > 0 } connected && connected != tune.Settings.LastPort)
@@ -82,11 +90,11 @@ public sealed class ShellViewModel : ViewModelBase
             }
         };
 
-        live.SampleShown += (_, sample) => tune.LiveCursor.Push(sample, live.CurrentDefinition);
-        // On every tab, so a run survives switching tabs; Live has already fed its warm-up monitor the same frame (performance
-        // spec 5).
+        live.SampleShown += (_, sample) => tune.PushSample(sample, live.CurrentDefinition);
+        live.SampleShown += (_, sample) => LiveTuning.Push(sample, live.CurrentDefinition);
+        // On every tab, so a run survives switching tabs; Live has already fed its warm-up monitor the same frame.
         live.SampleShown += (_, sample) => Performance.Push(sample, live.LastFrame, live.CurrentDefinition);
-        // A finished run to save takes the primary from Connect (minor review, findings 20 and 33).
+        // A finished run to save takes the primary from Connect.
         Performance.Run.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(PerformanceRunViewModel.CanSave))
@@ -95,6 +103,12 @@ public sealed class ShellViewModel : ViewModelBase
             }
         };
         tune.LiveCursor.IsVisible = IsTune;
+        // With a V9 ECU, one watch follows the table in front: the Tune tab's, Live tuning's or a focused map window's.
+        Watch = new MapWatchCoordinator(() => live.Watch);
+        tune.LiveCursor.Coordinator = Watch;
+        LiveTuning.LiveCursor.Coordinator = Watch;
+        if (tune.LiveCursor.IsVisible) Watch.Activate(tune.LiveCursor);
+        live.LineChanged += (_, _) => Watch.Send();
 
         tune.DocumentOpened += (_, _) =>
         {
@@ -147,6 +161,8 @@ public sealed class ShellViewModel : ViewModelBase
 
     public LiveTuningViewModel LiveTuning { get; }
 
+    public FunViewModel Fun { get; }
+
     public string SelectedTab
     {
         get => _selectedTab;
@@ -156,13 +172,17 @@ public sealed class ShellViewModel : ViewModelBase
             {
                 OnPropertyChanged(nameof(IsLive));
                 OnPropertyChanged(nameof(IsTune));
+                OnPropertyChanged(nameof(IsLiveTuning));
+                OnPropertyChanged(nameof(IsFun));
                 OnPropertyChanged(nameof(IsCompare));
                 OnPropertyChanged(nameof(IsPerformance));
                 OnPropertyChanged(nameof(ConnectIsPrimary));
                 OnPropertyChanged(nameof(SaveIsPrimary));
                 Tune.LiveCursor.IsVisible = IsTune;
+                LiveTuning.LiveCursor.IsVisible = IsLiveTuning;
                 Compare.IsVisible = IsCompare;
                 Performance.IsVisible = IsPerformance;
+                Fun.IsVisible = IsFun;
             }
         }
     }
