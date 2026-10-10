@@ -144,6 +144,40 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
     /// <summary>The tables open in windows of their own, in the order they were opened.</summary>
     public ObservableCollection<MapWindowViewModel> MapWindows { get; } = new();
 
+    /// <summary>
+    /// Opens a map, curve or axis in a window of its own, as TunerPro does, or brings its open window to the front. Any
+    /// number can be open; each edits the bin through the one undo history.
+    /// </summary>
+    public MapWindowViewModel OpenMapWindow(XdfTable table)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        if (MapWindows.FirstOrDefault(open => ReferenceEquals(open.Table, table)) is { } open)
+        {
+            open.Activate();
+            return open;
+        }
+
+        if (Document is null || History is null || Catalog is null)
+        {
+            throw new InvalidOperationException("Open a bin before opening a map in a window.");
+        }
+
+        var map = new MapWindowViewModel(this, table, _time);
+        map.Closed += (_, _) => MapWindows.Remove(map);
+        MapWindows.Add(map);
+        MapWindowOpened?.Invoke(this, map);
+        return map;
+    }
+
+    /// <summary>Closes every map window: the bin they edit is going away.</summary>
+    public void CloseMapWindows()
+    {
+        foreach (var map in MapWindows.ToList())
+        {
+            map.Close();
+        }
+    }
+
     /// <summary>A logged sample for the cursor on the Tune tab and in every map window.</summary>
     public void PushSample(LiveSample sample, AdxDefinition? definition)
     {
@@ -986,6 +1020,8 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
 
     private void Attach(CalibrationDocument document, string xdfPath)
     {
+        // The windows edit the old bin's tables through its history; a new bin or XDF closes them.
+        CloseMapWindows();
         XdfPath = Path.GetFullPath(xdfPath);
         if (Document is not null)
         {

@@ -408,6 +408,8 @@ public sealed class CompareViewModel : ViewModelBase, ISidePanel
             return false;
         }
 
+        // Tune's map windows edit A, which is about to go: they take no edits from the questions to the new A.
+        using var hold = _tune.HoldMapWindows();
         if (!await AskToSwap($"Swap A and B? {Path.GetFileName(b)} opens as A, the bin you edit, and {Path.GetFileName(a)} becomes B.")
             || !await _tune.ConfirmDiscardAsync())
         {

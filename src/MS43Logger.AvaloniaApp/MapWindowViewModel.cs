@@ -14,6 +14,29 @@ public sealed class MapWindowViewModel : ViewModelBase
     private readonly TuneViewModel _tune;
     private string _toolValue = string.Empty;
 
+    internal MapWindowViewModel(TuneViewModel tune, XdfTable table, TimeProvider? time)
+    {
+        _tune = tune;
+        Table = table;
+        Kind = tune.Catalog!.Kind(table);
+        Editor = new TableEditorViewModel(tune.Document!, tune.History!, table)
+        {
+            Selection = new CellRange(0, 0, 0, 0),
+            ShowRaw = tune.Settings.OpenMapsRaw,
+            NumberRows = Kind == ItemKind.Axis,
+            Axis = tune.EditAxis,
+        };
+
+        // Shown whatever tab the main window is on: the window is on screen for as long as it is open.
+        LiveCursor = new LiveCursorController(time)
+        {
+            AutoTick = tune.LiveCursor.AutoTick, Trail = tune.LiveCursor.Trail, Coordinator = tune.LiveCursor.Coordinator, IsVisible = true,
+        };
+        LiveCursor.Bind(tune.Document, Editor);
+        tune.Undos.Changed += OnUndosChanged;
+        tune.PropertyChanged += OnTuneChanged;
+    }
+
     /// <summary>Raised once, when the window is closed from either side: its own close button or the bin going away.</summary>
     public event EventHandler? Closed;
 
@@ -33,6 +56,9 @@ public sealed class MapWindowViewModel : ViewModelBase
     public LiveCursorController LiveCursor { get; }
 
     public bool IsClosed { get; private set; }
+
+    /// <summary>True while another bin or XDF is being chosen and read: this window takes no edits, and closes with the old bin.</summary>
+    public bool IsHeld => _tune.MapWindowsHeld;
 
     /// <summary>The Tune tab's problem line, such as a save that failed: Ctrl S works from here, so its outcome shows here too.</summary>
     public string? ErrorMessage => _tune.HasErrorBanner ? _tune.ErrorMessage : null;
@@ -79,11 +105,49 @@ public sealed class MapWindowViewModel : ViewModelBase
     /// <summary>Asks the window to come to the front.</summary>
     public void Activate() => ActivateRequested?.Invoke(this, EventArgs.Empty);
 
+    /// <summary>Lets go of the bin and tells the window and the Tune tab; a second call does nothing.</summary>
+    public void Close()
+    {
+        if (IsClosed)
+        {
+            return;
+        }
+
+        IsClosed = true;
+        _tune.Undos.Changed -= OnUndosChanged;
+        _tune.PropertyChanged -= OnTuneChanged;
+        LiveCursor.Clear();
+        LiveCursor.Bind(null, null);
+        Editor.Dispose();
+        Closed?.Invoke(this, EventArgs.Empty);
+    }
+
     private void OnUndosChanged(object? sender, EventArgs e)
     {
         OnPropertyChanged(nameof(CanUndo));
         OnPropertyChanged(nameof(CanRedo));
         OnPropertyChanged(nameof(UndoTip));
         OnPropertyChanged(nameof(RedoTip));
+    }
+
+    private void OnTuneChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(TuneViewModel.MapWindowsHeld))
+        {
+            OnPropertyChanged(nameof(IsHeld));
+        }
+
+        if (e.PropertyName is nameof(TuneViewModel.ErrorMessage) or nameof(TuneViewModel.HasErrorBanner))
+        {
+            OnPropertyChanged(nameof(ErrorMessage));
+        }
+
+        if (e.PropertyName == nameof(TuneViewModel.EditAxis))
+        {
+            Editor.Axis = _tune.EditAxis;
+            OnPropertyChanged(nameof(IsEditAxisX));
+            OnPropertyChanged(nameof(IsEditAxisY));
+            OnPropertyChanged(nameof(IsEditAxisXY));
+        }
     }
 }
