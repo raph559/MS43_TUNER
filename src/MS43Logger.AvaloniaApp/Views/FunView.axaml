@@ -1,0 +1,164 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:MS43Logger.AvaloniaApp"
+             xmlns:controls="using:MS43Logger.AvaloniaApp.Controls"
+             x:Class="MS43Logger.AvaloniaApp.Views.FunView"
+             x:DataType="local:FunViewModel">
+    <UserControl.Styles>
+        <!-- The Fun tab (spec 2026-10-28, layout C): the features on the left, the chosen one's settings on the right. -->
+        <Style Selector="Border#FunRail">
+            <Setter Property="Width" Value="256" />
+        </Style>
+        <Style Selector="ListBox#FunFeatures ListBoxItem">
+            <Setter Property="Padding" Value="12,10" />
+        </Style>
+        <!-- A feature the bin or the ECU does not have stays listed, greyed (owner, 2026-10-28). -->
+        <Style Selector="Grid.off TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
+        <Style Selector="TextBlock.state">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid ColumnDefinitions="Auto,*">
+        <Border Name="FunRail" Background="{DynamicResource FrameBrush}" BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="0,0,1,0"
+                Padding="8,16">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Classes="label" Text="Fun" Margin="4,0,4,12" />
+                <ListBox Name="FunFeatures" ItemsSource="{Binding Features}" SelectedItem="{Binding Selected}" Background="Transparent"
+                         AutomationProperties.Name="Fun features">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="local:FunFeature">
+                            <Grid ColumnDefinitions="*,Auto" Classes.off="{Binding !IsAvailable}" ToolTip.Tip="{Binding Unavailable}">
+                                <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Classes="state" Text="{Binding SwitchText}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </Border>
+
+        <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="24,16" Spacing="12" MaxWidth="720" HorizontalAlignment="Left">
+                <Border Name="FunModeBar" Background="{DynamicResource FrameBrush}" CornerRadius="6" Padding="12,8">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <controls:StrokeIcon Data="{StaticResource Icon.Info}" Width="14" Height="14" VerticalAlignment="Center" />
+                        <TextBlock Name="FunMode" Text="{Binding ModeText}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Classes="title" Text="{Binding Selected.Title, FallbackValue=''}" />
+                <TextBlock Classes="body" Text="{Binding Note}" TextWrapping="Wrap"
+                           IsVisible="{Binding Note, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                <TextBlock Name="FunUnavailable" Classes="body" Text="{Binding Unavailable}" TextWrapping="Wrap"
+                           IsVisible="{Binding Unavailable, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+                <!-- Actions: live, the live page's own Send, A/B and write-to-bin; offline, Tune's undo (the header saves the bin). -->
+                <WrapPanel ItemSpacing="8" LineSpacing="8" IsVisible="{Binding IsGroup}">
+                    <Button Name="FunSend" Classes="primary" Content="Send" Click="Send_Click" IsVisible="{Binding IsLive}"
+                            AutomationProperties.Name="Send to the car" />
+                    <ToggleSwitch Name="FunAB" IsChecked="{Binding IsOn}" IsEnabled="{Binding CanSwitch}" IsVisible="{Binding IsLive}"
+                                  OnContent="Live" OffContent="Flashed" AutomationProperties.Name="Use the live settings" />
+                    <Button Name="FunWriteToBin" Content="Write into the bin" Click="WriteToBin_Click" IsVisible="{Binding IsLive}"
+                            AutomationProperties.Name="Write the sent settings into the bin" />
+                    <Button Name="FunUndo" Content="Undo" Click="Undo_Click" AutomationProperties.Name="Undo" />
+                    <Button Name="FunRedo" Content="Redo" Click="Redo_Click" AutomationProperties.Name="Redo" />
+                </WrapPanel>
+                <TextBlock Name="FunSaveHint" Classes="state" Text="Save the bin with the Save button at the top." IsVisible="{Binding ShowsSaveHint}" />
+                <TextBlock Name="FunProblem" Classes="state" Text="{Binding Problem}" TextWrapping="Wrap"
+                           IsVisible="{Binding Problem, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+                <!-- A settings group: the same rows as the live-tuning page. -->
+                <ItemsControl Name="FunRows" ItemsSource="{Binding ScalarRows}" IsVisible="{Binding IsGroup}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="local:LiveScalarRow">
+                            <Border BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="0,0,0,1" Padding="0,8,0,12">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Classes="label" Text="{Binding Label}" ToolTip.Tip="{Binding Description}" />
+                                    <ComboBox ItemsSource="{Binding Editor.Choices}" SelectedItem="{Binding Editor.SelectedChoice}"
+                                              IsVisible="{Binding Editor.IsSwitch}" HorizontalAlignment="Stretch"
+                                              AutomationProperties.Name="{Binding Label}">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate x:DataType="local:ChoiceItem">
+                                                <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                    <WrapPanel IsVisible="{Binding Editor.IsValue}" ItemSpacing="12" LineSpacing="6">
+                                        <TextBlock VerticalAlignment="Center" MinWidth="96"><Run Text="{Binding Editor.ReadingText, Mode=OneWay}" /> <Run Text="{Binding Editor.ReadingUnits, Mode=OneWay}" /></TextBlock>
+                                        <TextBox Width="120" Text="{Binding Editor.Input}" Watermark="New value" Classes="data13"
+                                                 KeyDown="ScalarValue_KeyDown" AutomationProperties.Name="{Binding Label}" />
+                                        <Button Content="Set" Click="ScalarSet_Click" AutomationProperties.Name="{Binding Label, StringFormat='Set {0}'}" />
+                                    </WrapPanel>
+                                    <TextBlock Classes="state" Text="{Binding Editor.Message}" TextWrapping="Wrap"
+                                               IsVisible="{Binding Editor.Message, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- The hardcut: live, the live page's limiter fields; offline, the bin's. -->
+                <StackPanel Name="FunHardcut" Spacing="8" IsVisible="{Binding IsHardcut}">
+                    <StackPanel Spacing="8" IsVisible="{Binding IsLive}">
+                        <ItemsControl ItemsSource="{Binding LiveTuning.LimiterGears}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="local:LimiterRpmRow">
+                                    <Grid ColumnDefinitions="160,120,Auto" Margin="0,2">
+                                        <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                        <TextBox Grid.Column="1" Text="{Binding Rpm}" Classes="data13" AutomationProperties.Name="{Binding Label}" />
+                                        <TextBlock Grid.Column="2" Text="rpm" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Grid ColumnDefinitions="160,120,Auto">
+                            <TextBlock Text="Hysteresis" VerticalAlignment="Center" />
+                            <TextBox Grid.Column="1" Text="{Binding LiveTuning.LimiterHysteresis}" Classes="data13" AutomationProperties.Name="Hysteresis" />
+                            <TextBlock Grid.Column="2" Text="rpm" Margin="8,0,0,0" VerticalAlignment="Center" />
+                        </Grid>
+                        <ComboBox SelectedIndex="{Binding LiveTuning.LimiterMode}" AutomationProperties.Name="Cut mode">
+                            <ComboBoxItem Content="Fuel cut" />
+                            <ComboBoxItem Content="Ignition cut" />
+                        </ComboBox>
+                        <CheckBox Content="Use live limiter settings" IsChecked="{Binding LiveTuning.LimiterEnabled}" />
+                        <WrapPanel ItemSpacing="8">
+                            <Button Name="FunLimiterSend" Classes="primary" Content="Send hardcut" Click="SendLimiter_Click" />
+                            <Button Name="FunLimiterToBin" Content="Write into the bin" Click="WriteToBin_Click"
+                                    AutomationProperties.Name="Write the sent hardcut into the bin" />
+                        </WrapPanel>
+                    </StackPanel>
+                    <StackPanel Spacing="8" IsVisible="{Binding IsBin}">
+                        <ItemsControl ItemsSource="{Binding OfflineGears}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="local:LimiterRpmRow">
+                                    <Grid ColumnDefinitions="160,120,Auto" Margin="0,2">
+                                        <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                        <TextBox Grid.Column="1" Text="{Binding Rpm}" Classes="data13" AutomationProperties.Name="{Binding Label}" />
+                                        <TextBlock Grid.Column="2" Text="rpm" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Grid ColumnDefinitions="160,120,Auto">
+                            <TextBlock Text="Hysteresis" VerticalAlignment="Center" />
+                            <TextBox Grid.Column="1" Text="{Binding OfflineHysteresis}" Classes="data13" AutomationProperties.Name="Hysteresis" />
+                            <TextBlock Grid.Column="2" Text="rpm" Margin="8,0,0,0" VerticalAlignment="Center" />
+                        </Grid>
+                        <ComboBox SelectedIndex="{Binding OfflineMode}" AutomationProperties.Name="Cut mode">
+                            <ComboBoxItem Content="Fuel cut" />
+                            <ComboBoxItem Content="Ignition cut" />
+                        </ComboBox>
+                        <WrapPanel ItemSpacing="8">
+                            <Button Name="FunLimiterApply" Classes="primary" Content="Apply to the bin" Click="ApplyLimiter_Click" />
+                            <Button Name="FunLimiterUndo" Content="Undo" Click="Undo_Click" AutomationProperties.Name="Undo the hardcut change" />
+                        </WrapPanel>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>
