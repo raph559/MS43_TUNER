@@ -49,21 +49,29 @@
         <Style Selector="Window.compactheader Button#ConnectionButton">
             <Setter Property="IsVisible" Value="True" />
         </Style>
-        <!-- The fourth tab's room (performance spec 9.1): narrower tabs, tighter margins after the mark and the tabs, and the
-             words "slow link" step aside while the rate and its warning icon stay. -->
-        <Style Selector="StackPanel#Brand, StackPanel#Tabs">
+        <!-- The header's room (performance spec 9.1): a tighter margin after the mark, and the words "slow link" step aside
+             while the rate and its warning icon stay. -->
+        <Style Selector="StackPanel#Brand">
             <Setter Property="Margin" Value="0,0,24,0" />
         </Style>
-        <Style Selector="Window.compactheader StackPanel#Brand, Window.compactheader StackPanel#Tabs">
+        <Style Selector="Window.compactheader StackPanel#Brand">
             <Setter Property="Margin" Value="0,0,8,0" />
         </Style>
-        <Style Selector="Window.compactheader ToggleButton.tab">
-            <Setter Property="Padding" Value="8,0" />
-        </Style>
-        <Style Selector="Window.compactheader ToggleButton.tab /template/ Border#Indicator">
-            <Setter Property="Margin" Value="8,0" />
-        </Style>
         <Style Selector="Window.compactheader Panel#SlowLinkWords">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <!-- Below 1280 px the tab column narrows, so the screens keep the room they had with the tabs in the header. -->
+        <Style Selector="Border#NavRail">
+            <Setter Property="Width" Value="120" />
+        </Style>
+        <Style Selector="Window.compact Border#NavRail">
+            <Setter Property="Width" Value="80" />
+        </Style>
+        <Style Selector="Window.compact ToggleButton.navtab">
+            <Setter Property="Padding" Value="6,0" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+        <Style Selector="Window.compact TextBlock#RateUnit">
             <Setter Property="IsVisible" Value="False" />
         </Style>
         <!-- Sizes live in styles, not on the elements, so the compact rules below can change them. -->
@@ -91,13 +99,6 @@
                 <StackPanel Name="Brand" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <shell:AppMark Name="AppMark" IsLive="{Binding Live.IsConnected}" Level="{Binding Live.EngineSpeedLevel}" />
                     <TextBlock Name="Wordmark" Classes="title" Text="MS43 Tuner" VerticalAlignment="Center" />
-                </StackPanel>
-
-                <StackPanel Name="Tabs" Grid.Column="1" Orientation="Horizontal">
-                    <ToggleButton Name="TabLive" Classes="tab" Content="Live" IsChecked="{Binding IsLive}" />
-                    <ToggleButton Name="TabTune" Classes="tab" Content="Tune" IsChecked="{Binding IsTune}" />
-                    <ToggleButton Name="TabCompare" Classes="tab" Content="Compare" IsChecked="{Binding IsCompare}" />
-                    <ToggleButton Name="TabPerformance" Classes="tab" Content="Performance" IsChecked="{Binding IsPerformance}" />
                 </StackPanel>
 
                 <!-- The file button gives way when the header is short: first the XDF line steps aside (it is in the
@@ -151,7 +152,7 @@
                         <TextBlock Classes="label" Text="No samples yet" IsVisible="{Binding Live.HasNoSamplesYet}" />
                         <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding !Live.HasNoSamplesYet}">
                             <TextBlock Classes="data13" FontWeight="SemiBold" Foreground="{DynamicResource NowTextBrush}" Text="{Binding Live.RateValue}" VerticalAlignment="Center" />
-                            <TextBlock Classes="label" Text="samples/s" VerticalAlignment="Center" />
+                            <TextBlock Name="RateUnit" Classes="label" Text="samples/s" VerticalAlignment="Center" />
                             <controls:StrokeIcon Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource WarnBrush}" Width="14" Height="14"
                                                  VerticalAlignment="Center" IsVisible="{Binding Live.IsSlowLink}" />
                             <Panel Name="SlowLinkWords" VerticalAlignment="Center">
@@ -236,13 +237,28 @@
             </Grid>
         </Border>
 
-        <!-- Screens -->
-        <Panel Grid.Row="1">
-            <views:LiveView DataContext="{Binding Live}" IsVisible="{Binding $parent[Window].((local:ShellViewModel)DataContext).IsLive}" />
-            <views:TuneView DataContext="{Binding Tune}" IsVisible="{Binding $parent[Window].((local:ShellViewModel)DataContext).IsTune}" />
-            <views:CompareView DataContext="{Binding Compare}" IsVisible="{Binding $parent[Window].((local:ShellViewModel)DataContext).IsCompare}" />
-            <views:PerformanceView DataContext="{Binding Performance}" IsVisible="{Binding $parent[Window].((local:ShellViewModel)DataContext).IsPerformance}" />
-        </Panel>
+        <!-- Screens, with the tabs in a column on their left: the header keeps the file, Save and the connection. -->
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*">
+            <Border Name="NavRail" Background="{DynamicResource FrameBrush}" BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="0,0,1,0"
+                    Padding="0,8">
+                <StackPanel Name="Tabs" Orientation="Vertical">
+                    <ToggleButton Name="TabLive" Classes="navtab" Content="Live" IsChecked="{Binding IsLive}" />
+                    <ToggleButton Name="TabTune" Classes="navtab" Content="Tune" IsChecked="{Binding IsTune}" />
+                    <ToggleButton Name="TabLiveTuning" Classes="navtab" Content="Live tuning" IsChecked="{Binding IsLiveTuning}" />
+                    <ToggleButton Name="TabFun" Classes="navtab" Content="Fun" IsChecked="{Binding IsFun}" />
+                    <ToggleButton Name="TabCompare" Classes="navtab" Content="Compare" IsChecked="{Binding IsCompare}" />
+                    <ToggleButton Name="TabPerformance" Classes="navtab" Content="Performance" IsChecked="{Binding IsPerformance}" />
+                </StackPanel>
+            </Border>
+            <Panel Grid.Column="1">
+                <views:LiveView DataContext="{Binding Live}" IsVisible="{Binding $parent[Window].((local:ShellViewModel)DataContext).IsLive}" />
+                <views:TuneView DataContext="{Binding Tune}" IsVisible="{Binding $parent[Window].((local:ShellViewModel)DataContext).IsTune}" />
+                <views:LiveTuningView DataContext="{Binding LiveTuning}" IsVisible="{Binding $parent[Window].((local:ShellViewModel)DataContext).IsLiveTuning}" />
+                <views:FunView DataContext="{Binding Fun}" IsVisible="{Binding $parent[Window].((local:ShellViewModel)DataContext).IsFun}" />
+                <views:CompareView DataContext="{Binding Compare}" IsVisible="{Binding $parent[Window].((local:ShellViewModel)DataContext).IsCompare}" />
+                <views:PerformanceView DataContext="{Binding Performance}" IsVisible="{Binding $parent[Window].((local:ShellViewModel)DataContext).IsPerformance}" />
+            </Panel>
+        </Grid>
 
         <!-- Opening another bin: the open one stays and a 2 px bar runs under the header (system 7.1). -->
         <ProgressBar Name="BusyBar" Grid.Row="1" VerticalAlignment="Top" IsIndeterminate="True" IsVisible="{Binding Tune.ShowsBusyBar}" />
@@ -250,14 +266,18 @@
         <!-- Status bar (system 5.11) -->
         <Border Grid.Row="2" Background="{DynamicResource FrameBrush}" BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="0,1,0,0" Padding="16,0,8,0">
             <!-- The connection line takes the width left over and trims its end; the whole line is in its tooltip. -->
-            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
                 <Panel Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center">
                     <Ellipse Name="ConnectionDot" Stroke="{DynamicResource EdgeBrush}" StrokeThickness="1.5" IsVisible="{Binding !Live.IsConnected}" />
                     <Ellipse Fill="{DynamicResource NowBrush}" IsVisible="{Binding Live.IsConnected}" />
                 </Panel>
                 <TextBlock Name="ConnectionText" Grid.Column="1" Margin="0,0,12,0" FontSize="12" Foreground="{DynamicResource Ink2Brush}" VerticalAlignment="Center"
                            FontFeatures="{x:Static theme:Typography.Tabular}" TextTrimming="CharacterEllipsis" />
-                <StackPanel Name="ReadoutsSeg" Grid.Column="2" Orientation="Horizontal" Spacing="8" Margin="0,0,12,0" IsVisible="{Binding IsLive}">
+                <!-- While connected: start or stop the CSV log at once, each start a new file. -->
+                <ToggleButton Name="LogButton" Grid.Column="2" Classes="seg small" Content="{Binding Live.LogButtonText}"
+                              IsChecked="{Binding Live.EnableCsvLogging}" IsVisible="{Binding Live.IsConnected}"
+                              AutomationProperties.Name="CSV log" ToolTip.Tip="{Binding Live.CsvPath}" Margin="0,0,12,0" VerticalAlignment="Center" />
+                <StackPanel Name="ReadoutsSeg" Grid.Column="3" Orientation="Horizontal" Spacing="8" Margin="0,0,12,0" IsVisible="{Binding IsLive}">
                     <TextBlock Name="ReadoutsLabel" Classes="label" Text="Readouts" VerticalAlignment="Center" />
                     <Border Classes="seg small" AutomationProperties.Name="Readouts" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal" Spacing="2">
@@ -266,7 +286,7 @@
                         </StackPanel>
                     </Border>
                 </StackPanel>
-                <Border Grid.Column="3" Classes="seg small" AutomationProperties.Name="Theme" VerticalAlignment="Center">
+                <Border Grid.Column="4" Classes="seg small" AutomationProperties.Name="Theme" VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal" Spacing="2">
                         <!-- A moon and a sun: the words are the tooltips and what a screen reader says. -->
                         <ToggleButton Name="NightButton" Classes="seg small" IsChecked="{Binding IsNight}" Padding="8,0"

@@ -428,23 +428,34 @@
                 </Border>
             </Panel>
 
-            <!-- gear: the slots wrap under the name when the cell is narrow -->
+            <!-- gear and speed share one cell, side by side (owner, 2026-10-28: the knock cell took the speed cell's place) -->
             <Border Classes="cell">
-                <WrapPanel ItemSpacing="12" LineSpacing="8">
-                    <TextBlock Classes="cell-title" VerticalAlignment="Center" ToolTip.Tip="{Binding GearReadout.FullName}"><Run Text="{Binding GearReadout.ChannelTitle, Mode=OneWay}" /><Run Classes="cell-id" Text="{Binding GearReadout.ChannelId, StringFormat='&#x2002;{0}', Mode=OneWay}" /></TextBlock>
-                    <controls:GearSlots Name="GearSlots" Gear="{Binding Gear}" IsLive="{Binding IsConnected}" />
-                </WrapPanel>
-            </Border>
-
-            <!-- speed -->
-            <Border Classes="cell">
-                <StackPanel Spacing="8">
-                    <TextBlock Classes="cell-title" ToolTip.Tip="{Binding SpeedReadout.FullName}"><Run Text="{Binding SpeedReadout.ChannelTitle, Mode=OneWay}" /><Run Classes="cell-id" Text="{Binding SpeedReadout.ChannelId, StringFormat='&#x2002;{0}', Mode=OneWay}" /></TextBlock>
-                    <Panel Height="28">
+                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
+                    <TextBlock Classes="cell-title" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding GearReadout.FullName}"><Run Text="Gear" /><Run Classes="cell-id" Text="{Binding GearReadout.ChannelId, StringFormat='&#x2002;{0}', Mode=OneWay}" /></TextBlock>
+                    <controls:GearSlots Name="GearSlots" Grid.Row="1" Margin="0,8,0,0" Gear="{Binding Gear}" IsLive="{Binding IsConnected}" />
+                    <TextBlock Grid.Column="1" Classes="cell-title" Margin="16,0,0,0" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SpeedReadout.FullName}"><Run Text="Speed" /><Run Classes="cell-id" Text="{Binding SpeedReadout.ChannelId, StringFormat='&#x2002;{0}', Mode=OneWay}" /></TextBlock>
+                    <Panel Grid.Row="1" Grid.Column="1" Height="28" Margin="16,8,0,0">
                         <controls:ReadingText Name="SpeedReadout" Classes="data24 reading small" Classes.na="{Binding !SpeedReadout.HasValue}"
                                               Value="{Binding SpeedReadout.Display}" Unit="{Binding SpeedReadout.Unit}" />
                     </Panel>
-                </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Knock retard per cylinder (owner, 2026-10-28): the Performance tab's six bars and their average, as tall as the
+                 cell allows; each cylinder at or past 1.5 °CRK is named on the title line (never colour alone). -->
+            <Border Name="LiveKnockSection" Classes="cell" ToolTip.Tip="{Binding KnockWarning}">
+                <DockPanel IsVisible="{Binding ShowsKnock}">
+                    <DockPanel DockPanel.Dock="Top">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6"
+                                    IsVisible="{Binding KnockShort, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <controls:StrokeIcon Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource CautionBrush}" Width="14" Height="14" VerticalAlignment="Center" />
+                            <controls:NumberText Name="LiveKnockWarning" Classes="cap" Value="{Binding KnockShort}" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Classes="cell-title" Text="Knock retard" TextTrimming="CharacterEllipsis" />
+                    </DockPanel>
+                    <controls:CylinderBars Name="LiveKnockBars" Margin="0,4,0,0" BarHeight="20" ShowsAverage="True" VerticalAlignment="Stretch"
+                                           Values="{Binding Knock}" IsLive="{Binding IsConnected}" Version="{Binding KnockVersion}" />
+                </DockPanel>
             </Border>
         </controls:ReadoutBand>
 
@@ -491,6 +502,9 @@
                 <TextBlock Classes="list-count" Margin="12,0,0,0" VerticalAlignment="Center"><Run Classes="num" Text="{Binding VisibleChannelCount, Mode=OneWay}" /><Run Text=" shown" /></TextBlock>
                 <Button Name="PerformanceButton" DockPanel.Dock="Right" Classes="quiet" Content="Performance tests" Click="OpenPerformance_Click"
                         VerticalAlignment="Center" ToolTip.Tip="Open the Performance tab" />
+                <Button Name="FaultMemoryButton" DockPanel.Dock="Right" Classes="quiet" Content="Fault memory" Click="FaultMemory_Click"
+                        VerticalAlignment="Center" IsEnabled="{Binding IsConnected}" ToolTip.Tip="Read the ECU's stored faults (read only)"
+                        ToolTip.ShowOnDisabled="True" />
                 <StackPanel Orientation="Horizontal" Spacing="16" Margin="20,0,0,0">
                     <TextBox Name="ChannelFilter" Width="300" Watermark="Filter by name or ID" Text="{Binding SearchText}" VerticalAlignment="Center"
                              AutomationProperties.Name="Filter channels">
