@@ -93,7 +93,7 @@
         <Style Selector="Border.banner">
             <Setter Property="Margin" Value="0,16,0,0" />
         </Style>
-        <!-- The compare strip: a Hairline box under the edit tools, so A / B / B − A and Copy from B read as their own group. -->
+        <!-- The compare strip: a Hairline box under the edit tools, so A / B / A − B and Copy from B read as their own group. -->
         <Style Selector="Border.comparestrip">
             <Setter Property="Margin" Value="0,12,0,0" />
             <Setter Property="Padding" Value="12,6,6,6" />
@@ -339,7 +339,7 @@
         <!-- Pane: title row, banners, toolbar, then the item -->
         <Border Name="PaneHost" Grid.Column="1" Background="{DynamicResource PaneBrush}">
             <DockPanel Name="TunePane">
-                <Grid Name="TitleRow" DockPanel.Dock="Top" Height="32" ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto"
+                <Grid Name="TitleRow" DockPanel.Dock="Top" Height="32" ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto"
                       IsVisible="{Binding SelectedItem, Converter={x:Static ObjectConverters.IsNotNull}}">
                     <controls:ItemGlyph Kind="{Binding SelectedKind}" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource Ink2Brush}" />
                     <TextBlock Name="ItemTitle" Grid.Column="1" Classes="mono13" Text="{Binding SelectedItem.Title, FallbackValue=''}" VerticalAlignment="Center"
@@ -350,14 +350,21 @@
                     <Border Name="ReadOnlyChip" Grid.Column="3" Classes="chip" Margin="0,0,8,0" VerticalAlignment="Center" IsVisible="{Binding IsReadOnlyItem}">
                         <TextBlock Text="Read-only" />
                     </Border>
-                    <Button Name="PinButton" Grid.Column="4" Classes="quiet" Click="Pin_Click" VerticalAlignment="Center" ToolTip.Tip="Pin to the top of the rail"
+                    <!-- TunerPro's table windows: a map, curve or axis opens in a window of its own, any number at once. -->
+                    <!-- Icon only, so the row keeps its room for long ids at 1024 px (a double-click in the rail does the same). -->
+                    <Button Name="OpenWindowButton" Grid.Column="4" Classes="quiet icon" Click="OpenWindow_Click" VerticalAlignment="Center" Margin="0,0,4,0"
+                            ToolTip.Tip="Open in window" AutomationProperties.Name="Open in window"
+                            IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <controls:StrokeIcon Data="{StaticResource Icon.OpenWindow}" />
+                    </Button>
+                    <Button Name="PinButton" Grid.Column="5" Classes="quiet" Click="Pin_Click" VerticalAlignment="Center" ToolTip.Tip="Pin to the top of the rail"
                             AutomationProperties.Name="{Binding PinText}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <controls:StrokeIcon Data="{StaticResource Icon.Pin}" Width="14" Height="14" VerticalAlignment="Center" />
                             <TextBlock Text="{Binding PinText}" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
-                    <Button Name="DetailsToggle" Grid.Column="5" Classes="quiet" Content="Details" Click="Details_Click" VerticalAlignment="Center"
+                    <Button Name="DetailsToggle" Grid.Column="6" Classes="quiet" Content="Details" Click="Details_Click" VerticalAlignment="Center"
                             ToolTip.Tip="Edit limits, surface, details and colour scale" />
                 </Grid>
                 <!-- Info lines under the title (system 7.1): inline, the info icon, no box. -->
@@ -446,8 +453,8 @@
                     </Border>
                 </WrapPanel>
 
-                <!-- Compare inside Tune (a B open on Compare), apart from the edit tools: what is shown (A, B or B − A), how
-                     B − A reads (Units, Raw, %; one setting with Compare), and B's values copied into A. -->
+                <!-- Compare inside Tune (a B open on Compare), apart from the edit tools: what is shown (A, B or A − B), how
+                     A − B reads (Units, Raw, %; one setting with Compare), and B's values copied into A. -->
                 <Border Name="CompareStrip" DockPanel.Dock="Top" Classes="comparestrip" IsVisible="{Binding ShowsCompare}">
                     <WrapPanel ItemSpacing="12" LineSpacing="8">
                         <TextBlock Name="CompareStripLabel" Classes="label" Text="{Binding CompareStripText}" ToolTip.Tip="{Binding CompareStripText}"
@@ -456,14 +463,14 @@
                             <StackPanel Orientation="Horizontal" Spacing="2">
                                 <ToggleButton Name="TuneViewA" Classes="seg" Content="A" IsChecked="{Binding IsGridA}" ToolTip.Tip="This bin, the one you edit" />
                                 <ToggleButton Name="TuneViewB" Classes="seg" Content="B" IsChecked="{Binding IsGridB}" ToolTip.Tip="{Binding CompareFileB, StringFormat='B: {0} (read-only)'}" />
-                                <ToggleButton Name="TuneViewDelta" Classes="seg" Content="B − A" IsChecked="{Binding IsGridDelta}" ToolTip.Tip="B − A (read-only)" />
+                                <ToggleButton Name="TuneViewDelta" Classes="seg" Content="A − B" IsChecked="{Binding IsGridDelta}" ToolTip.Tip="A − B (read-only)" />
                             </StackPanel>
                         </Border>
-                        <Border Name="TuneDeltaSeg" Classes="seg" IsVisible="{Binding ShowsDeltaMode}" AutomationProperties.Name="B − A as">
+                        <Border Name="TuneDeltaSeg" Classes="seg" IsVisible="{Binding ShowsDeltaMode}" AutomationProperties.Name="A − B as">
                             <StackPanel Orientation="Horizontal" Spacing="2">
-                                <ToggleButton Name="TuneDeltaUnits" Classes="seg" Content="Units" IsChecked="{Binding IsDeltaUnits}" ToolTip.Tip="B − A in the map's units" />
-                                <ToggleButton Name="TuneDeltaRaw" Classes="seg" Content="Raw" IsChecked="{Binding IsDeltaRaw}" ToolTip.Tip="B − A in stored counts" />
-                                <ToggleButton Name="TuneDeltaPercent" Classes="seg" Content="%" IsChecked="{Binding IsDeltaPercent}" ToolTip.Tip="B − A as a percentage of A" />
+                                <ToggleButton Name="TuneDeltaUnits" Classes="seg" Content="Units" IsChecked="{Binding IsDeltaUnits}" ToolTip.Tip="A − B in the map's units" />
+                                <ToggleButton Name="TuneDeltaRaw" Classes="seg" Content="Raw" IsChecked="{Binding IsDeltaRaw}" ToolTip.Tip="A − B in stored counts" />
+                                <ToggleButton Name="TuneDeltaPercent" Classes="seg" Content="%" IsChecked="{Binding IsDeltaPercent}" ToolTip.Tip="A − B as a percentage of B" />
                             </StackPanel>
                         </Border>
                         <Button Name="CopyFromBTool" Content="Copy from B" Click="CopyFromB_Click" IsVisible="{Binding ShowsCompareGrid}"
