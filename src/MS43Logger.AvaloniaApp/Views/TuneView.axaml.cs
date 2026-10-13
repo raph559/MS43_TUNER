@@ -1,22 +1,48 @@
 using System.Linq;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.VisualTree;
 using MS43Logger.AvaloniaApp.Controls;
+using MS43Logger.Core.Tuning;
 
 namespace MS43Logger.AvaloniaApp.Views;
 
 public partial class TuneView : UserControl
 {
     private readonly RailSizer _rail;
+    private readonly MenuItem _openWindowItem = new() { Name = "OpenWindowItem", Header = "Open in window" };
+    private readonly MenuItem _pinItem = new() { Name = "PinItem" };
+    private RailItem? _menuRow;
+    private XdfItem? _firstPress;
 
     public TuneView()
     {
         InitializeComponent();
         _rail = new RailSizer(RailHost, RailResizeHandle, SearchBox);
         DataContextChanged += (_, _) => _rail.Watch(DataContext as TuneViewModel);
+        RailList.AddHandler(PointerPressedEvent, Rail_PointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+        RailList.AddHandler(ContextRequestedEvent, Rail_ContextRequested);
+        RowMenu.Items.Add(_openWindowItem);
+        RowMenu.Items.Add(_pinItem);
+        _openWindowItem.Click += (_, _) =>
+        {
+            if (_menuRow?.Item is XdfTable table && ViewModel is { HasDocument: true } tune)
+            {
+                tune.OpenMapWindow(table);
+            }
+        };
+        _pinItem.Click += (_, _) =>
+        {
+            if (_menuRow is { } row && ViewModel is { } tune)
+            {
+                tune.TogglePin(row.Item);
+            }
+        };
 
-        // The slider asks; the value editor writes, one undo step per step, jump or released drag (system 5.14).
+        // The slider asks; the value editor writes, one undo step per step, jump or released drag.
         var slider = this.FindControl<ValueSlider>("ValueSlider")!;
         slider.StepRequested += (_, steps) => ViewModel?.Value?.StepBy(steps);
         slider.JumpRequested += (_, toHigh) => ViewModel?.Value?.JumpTo(toHigh);
@@ -37,6 +63,9 @@ public partial class TuneView : UserControl
     }
 
     private TuneViewModel? ViewModel => DataContext as TuneViewModel;
+
+    /// <summary>The rail rows' menu: Open in window for maps, curves and axes, then Pin or Unpin. One menu, for the row asked about.</summary>
+    internal ContextMenu RowMenu { get; } = new();
 
     public void FocusSearch() => this.FindControl<TextBox>("SearchBox")?.Focus();
 
@@ -87,7 +116,14 @@ public partial class TuneView : UserControl
     /// <summary>Asks about unsaved edits, then opens a bin with the XDF remembered for its firmware (or asks for one).</summary>
     public async System.Threading.Tasks.Task OpenBinAsync()
     {
-        if (ViewModel is not { } tune || !await tune.ConfirmDiscardAsync() || await PickAsync("Open bin", "MS43 bin", "*.bin") is not { } bin)
+        if (ViewModel is not { } tune)
+        {
+            return;
+        }
+
+        // The map windows edit this bin, which is about to go, and the file picker blocks only this window.
+        using var hold = tune.HoldMapWindows();
+        if (!await tune.ConfirmDiscardAsync() || await PickAsync("Open bin", "MS43 bin", "*.bin") is not { } bin)
         {
             return;
         }
@@ -105,7 +141,13 @@ public partial class TuneView : UserControl
     /// <summary>Asks about unsaved edits, then opens the current bin (or the last one, or one picked) with another XDF.</summary>
     public async System.Threading.Tasks.Task OpenXdfAsync()
     {
-        if (ViewModel is not { } tune || !await tune.ConfirmDiscardAsync() || await PickAsync("Open XDF", "TunerPro XDF", "*.xdf") is not { } xdf)
+        if (ViewModel is not { } tune)
+        {
+            return;
+        }
+
+        using var hold = tune.HoldMapWindows();
+        if (!await tune.ConfirmDiscardAsync() || await PickAsync("Open XDF", "TunerPro XDF", "*.xdf") is not { } xdf)
         {
             return;
         }
@@ -128,6 +170,9 @@ public partial class TuneView : UserControl
         // Both actions rebuild the rail. Rebuilding it inside the ListBox's own selection change made the ListBox read
         // its selection from the new, shorter list and crash, so the action runs once the change has finished.
         var entry = list.SelectedItem;
+        var index = list.SelectedIndex;
+        var key = index >= 0 && index < tune.Rail.Count ? RowKey(tune, index) : null;
+        var top = ListAnchor.TopOf(list, index);
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             switch (entry)
@@ -139,7 +184,36 @@ public partial class TuneView : UserControl
                     tune.ToggleCategory(category.Name);
                     break;
             }
+
+            // The rebuild adds the pick to Recent at the top or opens a category: the clicked row stays where it was.
+            if (key is not null && top is { } at)
+            {
+                ListAnchor.Keep(list, Enumerable.Range(0, tune.Rail.Count).FirstOrDefault(i => RowKey(tune, i) == key, -1), at);
+            }
         });
+    }
+
+    // A row by what it shows and the heading it sits under: the same item can be both in Recent and in its category.
+    private static string? RowKey(TuneViewModel tune, int index)
+    {
+        string? section = null;
+        for (var i = index - 1; i >= 0 && section is null; i--)
+        {
+            section = tune.Rail[i] switch
+            {
+                RailGroup group => group.Title,
+                RailCategory category when tune.Rail[index] is RailItem => category.Name,
+                _ => null,
+            };
+        }
+
+        return tune.Rail[index] switch
+        {
+            RailItem item => $"{section}/item/{item.Item.Title}",
+            RailCategory category => $"{section}/category/{category.Name}",
+            RailGroup group => $"group/{group.Title}",
+            _ => null,
+        };
     }
 
     private void Tool_Click(object? sender, RoutedEventArgs e)
@@ -178,6 +252,62 @@ public partial class TuneView : UserControl
         }
     }
 
+    private void OpenWindow_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is { SelectedItem: XdfTable table } tune)
+        {
+            tune.OpenMapWindow(table);
+        }
+    }
+
+    // A double-click on a map, curve or axis in the rail opens it in a window, as in TunerPro; the first click has shown it
+    // here. The first click rebuilds the rail (Recent moves to the top), so the row under the second press can be another
+    // one: the window is the map the first press was on, and the second press selects nothing.
+    private void Rail_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        var button = e.GetCurrentPoint(this).Properties;
+        var row = (e.Source as Control)?.DataContext as RailItem;
+        if (button.IsRightButtonPressed && row is not null)
+        {
+            // Selecting on a right press would rebuild the rail under the pointer before the release asks for the menu.
+            e.Handled = true;
+            return;
+        }
+
+        if (!button.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        if (e.ClickCount == 2)
+        {
+            if (_firstPress is XdfTable table && ViewModel is { HasDocument: true } tune)
+            {
+                tune.OpenMapWindow(table);
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        _firstPress = row?.Item;
+    }
+
+    // The right click's release and the keyboard's menu key (Shift F10) both ask on the row: its own menu opens there.
+    private void Rail_ContextRequested(object? sender, ContextRequestedEventArgs e)
+    {
+        if (ViewModel is not { HasDocument: true } tune || (e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true) is not { DataContext: RailItem row } container)
+        {
+            return;
+        }
+
+        _menuRow = row;
+        _openWindowItem.IsVisible = row.OpensInWindow;
+        _pinItem.Header = tune.Settings.IsPinned(row.Item.Title) ? "Unpin" : "Pin";
+        RowMenu.Open(container);
+        e.Handled = true;
+    }
+
     private void Pin_Click(object? sender, RoutedEventArgs e)
     {
         if (ViewModel is { SelectedItem: { } item } tune)
@@ -205,7 +335,7 @@ public partial class TuneView : UserControl
 
     private async void UseAnotherXdf_Click(object? sender, RoutedEventArgs e) => await OpenXdfAsync();
 
-    // The banner's way out of what went wrong (system 7.1).
+    // The banner's way out of what went wrong.
     private async void ErrorAction_Click(object? sender, RoutedEventArgs e)
     {
         switch (ViewModel?.ErrorAction)

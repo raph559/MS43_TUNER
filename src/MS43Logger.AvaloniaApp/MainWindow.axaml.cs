@@ -16,6 +16,8 @@ namespace MS43Logger.AvaloniaApp;
 
 public partial class MainWindow : Window
 {
+    private readonly List<MapWindow> _mapWindows = new();
+    private readonly List<MapWindow> _asideForDialog = new();
     private bool _closeConfirmed;
 
     public MainWindow()
@@ -31,6 +33,10 @@ public partial class MainWindow : Window
         // Show details on a Live banner opens the connection log; nothing waits for it to close.
         shell.Live.ShowConnectionLogRequested += (_, _) =>
             _ = Dialogs.ShowAsync(new ConnectionLogView(shell.Live.Banner, shell.Live.ConnectionLog ?? string.Empty));
+
+        // Fault memory on the Live tab: the stored faults, read on open over the connected line.
+        shell.Live.ShowFaultMemoryRequested += (_, _) =>
+            _ = Dialogs.ShowAsync(new FaultMemoryView(new FaultMemoryViewModel(() => shell.Live.Line)));
 
         // The save prompt reads the Saving settings as it opens; Esc, or another dialog taking its place, cancels.
         shell.Compare.AskToSwap = async message => await Dialogs.ShowAsync(new ConfirmActionDialog(message,
@@ -53,10 +59,13 @@ public partial class MainWindow : Window
         UpdateWindowButtons();
         App.ThemeChanging += CaptureTheme;
         App.ThemeChanged += FadeTheme;
+        shell.Tune.MapWindowOpened += (_, map) => ShowMapWindow(map);
+        Dialogs.IsOpenChanged += (_, _) => StepMapWindowsAside(Dialogs.IsOpen);
         Closed += (_, _) =>
         {
             App.ThemeChanging -= CaptureTheme;
             App.ThemeChanged -= FadeTheme;
+            shell.Tune.CloseMapWindows();
         };
         Closing += OnClosing;
         AddHandler(KeyDownEvent, OnShortcut, RoutingStrategies.Tunnel);
@@ -247,6 +256,68 @@ public partial class MainWindow : Window
     }
 
     private ShellViewModel Shell => (ShellViewModel)DataContext!;
+
+    /// <summary>The tables open in windows of their own, in the order they were opened.</summary>
+    internal IReadOnlyList<MapWindow> MapWindows => _mapWindows;
+
+    // A table window starts at the size its grid wants, up to most of the screen, cascaded from this window's top left as
+    // TunerPro's are; after that it is the person's to size and move.
+    private void ShowMapWindow(MapWindowViewModel map)
+    {
+        var view = new MapWindow(map, this) { SizeToContent = SizeToContent.WidthAndHeight, WindowStartupLocation = WindowStartupLocation.Manual };
+        if (Screens.ScreenFromWindow(this) is { } screen)
+        {
+            view.MaxWidth = screen.WorkingArea.Width / screen.Scaling * 0.9;
+            view.MaxHeight = screen.WorkingArea.Height / screen.Scaling * 0.9;
+        }
+
+        var step = (int)Math.Round((64 + 32 * (_mapWindows.Count % 8)) * RenderScaling);
+        view.Position = new PixelPoint(Position.X + step, Position.Y + step);
+        view.Opened += (_, _) => Dispatcher.UIThread.Post(() =>
+        {
+            view.SizeToContent = SizeToContent.Manual;
+            view.MaxWidth = double.PositiveInfinity;
+            view.MaxHeight = double.PositiveInfinity;
+
+            // Kept on its screen: a cascade from a window near the screen's edge would start partly off it.
+            if (view.Screens.ScreenFromWindow(view) is { } shown && view.FrameSize is { } frame)
+            {
+                var area = shown.WorkingArea;
+                var size = PixelSize.FromSize(frame, shown.Scaling);
+                view.Position = new PixelPoint(
+                    Math.Clamp(view.Position.X, area.X, Math.Max(area.X, area.Right - size.Width)),
+                    Math.Clamp(view.Position.Y, area.Y, Math.Max(area.Y, area.Bottom - size.Height)));
+            }
+        });
+        view.Closed += (_, _) => _mapWindows.Remove(view);
+        _mapWindows.Add(view);
+        view.Show(this);
+    }
+
+    // This window's prompts are drawn inside it, and an owned map window stays above it, so a map could hide the save
+    // prompt on closing. While a prompt is open the map windows step aside; they come back, unactivated, when it closes.
+    private void StepMapWindowsAside(bool aside)
+    {
+        if (aside)
+        {
+            foreach (var view in _mapWindows.Where(view => view.IsVisible))
+            {
+                view.Hide();
+                _asideForDialog.Add(view);
+            }
+
+            return;
+        }
+
+        foreach (var view in _asideForDialog.Where(_mapWindows.Contains))
+        {
+            view.ShowActivated = false;
+            view.Show(this);
+            view.ShowActivated = true;
+        }
+
+        _asideForDialog.Clear();
+    }
 
     private TuneView? Tune => this.GetVisualDescendants().OfType<TuneView>().FirstOrDefault();
 

@@ -17,6 +17,27 @@ public partial class MapWindow : Window
         InitializeComponent();
     }
 
+    public MapWindow(MapWindowViewModel map, MainWindow main)
+        : this()
+    {
+        DataContext = map ?? throw new ArgumentNullException(nameof(map));
+        _main = main;
+        map.Closed += OnMapClosed;
+        map.ActivateRequested += OnActivateRequested;
+        Closed += (_, _) =>
+        {
+            _closed = true;
+            map.Closed -= OnMapClosed;
+            map.ActivateRequested -= OnActivateRequested;
+            map.Close();
+        };
+        AddHandler(KeyDownEvent, OnShortcut, RoutingStrategies.Tunnel);
+
+        // The window is there to edit its grid: the grid has the keys from the start.
+        Opened += (_, _) => this.FindControl<Controls.MapGrid>("MapGrid")?.Focus();
+        UpdateWindowButtons();
+    }
+
     private MapWindowViewModel? Map => DataContext as MapWindowViewModel;
 
     // The focused map window is the one the V9 watch follows.
@@ -24,6 +45,15 @@ public partial class MapWindow : Window
     {
         base.OnGotFocus(e);
         Map?.LiveCursor.Focused();
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == WindowStateProperty)
+        {
+            UpdateWindowButtons();
+        }
     }
 
     // The bin went away (another bin, another XDF, or the app closing): the window goes with it.
@@ -132,4 +162,13 @@ public partial class MapWindow : Window
 
     private void ToggleMaximized() =>
         WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+    private void UpdateWindowButtons()
+    {
+        var maximized = WindowState == WindowState.Maximized;
+        Classes.Set("maximized", maximized);
+        var label = maximized ? "Restore down" : "Maximize";
+        ToolTip.SetTip(MaximizeButton, label);
+        Avalonia.Automation.AutomationProperties.SetName(MaximizeButton, label);
+    }
 }
