@@ -370,6 +370,46 @@ public sealed class FunTabTests
         finally { Close(window, shell); }
     }
 
+    [AvaloniaFact] // review I1
+    public async Task ConnectedTypingSurvivesTheLivePagesTick()
+    {
+        var (window, shell, fun, _) = await Open(6);
+        try
+        {
+            Choose(fun, "lc");
+            var row = fun.ScalarRows.Single(r => r.Key == "c_lc_n_max");
+            row.Editor.Input = "48";
+            await shell.LiveTuning.TickAsync(); await shell.LiveTuning.TickAsync();
+            Assert.Same(row, fun.ScalarRows.Single(r => r.Key == "c_lc_n_max"));
+            Assert.Equal("48", row.Editor.Input);
+        }
+        finally { Close(window, shell); }
+    }
+
+    [AvaloniaFact] // review I2, I4
+    public async Task WriteToBinNeedsASend_AndTheHardcutUndoRevertsAll()
+    {
+        var (window, shell, fun, _) = await Open(6);
+        try
+        {
+            Choose(fun, "lc");
+            await fun.WriteToBinAsync();
+            Assert.Contains("Send these settings", fun.Problem);
+        }
+        finally { Close(window, shell); }
+        var (w2, s2, offline, _) = await Open();
+        try
+        {
+            Choose(offline, "hardcut");
+            var before = s2.Tune.Document!.Image.ToArray();
+            offline.OfflineGears[3].Rpm = "6880"; offline.OfflineHysteresis = "64"; offline.ApplyOfflineLimiter();
+            Assert.NotEqual(before, s2.Tune.Document.Image.ToArray());
+            offline.Undo();
+            Assert.Equal(before, s2.Tune.Document.Image.ToArray());
+        }
+        finally { Close(w2, s2); }
+    }
+
     /// <summary>An ECU without the overlay: its header is not "LTOV".</summary>
     private sealed class FakeStockEcu : IDs2Line
     {
@@ -384,5 +424,12 @@ public sealed class FunTabTests
 
     private sealed class ManualTicker : TimeProvider
     {
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period) => new Timer();
+        private sealed class Timer : ITimer
+        {
+            public bool Change(TimeSpan dueTime, TimeSpan period) => true;
+            public void Dispose() { }
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        }
     }
 }
