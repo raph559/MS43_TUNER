@@ -137,6 +137,30 @@ public sealed class LiveTuningReviewTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task WhileLookingForTheOverlay_TheGridIsReadOnly()                      // I7
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (page, ecu, _) = await Attached();
+        Raise(page, 1, 2);
+        var gate = new SemaphoreSlim(0);
+        var line = new GatedLine(ecu, gate);
+
+        var attaching = page.AttachLine(line);
+        Assert.True(page.IsReadOnly);
+        Assert.True(page.Editor!.IsReadOnly);
+        Assert.Contains((0, 0), page.Editor.ChangedCells);                     // the page's edits still shown
+
+        gate.Release(1000);
+        await attaching;
+        Assert.False(page.IsReadOnly);
+        Assert.True(page.Maps[1].HasUnsent);
+    }
+
+    [AvaloniaFact]
     public async Task CopyToTune_CopiesWhatWasSent_AndNamesTheUnsentMaps()              // I8
     {
         if (!TuneScreen.Available)
@@ -181,5 +205,15 @@ public sealed class LiveTuningReviewTests : IDisposable
         Assert.Equal("LIVE", page.Maps[1].StateText);
         page.Selected = page.Maps[1];
         Assert.Equal(36, page.Editor!.ChangedCells.Count);                     // the ECU's copy, not the flash
+    }
+
+    /// <summary>A line whose answers wait for the test: detection can be caught half-way.</summary>
+    private sealed class GatedLine(IDs2Line inner, SemaphoreSlim gate) : IDs2Line
+    {
+        public byte[] Request(IReadOnlyList<byte> payload, int listenMilliseconds = 400)
+        {
+            gate.Wait();
+            return inner.Request(payload, listenMilliseconds);
+        }
     }
 }
