@@ -216,6 +216,31 @@ public sealed class LiveTuningTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task ALeanerLambdaCell_IsRefusedInThePage()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (page, ecu, _) = await Attached();
+        page.Selected = page.Maps[2];
+        var values = page.Editor!.Values;
+        var (row, col) = (from r in Enumerable.Range(0, values.Rows) from c in Enumerable.Range(0, values.Cols)
+                          where values.Raw[r, c] > 128 select (r, c)).First();
+        page.Editor.Selection = new CellRange(row, col, row, col);
+        // A step moves λ as shown: +1 raises it (leaner), the raw byte going down.
+        Assert.True(page.Editor.Apply(new EditRequest(EditKind.Step, 1)), page.Editor.Message);
+        var sent = ecu.Requests.Count;
+
+        await page.SendSelectedAsync();
+
+        Assert.Contains("leaner", page.Problem);
+        Assert.Equal(sent, ecu.Requests.Count);
+        Assert.Equal(OverlayState.Free, ecu.Peek().Tables[2].State);
+    }
+
+    [AvaloniaFact]
     public async Task EditsSurviveARestartOfThePage()
     {
         if (!TuneScreen.Available)
@@ -229,5 +254,36 @@ public sealed class LiveTuningTests : IDisposable
         Assert.True(again.Maps[1].HasUnsent);
         again.Selected = again.Maps[1];
         Assert.Equal(again.Editor!.Values.Rows * again.Editor.Values.Cols, again.Editor.ChangedCells.Count);
+    }
+
+    [AvaloniaFact]
+    public async Task TheEcusOtherMaps_AreSaid()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var other = File.ReadAllBytes(TuneScreen.Car!);
+        other[OverlayContract.Maps[0].Address] ^= 0x01;
+        var (page, _, _) = await Attached(ecuImage: other);
+        Assert.Equal("The ECU's maps differ from the open bin: edits start from the ECU's.", page.BinDiffers);
+    }
+
+    [AvaloniaFact]
+    public async Task TheFlamesRow_StaysEditable()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (page, _, _) = await Attached();
+        page.Selected = page.Maps[0];
+        var editor = page.Editor!;
+        var last = editor.Values.Rows - 1;                                  // the 6,990 rpm row
+        editor.Selection = new CellRange(last, 0, last, 0);
+        Assert.True(editor.Apply(new EditRequest(EditKind.Step, 1)), editor.Message);
+        Assert.Contains((last, 0), editor.ChangedCells);
     }
 }
