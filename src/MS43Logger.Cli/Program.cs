@@ -67,6 +67,7 @@ static int Run(string[] args)
             var rateMeter = new SampleRateMeter(windowSize: int.MaxValue);
             long sampleIndex = 0;
 
+            var missedPolls = 0;
             while (!stopRequested)
             {
                 if (options.Count is long countLimit && sampleIndex >= countLimit)
@@ -79,7 +80,20 @@ static int Run(string[] args)
                     break;
                 }
 
-                var payload = session.PollPayload();
+                // One poll that fails its retries is skipped, so a long log survives a noisy moment on the line;
+                // five in a row mean the ECU is gone.
+                byte[] payload;
+                try
+                {
+                    payload = session.PollPayload();
+                    missedPolls = 0;
+                }
+                catch (TimeoutException) when (++missedPolls < 5)
+                {
+                    Console.Error.WriteLine($"No answer from the ECU ({missedPolls} in a row); trying again.");
+                    continue;
+                }
+
                 rateMeter.Record(stopwatch.Elapsed);
                 var decodedValues = definition.DecodePayload(payload, channels);
                 var sample = new LogSample(DateTimeOffset.UtcNow, sampleIndex, decodedValues);

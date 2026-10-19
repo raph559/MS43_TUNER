@@ -75,7 +75,7 @@ public sealed class CompareSwapTests : IDisposable
         Assert.Equal(Path.GetFullPath(a), shell.Compare.PathB);
         Assert.Equal(before, shell.Compare.Result!.Items.Count);
 
-        // B − A turns over: what A had more of, B has now.
+        // A − B turns over: what A had more of, B has now.
         var map = shell.Compare.Result.Items.Single(item => item.Item.Title == "ip_iga_ron98_pl__n__maf");
         Assert.NotNull(map.LargestChange);
     }

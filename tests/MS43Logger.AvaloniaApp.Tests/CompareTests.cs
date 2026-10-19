@@ -82,7 +82,7 @@ public sealed class CompareTests : IDisposable
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
         var grid = Find.Named<Controls.MapGrid>(window, "CompareGrid");
         Assert.Equal(DeltaMode.Units, compare.DeltaMode);
-        Assert.Equal("B − A: -21.0 to +61.1 °CRK, 293 of 320 cells differ", compare.ScaleCaption);
+        Assert.Equal("A − B: -61.1 to +21.0 °CRK, 293 of 320 cells differ", compare.ScaleCaption);
         Assert.True(Find.Named<ToggleButton>(window, "DeltaRaw").IsEffectivelyVisible);
 
         compare.DeltaMode = DeltaMode.Raw;
@@ -91,19 +91,19 @@ public sealed class CompareTests : IDisposable
         var (row, col) = Changed(compare);
         Assert.Equal((double)raw[row, col], compare.Grid.Values.Physical[row, col]);
         Assert.Equal((raw[row, col] > 0 ? "+" : "-") + Math.Abs(raw[row, col]), grid.CellText(row, col));
-        Assert.StartsWith("B − A in counts: ", compare.ScaleCaption);
+        Assert.StartsWith("A − B in counts: ", compare.ScaleCaption);
         Assert.StartsWith("largest change ", compare.LargestText);
         Assert.DoesNotContain("°CRK", compare.LargestText);
 
         compare.DeltaMode = DeltaMode.Percent;
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
         Assert.EndsWith(" %", grid.CellText(row, col));
-        Assert.StartsWith("B − A as % of A: ", compare.ScaleCaption);
+        Assert.StartsWith("A − B as % of B: ", compare.ScaleCaption);
         Assert.EndsWith(" %", compare.LargestText);
         Assert.Equal(DeltaMode.Percent, compare.Settings.CompareDeltaMode);
         Screens.Save(window, "compare-percent");
 
-        // The choice is about B − A only: on A or B it steps aside.
+        // The choice is about A − B only: on A or B it steps aside.
         compare.View = "a";
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
         Assert.False(Find.Named<ToggleButton>(window, "DeltaRaw").IsEffectivelyVisible);
@@ -225,7 +225,7 @@ public sealed class CompareTests : IDisposable
 
         Assert.True(compare.Grid!.IsDelta);
         Assert.Contains("row axis differs", compare.AxisBanner);
-        Assert.Equal("B − A: -21.0 to +61.1 °CRK, 293 of 320 cells differ", compare.ScaleCaption);
+        Assert.Equal("A − B: -61.1 to +21.0 °CRK, 293 of 320 cells differ", compare.ScaleCaption);
         Assert.Contains(compare.Entries.OfType<CompareRow>(), row => row.IsCurrent && row.Difference.Item.Title == "ip_iga_ron98_pl__n__maf");
         Screens.Save(window, "compare-delta-night");
         shell.IsNight = false;
@@ -557,7 +557,7 @@ public sealed class CompareTests : IDisposable
         Assert.True(Find.Named<TextBox>(window, "CompareSearchBox").IsEffectivelyVisible);
     }
 
-    // The owner: a switch's choice ("Electrical cooling fan present, function and diagnosis active") was set in the 56 px
+    // A switch's choice ("Electrical cooling fan present, function and diagnosis active") was set in the 56 px
     // number style and cut off at the pane's edge. A choice is text: it wraps, at a size that reads.
     [AvaloniaFact]
     public async Task SwitchChoicesWrapAsText()
@@ -596,6 +596,49 @@ public sealed class CompareTests : IDisposable
         Screens.Save(window, "compare-switch-night-1440");
     }
 
+    // As on the Tune rail: the list is rebuilt on a click (the current row moves), and the clicked row stays put.
+    [AvaloniaFact]
+    public async Task TheClickedRowStaysWhereItWas()
+    {
+        if (!Available)
+        {
+            return;
+        }
+
+        var (window, _, compare) = await Open();
+        var list = Find.Named<ListBox>(window, "DiffList");
+        var rows = compare.Entries.OfType<CompareRow>().ToList();
+        var title = rows[rows.Count / 2].Difference.Item.Title;
+        int Index() => compare.Entries.Select((entry, i) => (entry, i)).Single(pair => pair.entry is CompareRow row && row.Difference.Item.Title == title).i;
+        double? Top() => list.ContainerFromIndex(Index()) is Control row && row.TranslatePoint(default, list) is { } at ? at.Y : null;
+        list.ScrollIntoView(Index());
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        var before = Top();
+        Assert.NotNull(before);
+
+        list.SelectedItem = compare.Entries[Index()];
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(title, compare.Selected?.Item.Title);
+        Assert.Equal(before!.Value, Assert.NotNull(Top()), 1);
+    }
+
+    // An arrow reads as "was, now": B (the bin compared with) then A (the bin tuned), as A − B reads.
+    [AvaloniaFact]
+    public async Task ValueRowsReadFromBToA()
+    {
+        if (!Available)
+        {
+            return;
+        }
+
+        var (_, _, compare) = await Open();
+
+        var row = compare.Entries.OfType<CompareRow>().Single(entry => entry.Difference.Item.Title == "c_lc_n_max");
+
+        Assert.Equal("3520 → 4512", row.Summary);
+    }
+
     [AvaloniaFact]
     public async Task ValueViewShowsTheDifference()
     {
@@ -609,7 +652,7 @@ public sealed class CompareTests : IDisposable
         compare.Selected = Item(compare, "c_lc_n_max");
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
-        Assert.Equal("B − A: -992 rpm", compare.ValueDeltaText);
+        Assert.Equal("A − B: +992 rpm", compare.ValueDeltaText);
         Assert.Equal("4512", Find.Named<Controls.ReadingText>(window, "ValueAText").Value);
         Assert.Equal("3520", Find.Named<Controls.ReadingText>(window, "ValueBText").Value);
         Assert.True(Find.Named<Control>(window, "ValueDeltaText").IsEffectivelyVisible);
