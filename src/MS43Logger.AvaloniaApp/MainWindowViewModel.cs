@@ -27,7 +27,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private string _statusText = "Disconnected";
     private int _sampleCount;
     private Ds2Session _session;
-    private AdxDefinition _currentDefinition;
     private CancellationTokenSource _pollingCts;
     private DispatcherTimer _uiTimer;
     private readonly Stopwatch _sessionStopwatch = new();
@@ -346,15 +345,15 @@ public class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             StatusText = $"Connecting to MS43 ({SelectedVariant}) on {SelectedPort}...";
-            _currentDefinition = BundledDefinitions.Load(SelectedVariant);
-            var channels = _currentDefinition.MatchChannels(Array.Empty<string>());
+            CurrentDefinition = BundledDefinitions.Load(SelectedVariant);
+            var channels = CurrentDefinition.MatchChannels(Array.Empty<string>());
 
             if (EnableCsvLogging)
             {
                 OpenCsvWriter(channels);
             }
 
-            _session = Ds2Session.Create(_currentDefinition, SelectedPort);
+            _session = Ds2Session.Create(CurrentDefinition, SelectedPort);
             await Task.Run(() => _session.Connect());
 
             IsConnected = true;
@@ -430,7 +429,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
         logger.SampleReceived += (_, sample) =>
         {
             WriteCsvRow(sample.Values);
-            Dispatcher.UIThread.Post(() => ShowSample(sample.Values));
+            Dispatcher.UIThread.Post(() => ShowSample(sample));
         };
         logger.Status += (_, status) => Dispatcher.UIThread.Post(() =>
             StatusText = status == "Resumed" ? BuildConnectedStatus(channels.Count) : status);
@@ -441,7 +440,25 @@ public class MainWindowViewModel : INotifyPropertyChanged
             Disconnect();
         });
 
-        return logger.RunAsync(_session, _currentDefinition, channels, token);
+        return logger.RunAsync(_session, CurrentDefinition, channels, token);
+    }
+
+    /// <summary>The definition the logger decodes with; set on connect.</summary>
+    public AdxDefinition CurrentDefinition { get; internal set; }
+
+    /// <summary>Raised on the UI thread after each sample has been shown.</summary>
+    public event EventHandler<LiveSample> SampleShown;
+
+    internal void ShowSample(LiveSample sample)
+    {
+        // A poll still in flight when Disconnect ran is posted afterwards; it must not bring values or the cursor back.
+        if (!IsConnected)
+        {
+            return;
+        }
+
+        ShowSample(sample.Values);
+        SampleShown?.Invoke(this, sample);
     }
 
     internal void ShowSample(IReadOnlyList<DecodedValue> decoded)
