@@ -32,8 +32,10 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private CancellationTokenSource _pollingCts;
     private DispatcherTimer _uiTimer;
     private readonly Stopwatch _sessionStopwatch = new();
-    private readonly Stopwatch _sampleRateStopwatch = new();
-    private long _sampleRateBaseCount;
+    private readonly Stopwatch _sampleClock = new();
+    private readonly SampleRateMeter _rateMeter = new();
+    private readonly object _rateLock = new();
+    private string _rateText = "No samples yet";
     private StreamWriter _csvWriter;
     private string _searchText = string.Empty;
     private bool _enableCsvLogging;
@@ -231,6 +233,12 @@ public class MainWindowViewModel : INotifyPropertyChanged
         set => SetField(ref _samplesPerSecond, value);
     }
 
+    public string RateText
+    {
+        get => _rateText;
+        set => SetField(ref _rateText, value);
+    }
+
     public bool ShowPinnedOnly
     {
         get => _showPinnedOnly;
@@ -319,9 +327,8 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
             IsConnected = true;
             SampleCount = 0;
-            SamplesPerSecond = 0;
-            _sampleRateBaseCount = 0;
-            _sampleRateStopwatch.Restart();
+            ResetRate();
+            _sampleClock.Restart();
             StatusText = BuildConnectedStatus(channels.Count);
 
             _allLiveValues.Clear();
@@ -369,6 +376,11 @@ public class MainWindowViewModel : INotifyPropertyChanged
                 try
                 {
                     var payload = _session.PollPayload();
+                    lock (_rateLock)
+                    {
+                        _rateMeter.Record(_sampleClock.Elapsed);
+                    }
+
                     var decoded = _currentDefinition.DecodePayload(payload, channels);
                     WriteCsvRow(decoded);
                     var resumedAfterTimeout = consecutivePollTimeouts > 0;
@@ -454,9 +466,9 @@ public class MainWindowViewModel : INotifyPropertyChanged
         _uiTimer = null;
 
         _sessionStopwatch.Stop();
-        _sampleRateStopwatch.Stop();
+        _sampleClock.Stop();
         ElapsedTime = "00:00:00";
-        SamplesPerSecond = 0;
+        ResetRate();
         IsConnected = false;
 
         if (_session is not null)
@@ -566,15 +578,27 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     private void UpdateSampleRate()
     {
-        var elapsed = _sampleRateStopwatch.Elapsed.TotalSeconds;
-        if (elapsed <= 0.1)
+        RateStats stats;
+        lock (_rateLock)
         {
-            return;
+            stats = _rateMeter.Current;
         }
 
-        SamplesPerSecond = Math.Max(0, (SampleCount - _sampleRateBaseCount) / elapsed);
-        _sampleRateBaseCount = SampleCount;
-        _sampleRateStopwatch.Restart();
+        SamplesPerSecond = stats?.SamplesPerSecond ?? 0;
+        RateText = stats is null
+            ? "No samples yet"
+            : string.Format(CultureInfo.InvariantCulture, "{0:0} samples/s, {1:0}–{2:0} ms", stats.SamplesPerSecond, stats.MinMs, stats.MaxMs);
+    }
+
+    private void ResetRate()
+    {
+        lock (_rateLock)
+        {
+            _rateMeter.Reset();
+        }
+
+        SamplesPerSecond = 0;
+        RateText = "No samples yet";
     }
 
     private static string SanitizeUnits(string units)

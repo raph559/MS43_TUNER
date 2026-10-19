@@ -5,3 +5,6 @@ bin/
 obj/
 .vs/
 artifacts/
+
+# Local copies of real bins and XDFs for tests (never committed)
+testdata/local/
