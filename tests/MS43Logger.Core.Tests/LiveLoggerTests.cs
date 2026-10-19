@@ -1,0 +1,89 @@
+using MS43Logger.Core;
+
+namespace MS43Logger.Core.Tests;
+
+public class LiveLoggerTests
+{
+    private sealed class FakeSource(params Func<byte[]>[] steps) : IPayloadSource
+    {
+        private int _next;
+
+        public byte[] PollPayload() => _next < steps.Length ? steps[_next++]() : throw new OperationCanceledException();
+    }
+
+    private static readonly AdxDefinition Ms43x = BundledDefinitions.Load("ms43x");
+
+    private static byte[] Payload(byte rpmHigh)
+    {
+        var payload = new byte[73];
+        payload[0x04] = rpmHigh;
+        return payload;
+    }
+
+    private static Func<byte[]> Timeout() => () => throw new TimeoutException("no reply");
+
+    [Fact]
+    public async Task LoggerPublishesDecodedSamples()
+    {
+        var logger = new LiveLogger(pause: TimeSpan.Zero);
+        var samples = new List<LiveSample>();
+        logger.SampleReceived += (_, sample) => samples.Add(sample);
+        var source = new FakeSource(() => Payload(1), () => Payload(2), () => Payload(3));
+        var channels = Ms43x.MatchChannels(["N"]);
+
+        await logger.RunAsync(source, Ms43x, channels, CancellationToken.None);
+
+        Assert.Equal(new long[] { 0, 1, 2 }, samples.Select(sample => sample.Index));
+        Assert.Equal(Ms43x.DecodePayload(Payload(3), channels)[0].Value, samples[2].Values[0].Value);
+        Assert.NotNull(logger.Rate);
+    }
+
+    [Fact]
+    public async Task ThreeTimeoutsInARowStopTheLogger()
+    {
+        var logger = new LiveLogger(pause: TimeSpan.Zero);
+        var samples = 0;
+        var statuses = new List<string>();
+        Exception? failure = null;
+        logger.SampleReceived += (_, _) => samples++;
+        logger.Status += (_, status) => statuses.Add(status);
+        logger.Failed += (_, error) => failure = error;
+        var source = new FakeSource(Timeout(), Timeout(), () => Payload(1), Timeout(), Timeout(), Timeout(), () => Payload(2));
+
+        await logger.RunAsync(source, Ms43x, Ms43x.MatchChannels(["N"]), CancellationToken.None);
+
+        Assert.Equal(1, samples);
+        Assert.IsType<TimeoutException>(failure);
+        Assert.Equal(
+            new[] { "Polling timeout (1/3). Retrying...", "Polling timeout (2/3). Retrying...", "Resumed", "Polling timeout (1/3). Retrying...", "Polling timeout (2/3). Retrying..." },
+            statuses);
+    }
+
+    [Fact]
+    public async Task OtherErrorsStopAtOnceAndCancellationIsQuiet()
+    {
+        var logger = new LiveLogger(pause: TimeSpan.Zero);
+        Exception? failure = null;
+        logger.Failed += (_, error) => failure = error;
+
+        await logger.RunAsync(new FakeSource(() => throw new InvalidOperationException("bad frame")), Ms43x, Ms43x.MatchChannels(["N"]), CancellationToken.None);
+        Assert.IsType<InvalidOperationException>(failure);
+
+        failure = null;
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        await logger.RunAsync(new FakeSource(() => Payload(1)), Ms43x, Ms43x.MatchChannels(["N"]), cancelled.Token);
+        Assert.Null(failure);
+    }
+
+    [Theory]
+    [InlineData(0, -225)]
+    [InlineData(8000, 45)]
+    [InlineData(4000, -90)]
+    [InlineData(9000, 45)]
+    [InlineData(-50, -225)]
+    public void GaugeAngleClampsAndSweeps(double value, double angle)
+    {
+        Assert.Equal(angle, GaugeMath.Angle(0, 8000, value), 9);
+    }
+}

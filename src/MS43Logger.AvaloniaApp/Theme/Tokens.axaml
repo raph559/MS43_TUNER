@@ -1,0 +1,144 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Design tokens from the approved mockup (docs/superpowers/mockups/ms43-tuner-mockup.html). -->
+    <FontFamily x:Key="DisplayFont">Bahnschrift, avares://Avalonia.Fonts.Inter/Assets#Inter</FontFamily>
+    <FontFamily x:Key="UiFont">Segoe UI, avares://Avalonia.Fonts.Inter/Assets#Inter</FontFamily>
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Dark">
+            <Color x:Key="DialColor">#0E1116</Color>
+            <SolidColorBrush x:Key="DialBrush" Color="#0E1116" />
+            <Color x:Key="PaneColor">#141920</Color>
+            <SolidColorBrush x:Key="PaneBrush" Color="#141920" />
+            <Color x:Key="RaisedColor">#1B222B</Color>
+            <SolidColorBrush x:Key="RaisedBrush" Color="#1B222B" />
+            <Color x:Key="SunkenColor">#0A0D11</Color>
+            <SolidColorBrush x:Key="SunkenBrush" Color="#0A0D11" />
+            <Color x:Key="BezelColor">#222A34</Color>
+            <SolidColorBrush x:Key="BezelBrush" Color="#222A34" />
+            <Color x:Key="Bezel2Color">#344150</Color>
+            <SolidColorBrush x:Key="Bezel2Brush" Color="#344150" />
+            <Color x:Key="InkColor">#EDEAE4</Color>
+            <SolidColorBrush x:Key="InkBrush" Color="#EDEAE4" />
+            <Color x:Key="Ink2Color">#A3ADBA</Color>
+            <SolidColorBrush x:Key="Ink2Brush" Color="#A3ADBA" />
+            <Color x:Key="Ink3Color">#6A7480</Color>
+            <SolidColorBrush x:Key="Ink3Brush" Color="#6A7480" />
+            <Color x:Key="NeedleColor">#FF6A1A</Color>
+            <SolidColorBrush x:Key="NeedleBrush" Color="#FF6A1A" />
+            <Color x:Key="RedZoneColor">#A9302B</Color>
+            <SolidColorBrush x:Key="RedZoneBrush" Color="#A9302B" />
+            <Color x:Key="FaceColor">#0F1318</Color>
+            <SolidColorBrush x:Key="FaceBrush" Color="#0F1318" />
+            <Color x:Key="TickColor">#C9CED6</Color>
+            <SolidColorBrush x:Key="TickBrush" Color="#C9CED6" />
+            <Color x:Key="DownColor">#4C8DFF</Color>
+            <SolidColorBrush x:Key="DownBrush" Color="#4C8DFF" />
+            <Color x:Key="UpColor">#FF5C7A</Color>
+            <SolidColorBrush x:Key="UpBrush" Color="#FF5C7A" />
+            <Color x:Key="OkColor">#5CC48A</Color>
+            <SolidColorBrush x:Key="OkBrush" Color="#5CC48A" />
+            <Color x:Key="NeedleGlowColor">#8CFF6A1A</Color>
+            <SolidColorBrush x:Key="NeedleSoftBrush" Color="#26FF6A1A" />
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#0E1116" />
+            <SolidColorBrush x:Key="HeaderBackgroundBrush" Color="#141920" />
+            <SolidColorBrush x:Key="HeaderBorderBrush" Color="#222A34" />
+            <SolidColorBrush x:Key="SidebarBackgroundBrush" Color="#141920" />
+            <SolidColorBrush x:Key="PanelBorderBrush" Color="#222A34" />
+            <SolidColorBrush x:Key="SurfaceBackgroundBrush" Color="#141920" />
+            <SolidColorBrush x:Key="SurfaceMutedBackgroundBrush" Color="#1B222B" />
+            <SolidColorBrush x:Key="SurfaceBorderBrush" Color="#222A34" />
+            <SolidColorBrush x:Key="PrimaryTextBrush" Color="#EDEAE4" />
+            <SolidColorBrush x:Key="SecondaryTextBrush" Color="#A3ADBA" />
+            <SolidColorBrush x:Key="TertiaryTextBrush" Color="#6A7480" />
+            <SolidColorBrush x:Key="MutedTextBrush" Color="#6A7480" />
+            <SolidColorBrush x:Key="SectionLabelBrush" Color="#A3ADBA" />
+            <SolidColorBrush x:Key="InputBackgroundBrush" Color="#0E1116" />
+            <SolidColorBrush x:Key="InputForegroundBrush" Color="#EDEAE4" />
+            <SolidColorBrush x:Key="InputBorderBrush" Color="#344150" />
+            <SolidColorBrush x:Key="NeutralButtonBackgroundBrush" Color="#1B222B" />
+            <SolidColorBrush x:Key="NeutralButtonForegroundBrush" Color="#EDEAE4" />
+            <SolidColorBrush x:Key="ConnectButtonBackgroundBrush" Color="#EDEAE4" />
+            <SolidColorBrush x:Key="ConnectButtonForegroundBrush" Color="#0E1116" />
+            <SolidColorBrush x:Key="StatusBadgeBackgroundBrush" Color="#1B222B" />
+            <SolidColorBrush x:Key="StatusBadgeTextBrush" Color="#EDEAE4" />
+            <SolidColorBrush x:Key="StatusConnectedBrush" Color="#FF6A1A" />
+            <SolidColorBrush x:Key="StatusDisconnectedBrush" Color="#6A7480" />
+            <SolidColorBrush x:Key="TipBackgroundBrush" Color="#1B222B" />
+            <SolidColorBrush x:Key="TipHeaderBrush" Color="#A3ADBA" />
+            <SolidColorBrush x:Key="TipTextBrush" Color="#A3ADBA" />
+            <SolidColorBrush x:Key="PinButtonBackgroundBrush" Color="#1B222B" />
+            <SolidColorBrush x:Key="PinButtonForegroundBrush" Color="#EDEAE4" />
+            <SolidColorBrush x:Key="FooterBackgroundBrush" Color="#141920" />
+            <SolidColorBrush x:Key="FooterForegroundBrush" Color="#6A7480" />
+            <SolidColorBrush x:Key="FooterAccentBrush" Color="#EDEAE4" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+            <Color x:Key="DialColor">#E6E9ED</Color>
+            <SolidColorBrush x:Key="DialBrush" Color="#E6E9ED" />
+            <Color x:Key="PaneColor">#F5F6F8</Color>
+            <SolidColorBrush x:Key="PaneBrush" Color="#F5F6F8" />
+            <Color x:Key="RaisedColor">#FFFFFF</Color>
+            <SolidColorBrush x:Key="RaisedBrush" Color="#FFFFFF" />
+            <Color x:Key="SunkenColor">#DCE1E7</Color>
+            <SolidColorBrush x:Key="SunkenBrush" Color="#DCE1E7" />
+            <Color x:Key="BezelColor">#D5DBE2</Color>
+            <SolidColorBrush x:Key="BezelBrush" Color="#D5DBE2" />
+            <Color x:Key="Bezel2Color">#B9C2CD</Color>
+            <SolidColorBrush x:Key="Bezel2Brush" Color="#B9C2CD" />
+            <Color x:Key="InkColor">#141A21</Color>
+            <SolidColorBrush x:Key="InkBrush" Color="#141A21" />
+            <Color x:Key="Ink2Color">#455160</Color>
+            <SolidColorBrush x:Key="Ink2Brush" Color="#455160" />
+            <Color x:Key="Ink3Color">#788392</Color>
+            <SolidColorBrush x:Key="Ink3Brush" Color="#788392" />
+            <Color x:Key="NeedleColor">#E05206</Color>
+            <SolidColorBrush x:Key="NeedleBrush" Color="#E05206" />
+            <Color x:Key="RedZoneColor">#D65A50</Color>
+            <SolidColorBrush x:Key="RedZoneBrush" Color="#D65A50" />
+            <Color x:Key="FaceColor">#FBFBFC</Color>
+            <SolidColorBrush x:Key="FaceBrush" Color="#FBFBFC" />
+            <Color x:Key="TickColor">#29313B</Color>
+            <SolidColorBrush x:Key="TickBrush" Color="#29313B" />
+            <Color x:Key="DownColor">#2E6BE0</Color>
+            <SolidColorBrush x:Key="DownBrush" Color="#2E6BE0" />
+            <Color x:Key="UpColor">#DD3B5C</Color>
+            <SolidColorBrush x:Key="UpBrush" Color="#DD3B5C" />
+            <Color x:Key="OkColor">#23915A</Color>
+            <SolidColorBrush x:Key="OkBrush" Color="#23915A" />
+            <Color x:Key="NeedleGlowColor">#59E05206</Color>
+            <SolidColorBrush x:Key="NeedleSoftBrush" Color="#1FE05206" />
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#E6E9ED" />
+            <SolidColorBrush x:Key="HeaderBackgroundBrush" Color="#F5F6F8" />
+            <SolidColorBrush x:Key="HeaderBorderBrush" Color="#D5DBE2" />
+            <SolidColorBrush x:Key="SidebarBackgroundBrush" Color="#F5F6F8" />
+            <SolidColorBrush x:Key="PanelBorderBrush" Color="#D5DBE2" />
+            <SolidColorBrush x:Key="SurfaceBackgroundBrush" Color="#F5F6F8" />
+            <SolidColorBrush x:Key="SurfaceMutedBackgroundBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="SurfaceBorderBrush" Color="#D5DBE2" />
+            <SolidColorBrush x:Key="PrimaryTextBrush" Color="#141A21" />
+            <SolidColorBrush x:Key="SecondaryTextBrush" Color="#455160" />
+            <SolidColorBrush x:Key="TertiaryTextBrush" Color="#788392" />
+            <SolidColorBrush x:Key="MutedTextBrush" Color="#788392" />
+            <SolidColorBrush x:Key="SectionLabelBrush" Color="#455160" />
+            <SolidColorBrush x:Key="InputBackgroundBrush" Color="#E6E9ED" />
+            <SolidColorBrush x:Key="InputForegroundBrush" Color="#141A21" />
+            <SolidColorBrush x:Key="InputBorderBrush" Color="#B9C2CD" />
+            <SolidColorBrush x:Key="NeutralButtonBackgroundBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="NeutralButtonForegroundBrush" Color="#141A21" />
+            <SolidColorBrush x:Key="ConnectButtonBackgroundBrush" Color="#141A21" />
+            <SolidColorBrush x:Key="ConnectButtonForegroundBrush" Color="#E6E9ED" />
+            <SolidColorBrush x:Key="StatusBadgeBackgroundBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="StatusBadgeTextBrush" Color="#141A21" />
+            <SolidColorBrush x:Key="StatusConnectedBrush" Color="#E05206" />
+            <SolidColorBrush x:Key="StatusDisconnectedBrush" Color="#788392" />
+            <SolidColorBrush x:Key="TipBackgroundBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="TipHeaderBrush" Color="#455160" />
+            <SolidColorBrush x:Key="TipTextBrush" Color="#455160" />
+            <SolidColorBrush x:Key="PinButtonBackgroundBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="PinButtonForegroundBrush" Color="#141A21" />
+            <SolidColorBrush x:Key="FooterBackgroundBrush" Color="#F5F6F8" />
+            <SolidColorBrush x:Key="FooterForegroundBrush" Color="#788392" />
+            <SolidColorBrush x:Key="FooterAccentBrush" Color="#141A21" />
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>
