@@ -8,3 +8,7 @@ artifacts/
 
 # Local copies of real bins and XDFs for tests (never committed)
 testdata/local/
+
+# MS4X map definitions: no stated licence, kept local (never committed)
+definitions/Siemens_MS43_MS43X001_512K_v1.0.0.xdf
+*.xdf
