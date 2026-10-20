@@ -22,7 +22,15 @@
     {"id": "activeVe", "ram": "E31C", "channel": "ACTIVEVE", "offset": "0x10", "bits": 16, "mask": "0xFFFF",
      "evidence": "0x4476A MOV R8,E31Ch; MOV F760h,R8. E31C has one writer, 0x34938 (curve 0x7B690 on valve overlap 8C08); E31D is its high byte"},
     {"id": "octane", "ram": "E305", "channel": "RONADFAC", "offset": "0x40", "bits": 8, "mask": "0xFF",
-     "evidence": "0x4488A MOVB RL7,E305h into frame 0x40; the ignition code reads the byte E305 only (0x2C66A)"}
+     "evidence": "0x4488A MOVB RL7,E305h into frame 0x40; the ignition code reads the byte E305 only (0x2C66A)"},
+    {"id": "load", "ram": "E33B", "channel": "MAFTI", "offset": "0x12", "bits": 16, "mask": "0xFF00", "shift": 8,
+     "evidence": "frame 0x12 = E33A (0C:467E); E33B is its high byte, with no byte writes to E33B in the code; 0B:D3BA compares the byte E33B"},
+    {"id": "rpm", "ram": "E0E4", "channel": "N", "offset": "0x04", "bits": 16, "mask": "0x1FFF",
+     "evidence": "frame 0x04 = E0E4 & 0x1FFF, gear in bits 13-15 (0C:467E)"}
+  ],
+  "curves": [
+    {"id": "vanosFullLoad", "data": "0x75D7F", "name": "id_maf_fl_ivvt__n", "bits": 8, "axis": "0x74B6C", "axisBits": 16, "input": "rpm", "interpolate": false,
+     "evidence": "0B:D3BA-D3E0: FD38.14 := E33B > id_maf_fl_ivvt__n(E0E4); 16 bytes on the rpm axis 0x74B6C, not interpolated (code catalogue, ms43x001_live_inputs.json); 30 at every rpm on the car bin, read from the open bin because it can be edited"}
   ],
   "factors": [
     {"id": "octane", "selector": "octane", "offset": 0, "scale": 255, "requires": [],
@@ -126,22 +134,68 @@
        {"data": "0x76278", "name": "ip_cam_sp_ron98_ex_is__n__maf_ivvt", "label": "RON98", "weight": ["1-e85Cam"]},
        {"data": "0x76090", "name": "ip_cam_sp_e85_ex_is__n__maf_ivvt", "label": "E85", "weight": ["e85Cam"]}
      ]},
-    {"id": "vanosLoad", "title": "VANOS, part and full load", "selection": "observed", "blend": "weights",
-     "evidence": "0B:39A4: not idle -> JNB FD38.14 picks the part-load maps (0B:3ACC-0B:3C26) or the full-load curves (0B:3AD8-3B20), each blended with its E85 twin by 8486; only in VANOS mode 2 (0B:2EEE)",
-     "caveat": "Part vs full load is FD38.14 (E33B above curve 0x75D7F, held while the pedal is released), which the frame does not carry, so these maps can only be ruled out. With FD9C.3 clear the part-load result is pulled toward 160/120.",
+    {"id": "vanosPartLoadIntake", "title": "VANOS intake, part load", "selection": "observed", "inferred": "That FD38.14 is fresh whenever the frame shows part load or full-load enrichment: it is recomputed only with the pedal off idle (FD44.3, not logged), and part load with the pedal released lasts only until the state machine moves to idle or overrun (transitions traced, the timing not measured).",
+     "blend": "weights",
+     "evidence": "0B:39A4: not idle -> JNB FD38.14 picks the part-load maps (0B:3ACC-0B:3C26), else the full-load curves (0B:3AD8-3B20), each blended with its E85 twin by 8486; only in VANOS mode 2 (0B:2EEE). FD38.14 := E33B > curve 0x75D7F(E0E4), recomputed only while FD44.3 (pedal at idle) is clear (0B:D3B2-D3E0)",
+     "caveat": "With FD9C.3 clear (not logged) the result is pulled toward 160/120, about 85 % of the map's deviation still applies.",
      "cases": [
        {"when": [{"selector": "vanos", "mask": "0x03", "notIn": [2]}], "then": "notInUse"},
        {"when": [{"selector": "state", "mask": "0x06", "in": [2]}], "then": "notInUse"},
-       {"when": [], "then": "possible"}
+       {"when": [{"selector": "state", "mask": "0x18", "notIn": [0]}], "then": "unknown", "why": "Overrun: the pedal is released, so FD38.14 (part or full load) keeps the value it had before, which the logger does not carry."},
+       {"when": [{"selector": "state", "mask": "0x06", "in": [0]}], "then": "unknown", "why": "Start or stopped: FD38.14 (part or full load) is recomputed only with the pedal pressed, which the frame shows only in part load and full-load enrichment."},
+       {"when": [{"selector": "load", "above": "vanosFullLoad"}], "then": "notInUse"},
+       {"when": [], "then": "use"}
      ],
      "members": [
        {"data": "0x76390", "name": "ip_cam_sp_ron98_in_pl__n__maf_ivvt", "label": "RON98", "weight": ["1-e85Cam"]},
+       {"data": "0x761A8", "name": "ip_cam_sp_e85_in_pl__n__maf_ivvt", "label": "E85", "weight": ["e85Cam"]}
+     ]},
+    {"id": "vanosPartLoadExhaust", "title": "VANOS exhaust, part load", "selection": "observed", "inferred": "That FD38.14 is fresh whenever the frame shows part load or full-load enrichment: it is recomputed only with the pedal off idle (FD44.3, not logged), and part load with the pedal released lasts only until the state machine moves to idle or overrun (transitions traced, the timing not measured).",
+     "blend": "weights",
+     "evidence": "0B:39A4: not idle -> JNB FD38.14 picks the part-load maps (0B:3ACC-0B:3C26), else the full-load curves (0B:3AD8-3B20), each blended with its E85 twin by 8486; only in VANOS mode 2 (0B:2EEE). FD38.14 := E33B > curve 0x75D7F(E0E4), recomputed only while FD44.3 (pedal at idle) is clear (0B:D3B2-D3E0)",
+     "caveat": "With FD9C.3 clear (not logged) the result is pulled toward 160/120, about 85 % of the map's deviation still applies.",
+     "cases": [
+       {"when": [{"selector": "vanos", "mask": "0x03", "notIn": [2]}], "then": "notInUse"},
+       {"when": [{"selector": "state", "mask": "0x06", "in": [2]}], "then": "notInUse"},
+       {"when": [{"selector": "state", "mask": "0x18", "notIn": [0]}], "then": "unknown", "why": "Overrun: the pedal is released, so FD38.14 (part or full load) keeps the value it had before, which the logger does not carry."},
+       {"when": [{"selector": "state", "mask": "0x06", "in": [0]}], "then": "unknown", "why": "Start or stopped: FD38.14 (part or full load) is recomputed only with the pedal pressed, which the frame shows only in part load and full-load enrichment."},
+       {"when": [{"selector": "load", "above": "vanosFullLoad"}], "then": "notInUse"},
+       {"when": [], "then": "use"}
+     ],
+     "members": [
        {"data": "0x7629C", "name": "ip_cam_sp_ron98_ex_pl__n__maf_ivvt", "label": "RON98", "weight": ["1-e85Cam"]},
+       {"data": "0x760B4", "name": "ip_cam_sp_e85_ex_pl__n__maf_ivvt", "label": "E85", "weight": ["e85Cam"]}
+     ]},
+    {"id": "vanosFullLoadIntake", "title": "VANOS intake, full load", "selection": "observed", "inferred": "That FD38.14 is fresh whenever the frame shows part load or full-load enrichment: it is recomputed only with the pedal off idle (FD44.3, not logged), and part load with the pedal released lasts only until the state machine moves to idle or overrun (transitions traced, the timing not measured).",
+     "blend": "weights",
+     "evidence": "0B:39A4: not idle -> JNB FD38.14 picks the part-load maps (0B:3ACC-0B:3C26), else the full-load curves (0B:3AD8-3B20), each blended with its E85 twin by 8486; only in VANOS mode 2 (0B:2EEE). FD38.14 := E33B > curve 0x75D7F(E0E4), recomputed only while FD44.3 (pedal at idle) is clear (0B:D3B2-D3E0)",
+     "caveat": "The threshold is the curve as stored in the open bin; the full-load curves are rpm-only, so the cursor sits on the rpm axis alone.",
+     "cases": [
+       {"when": [{"selector": "vanos", "mask": "0x03", "notIn": [2]}], "then": "notInUse"},
+       {"when": [{"selector": "state", "mask": "0x06", "in": [2]}], "then": "notInUse"},
+       {"when": [{"selector": "state", "mask": "0x18", "notIn": [0]}], "then": "unknown", "why": "Overrun: the pedal is released, so FD38.14 (part or full load) keeps the value it had before, which the logger does not carry."},
+       {"when": [{"selector": "state", "mask": "0x06", "in": [0]}], "then": "unknown", "why": "Start or stopped: FD38.14 (part or full load) is recomputed only with the pedal pressed, which the frame shows only in part load and full-load enrichment."},
+       {"when": [{"selector": "load", "above": "vanosFullLoad"}], "then": "use"},
+       {"when": [], "then": "notInUse"}
+     ],
+     "members": [
        {"data": "0x7635C", "name": "ip_cam_sp_ron98_in_fl__n", "label": "RON98", "weight": ["1-e85Cam"]},
+       {"data": "0x76174", "name": "ip_cam_sp_e85_in_fl__n", "label": "E85", "weight": ["e85Cam"]}
+     ]},
+    {"id": "vanosFullLoadExhaust", "title": "VANOS exhaust, full load", "selection": "observed", "inferred": "That FD38.14 is fresh whenever the frame shows part load or full-load enrichment: it is recomputed only with the pedal off idle (FD44.3, not logged), and part load with the pedal released lasts only until the state machine moves to idle or overrun (transitions traced, the timing not measured).",
+     "blend": "weights",
+     "evidence": "0B:39A4: not idle -> JNB FD38.14 picks the part-load maps (0B:3ACC-0B:3C26), else the full-load curves (0B:3AD8-3B20), each blended with its E85 twin by 8486; only in VANOS mode 2 (0B:2EEE). FD38.14 := E33B > curve 0x75D7F(E0E4), recomputed only while FD44.3 (pedal at idle) is clear (0B:D3B2-D3E0)",
+     "caveat": "The threshold is the curve as stored in the open bin; the full-load curves are rpm-only, so the cursor sits on the rpm axis alone.",
+     "cases": [
+       {"when": [{"selector": "vanos", "mask": "0x03", "notIn": [2]}], "then": "notInUse"},
+       {"when": [{"selector": "state", "mask": "0x06", "in": [2]}], "then": "notInUse"},
+       {"when": [{"selector": "state", "mask": "0x18", "notIn": [0]}], "then": "unknown", "why": "Overrun: the pedal is released, so FD38.14 (part or full load) keeps the value it had before, which the logger does not carry."},
+       {"when": [{"selector": "state", "mask": "0x06", "in": [0]}], "then": "unknown", "why": "Start or stopped: FD38.14 (part or full load) is recomputed only with the pedal pressed, which the frame shows only in part load and full-load enrichment."},
+       {"when": [{"selector": "load", "above": "vanosFullLoad"}], "then": "use"},
+       {"when": [], "then": "notInUse"}
+     ],
+     "members": [
        {"data": "0x76268", "name": "ip_cam_sp_ron98_ex_fl__n", "label": "RON98", "weight": ["1-e85Cam"]},
-       {"data": "0x761A8", "name": "ip_cam_sp_e85_in_pl__n__maf_ivvt", "label": "E85", "weight": ["e85Cam"]},
-       {"data": "0x760B4", "name": "ip_cam_sp_e85_ex_pl__n__maf_ivvt", "label": "E85", "weight": ["e85Cam"]},
-       {"data": "0x76174", "name": "ip_cam_sp_e85_in_fl__n", "label": "E85", "weight": ["e85Cam"]},
        {"data": "0x76080", "name": "ip_cam_sp_e85_ex_fl__n", "label": "E85", "weight": ["e85Cam"]}
      ]},
     {"id": "catHeat", "title": "Catalyst heating ignition, phase 1", "selection": "observed",

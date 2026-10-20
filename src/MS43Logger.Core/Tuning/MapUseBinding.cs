@@ -14,8 +14,8 @@ public sealed record MapUse(MapUseState State, string Text, IReadOnlyList<MapSha
 }
 
 /// <summary>
-/// The map-use rule of one table, with its calibration factors read from the open bin. Rebind when the bin changes:
-/// the factors are read once.
+/// The map-use rule of one table, with its calibration factors and curves read from the open bin. Rebind when the bin changes:
+/// they are read once.
 /// </summary>
 public sealed class MapUseBinding
 {
@@ -27,8 +27,10 @@ public sealed class MapUseBinding
     private readonly string? _noRule;
     private readonly Dictionary<string, double> _calibration;
     private readonly string? _calibrationProblem;
+    private readonly Dictionary<string, CurveValues> _curves;
 
-    private MapUseBinding(MapUseRules? rules, MapUseRule? rule, long data, string? noRule, Dictionary<string, double> calibration, string? calibrationProblem)
+    private MapUseBinding(MapUseRules? rules, MapUseRule? rule, long data, string? noRule, Dictionary<string, double> calibration, string? calibrationProblem,
+        Dictionary<string, CurveValues>? curves = null)
     {
         _rules = rules;
         Rule = rule;
@@ -36,6 +38,7 @@ public sealed class MapUseBinding
         _noRule = noRule;
         _calibration = calibration;
         _calibrationProblem = calibrationProblem;
+        _curves = curves ?? new Dictionary<string, CurveValues>(StringComparer.Ordinal);
     }
 
     public MapUseRule? Rule { get; }
@@ -81,7 +84,25 @@ public sealed class MapUseBinding
             calibration[id] = value;
         }
 
-        return new MapUseBinding(rules, rule, data, null, calibration, problem);
+        var curves = rule.Cases.SelectMany(c => c.When).Select(condition => condition.AboveCurve).OfType<string>().Distinct()
+            .ToDictionary(id => id, id => ReadCurve(image, rules.Curves[id]), StringComparer.Ordinal);
+        return new MapUseBinding(rules, rule, data, null, calibration, problem, curves);
+    }
+
+    /// <summary>A curve's breakpoints and values, or why they cannot be read from the bin.</summary>
+    private sealed record CurveValues(UseCurve Curve, IReadOnlyList<long> Breakpoints, IReadOnlyList<long> Values, string? Problem);
+
+    private static CurveValues ReadCurve(BinImage image, UseCurve curve)
+    {
+        var breakpoints = LiveTableBinding.ReadBreakpoints(image, new CatalogAxis(curve.Axis, curve.AxisBits, curve.Input));
+        var values = new XdfData(curve.Data, curve.Bits, false, true, Math.Max(1, breakpoints?.Count ?? 0), 1, null);
+        if (breakpoints is not { Count: > 0 } || !image.Contains(values))
+        {
+            return new CurveValues(curve, Array.Empty<long>(), Array.Empty<long>(),
+                $"The curve {curve.Name} at 0x{curve.Data:X} cannot be read from the bin (its axis at 0x{curve.Axis:X}), so the choice is not known ({curve.Evidence}).");
+        }
+
+        return new CurveValues(curve, breakpoints, Enumerable.Range(0, breakpoints.Count).Select(i => image.ReadElement(values, i)).ToList(), null);
     }
 
     public MapUse Evaluate(AdxDefinition adx, ReadOnlySpan<byte> payload)
@@ -95,7 +116,7 @@ public sealed class MapUseBinding
         var reader = new SelectorReader(rules, adx, payload.ToArray());
         try
         {
-            var match = rule.Cases.FirstOrDefault(c => c.When.All(condition => Holds(condition, reader)));
+            var match = rule.Cases.FirstOrDefault(c => c.When.All(condition => Holds(condition, reader, _curves)));
             switch (match?.Then)
             {
                 case null:
@@ -132,7 +153,7 @@ public sealed class MapUseBinding
 
             return new MapUse(MapUseState.InUse, used.Count == 1 ? "In use" : list, used, null);
         }
-        catch (SelectorMissingException missing)
+        catch (CannotTellException missing)
         {
             return MapUse.Unknown(missing.Message);
         }
@@ -176,8 +197,23 @@ public sealed class MapUseBinding
 
     private static double SelectorFactor(UseFactor factor, SelectorReader reader) => (reader.Read(factor.Selector!) - factor.Offset) / factor.Scale;
 
-    private static bool Holds(UseCondition condition, SelectorReader reader) =>
-        condition.Values.Contains(reader.Read(condition.Selector) & condition.Mask) != condition.Negate;
+    private static bool Holds(UseCondition condition, SelectorReader reader, Dictionary<string, CurveValues> curves)
+    {
+        if (condition.AboveCurve is not { } id)
+        {
+            return condition.Values.Contains(reader.Read(condition.Selector) & condition.Mask) != condition.Negate;
+        }
+
+        var curve = curves[id];
+        if (curve.Problem is not null)
+        {
+            throw new CannotTellException(curve.Problem);
+        }
+
+        // Not interpolated (interp false in the code catalogue): the value at the highest breakpoint at or below the input, clamped to the ends.
+        var position = AxisSearch.Find(curve.Breakpoints, reader.Read(curve.Curve.Input), false);
+        return reader.Read(condition.Selector) > curve.Values[position.Index];
+    }
 
     private static string FactorId(string term) => term.StartsWith("1-", StringComparison.Ordinal) ? term[2..] : term;
 
@@ -190,7 +226,7 @@ public sealed class MapUseBinding
         return rounded == 0 ? "<1 %" : rounded.ToString("0", CultureInfo.InvariantCulture) + " %";
     }
 
-    private sealed class SelectorMissingException(string message) : Exception(message);
+    private sealed class CannotTellException(string message) : Exception(message);
 
     /// <summary>Reads each selector from the payload once: a value channel by its own byte order, a bitmask channel as its byte.</summary>
     private sealed class SelectorReader(MapUseRules rules, AdxDefinition adx, byte[] payload)
@@ -218,10 +254,10 @@ public sealed class MapUseBinding
             }
             else
             {
-                throw new SelectorMissingException($"The logger definition {adx.SourceName} does not carry {selector.Channel} at offset 0x{selector.PacketOffset:X2}.");
+                throw new CannotTellException($"The logger definition {adx.SourceName} does not carry {selector.Channel} at offset 0x{selector.PacketOffset:X2}.");
             }
 
-            return _values[id] = raw & selector.Mask;
+            return _values[id] = (raw & selector.Mask) >> selector.Shift;
         }
     }
 }
