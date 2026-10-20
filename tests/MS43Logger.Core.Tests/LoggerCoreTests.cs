@@ -22,6 +22,16 @@ public class LoggerCoreTests
     }
 
     [Fact]
+    public void BundledMs43xDefinitionListsItsBitmasks()
+    {
+        var definition = BundledDefinitions.Load("ms43x");
+
+        Assert.Contains(new AdxBitmaskDefinition("CHSTATE", "Catalyst Heating", 0x01, 0x08, 0x08), definition.Bitmasks);
+        Assert.Contains(new AdxBitmaskDefinition("VANOSACTIVE", "VANOS Active", 0x02, 0x03, 0x02), definition.Bitmasks);
+        Assert.DoesNotContain(definition.Values, value => value.Id == "CHSTATE");
+    }
+
+    [Fact]
     public void Ms43xSixteenBitChannelsAreLsbFirst()
     {
         // The frame is copied from C167 RAM, so words arrive low byte first; the ADX marks them with <flags>0x00000002</flags>.

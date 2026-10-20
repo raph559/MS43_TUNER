@@ -1,3 +1,4 @@
+using System.Xml.Linq;
 using MS43Logger.Core;
 using MS43Logger.Core.Tuning;
 
@@ -7,6 +8,7 @@ public class LiveTableBindingTests
 {
     private static readonly AdxDefinition Ms43x = BundledDefinitions.Load("ms43x");
     private static readonly LiveInputMap Map = LiveInputMap.LoadBundled("43X001")!;
+    private static readonly MapUseRules Rules = MapUseRules.LoadBundled("43X001")!;
 
     private static CalibrationDocument Car() => CalibrationDocument.Open(TestData.Find(TestData.CarBin)!, TestData.Find(TestData.Xdf)!);
 
@@ -159,5 +161,71 @@ public class LiveTableBindingTests
         {
             Assert.Contains($"ip_map_ve_{k}__map__n", bound);
         }
+    }
+
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void FixSaysWhetherTheMapIsInUse()
+    {
+        var document = Car();
+        var binding = LiveTableBinding.Resolve(Map, document, Table(document, "ip_iga_ron98_pl__n__maf"), Rules);
+        var payload = LivePayloads.Build(Ms43x, new (int, byte)[] { (0x00, 0x04), (0x40, 71) }, ("N", 2480 | 3 << 13), ("MAFIGA", 1415));
+        var fix = binding.Locate(Ms43x, payload, document.Reader.ReadTable(binding.Table).Physical);
+
+        Assert.Equal(new AxisPosition(5, 61166 / 65536.0, 0), fix.Row);
+        Assert.Equal(new AxisPosition(1, 32698 / 65536.0, 0), fix.Col);
+        Assert.Equal("RON98 72 % · RON91 28 %", fix.Use.Text);
+        Assert.Equal("ignitionPartLoad", binding.Use.Rule!.Id);
+    }
+
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void WithoutRulesTheFixSaysSelectionUnknown()
+    {
+        var document = Car();
+        var binding = LiveTableBinding.Resolve(Map, document, Table(document, "ip_iga_ron98_pl__n__maf"));
+        var fix = Locate(document, binding, ("N", 2480), ("MAFIGA", 1415));
+
+        Assert.Equal(MapUseState.Unknown, fix.Use.State);
+        Assert.Equal("Selection unknown", fix.Use.Text);
+    }
+
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void MissingSelectorKeepsTheCursor()
+    {
+        var document = Car();
+        var adx = WithoutChannel("RONADFAC");
+        var binding = LiveTableBinding.Resolve(Map, document, Table(document, "ip_iga_ron98_pl__n__maf"), Rules);
+        Assert.Null(binding.CheckLogger(adx));
+
+        var payload = LivePayloads.Build(adx, new (int, byte)[] { (0x00, 0x04) }, ("N", 2480), ("MAFIGA", 1415));
+        var fix = binding.Locate(adx, payload, document.Reader.ReadTable(binding.Table).Physical);
+
+        Assert.Equal(4, fix.Cells.Count);
+        Assert.Equal(MapUseState.Unknown, fix.Use.State);
+        Assert.Contains("RONADFAC", fix.Use.Detail);
+    }
+
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void EditingTheFlexSwitchRebinds()
+    {
+        var document = Car();
+        var table = Table(document, "ip_iga_ron98_pl__n__maf");
+        document.Image.WriteElement(new XdfData(0x70DF8, 8, false, true, 1, 1, null), 0, 1);
+        var binding = LiveTableBinding.Resolve(Map, document, table, Rules);
+
+        var payload = LivePayloads.Build(Ms43x, new (int, byte)[] { (0x00, 0x04), (0x40, 71) }, ("N", 2480), ("MAFIGA", 1415));
+        Assert.Equal("Selection unknown", binding.Locate(Ms43x, payload, document.Reader.ReadTable(table).Physical).Use.Text);
+    }
+
+    private static AdxDefinition WithoutChannel(string id)
+    {
+        var assembly = typeof(AdxDefinition).Assembly;
+        var name = assembly.GetManifestResourceNames().Single(n => n.EndsWith("Siemens_MS43_MS43X001_Logging.adx", StringComparison.OrdinalIgnoreCase));
+        using var source = assembly.GetManifestResourceStream(name)!;
+        var xml = XDocument.Load(source);
+        xml.Root!.Elements("ADXVALUE").Single(e => (string?)e.Attribute("id") == id).Remove();
+        using var stream = new MemoryStream();
+        xml.Save(stream);
+        stream.Position = 0;
+        return AdxDefinition.Load(stream, "without-" + id + ".adx");
     }
 }

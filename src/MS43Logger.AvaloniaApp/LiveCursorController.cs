@@ -8,7 +8,11 @@ using MS43Logger.Core.Tuning;
 namespace MS43Logger.AvaloniaApp;
 
 /// <summary>What the map, curve and surface draw for the engine's position: the fix, its fading trail, and whether samples stopped.</summary>
-public sealed record LiveCursorState(CursorFix Fix, IReadOnlyList<TrailPoint> Trail, bool IsStale);
+public sealed record LiveCursorState(CursorFix Fix, IReadOnlyList<TrailPoint> Trail, bool IsStale)
+{
+    /// <summary>The ECU is not reading this table now: the cursor is drawn in Ink3 instead of Now.</summary>
+    public bool IsUnused => Fix.Use.State == MapUseState.NotInUse;
+}
 
 /// <summary>
 /// Keeps the latest logger sample and, at most <see cref="MaxRedrawsPerSecond"/> times a second, places it on the table shown in
@@ -28,6 +32,7 @@ public sealed class LiveCursorController : ViewModelBase
     private CalibrationDocument? _document;
     private TableEditorViewModel? _editor;
     private LiveInputMap? _map;
+    private MapUseRules? _rules;
     private string? _mapFirmware;
     private bool _mapLoaded;
     private LiveTableBinding? _binding;
@@ -38,6 +43,9 @@ public sealed class LiveCursorController : ViewModelBase
     private bool _isVisible;
     private string? _readout;
     private bool _readoutIsLive;
+    private string? _use;
+    private string? _useDetail;
+    private bool _useIsDim;
 
     public LiveCursorController(TimeProvider? time = null)
     {
@@ -66,6 +74,15 @@ public sealed class LiveCursorController : ViewModelBase
     public string? Readout { get => _readout; private set => SetField(ref _readout, value); }
 
     public bool ReadoutIsLive { get => _readoutIsLive; private set => SetField(ref _readoutIsLive, value); }
+
+    /// <summary>"In use", "Not in use", "RON98 72 % · RON91 28 %", "Possibly in use" or "Selection unknown"; null with no cursor.</summary>
+    public string? Use { get => _use; private set => SetField(ref _use, value); }
+
+    /// <summary>Why the use is unknown, or the rule's caveat: the label's tooltip.</summary>
+    public string? UseDetail { get => _useDetail; private set => SetField(ref _useDetail, value); }
+
+    /// <summary>The label is Ink3 when the map is not in use or samples stopped.</summary>
+    public bool UseIsDim { get => _useIsDim; private set => SetField(ref _useIsDim, value); }
 
     /// <summary>The Settings trail: Off, Short (32 fixes over 1.2 s) or Long (96 over 3.6 s).</summary>
     public TrailMode Trail
@@ -163,6 +180,7 @@ public sealed class LiveCursorController : ViewModelBase
                 editor.Live = live with { IsStale = true };
                 ReadoutIsLive = false;
                 Readout = Format(live.Fix, editor.Table, stale: true);
+                UseIsDim = true;
             }
 
             return;
@@ -175,6 +193,7 @@ public sealed class LiveCursorController : ViewModelBase
             editor.Live = null;
             Readout = problem;
             ReadoutIsLive = false;
+            ClearUse();
             return;
         }
 
@@ -189,6 +208,7 @@ public sealed class LiveCursorController : ViewModelBase
             editor.Live = null;
             Readout = $"No live input: the last sample could not be read ({error.Message})";
             ReadoutIsLive = false;
+            ClearUse();
             return;
         }
 
@@ -197,13 +217,23 @@ public sealed class LiveCursorController : ViewModelBase
         editor.Live = new LiveCursorState(fix, _trail?.Points(at) ?? Array.Empty<TrailPoint>(), stale);
         Readout = Format(fix, editor.Table, stale);
         ReadoutIsLive = !stale;
+        Use = fix.Use.Text;
+        UseDetail = fix.Use.Detail ?? binding.Use.Rule?.Caveat;
+        UseIsDim = stale || fix.Use.State == MapUseState.NotInUse;
+    }
+
+    private void ClearUse()
+    {
+        Use = null;
+        UseDetail = null;
+        UseIsDim = false;
     }
 
     private void OnDocumentChanged(object? sender, EventArgs e) => Rebind();
 
     private void Rebind()
     {
-        Binding = _document is { } document && _editor is { } editor ? LiveTableBinding.Resolve(MapFor(document), document, editor.Table) : null;
+        Binding = _document is { } document && _editor is { } editor ? LiveTableBinding.Resolve(MapFor(document), document, editor.Table, _rules) : null;
         _pending = _sample is not null;
         if (Binding is not { HasInput: true } && _editor is not null)
         {
@@ -222,6 +252,7 @@ public sealed class LiveCursorController : ViewModelBase
         if (!_mapLoaded || !string.Equals(firmware, _mapFirmware, StringComparison.OrdinalIgnoreCase))
         {
             _map = LiveInputMap.LoadBundled(firmware);
+            _rules = MapUseRules.LoadBundled(firmware);
             _mapFirmware = firmware;
             _mapLoaded = true;
         }
@@ -231,6 +262,7 @@ public sealed class LiveCursorController : ViewModelBase
 
     private void ShowIdleReadout()
     {
+        ClearUse();
         ReadoutIsLive = false;
         Readout = Binding switch
         {
