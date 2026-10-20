@@ -7,6 +7,9 @@ namespace MS43Logger.Core;
 
 public sealed class AdxDefinition
 {
+    /// <summary>TunerPro's value flag for a little-endian channel, as in the XDF's <c>mmedtypeflags</c>.</summary>
+    private const int LsbFirstFlag = 0x02;
+
     private readonly IReadOnlyDictionary<string, AdxValueDefinition> _valuesByIdHash;
     private readonly IReadOnlyDictionary<string, AdxLookupTable> _lookupTablesByIdHash;
     private readonly IReadOnlyDictionary<string, AdxSendCommand> _sendCommandsById;
@@ -364,7 +367,7 @@ public sealed class AdxDefinition
             PacketOffset: ParseInt(element.Element("packetoffset")?.Value, 0),
             SizeInBits: ParseInt(element.Element("sizeinbits")?.Value, defaults.DataSizeBits),
             Signed: ParseBoolIndicator((string?)element.Attribute("signed"), defaults.Signed),
-            LsbFirst: ParseBoolIndicator((string?)element.Attribute("lsbfirst"), defaults.LsbFirst),
+            LsbFirst: (ParseInt(element.Element("flags")?.Value, 0) & LsbFirstFlag) != 0 || ParseBoolIndicator((string?)element.Attribute("lsbfirst"), defaults.LsbFirst),
             FloatingPoint: ParseBoolIndicator((string?)element.Attribute("float"), defaults.FloatingPoint),
             DigitCount: ParseInt(element.Element("digcount")?.Value, defaults.SignificantDigits),
             OutputType: ParseInt(element.Element("outputtype")?.Value, defaults.OutputType),

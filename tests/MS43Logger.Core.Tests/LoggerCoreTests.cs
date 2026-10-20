@@ -22,6 +22,22 @@ public class LoggerCoreTests
     }
 
     [Fact]
+    public void Ms43xSixteenBitChannelsAreLsbFirst()
+    {
+        // The frame is copied from C167 RAM, so words arrive low byte first; the ADX marks them with <flags>0x00000002</flags>.
+        var definition = BundledDefinitions.Load("ms43x");
+        var payload = new byte[73];
+        payload[0x04] = 0xB0;
+        payload[0x05] = 0x69;
+        var n = definition.Values.Single(value => value.Id == "N");
+
+        Assert.True(n.LsbFirst);
+        Assert.Equal(0x69B0, AdxDefinition.ReadRaw(n, payload));
+        Assert.Equal(2480, definition.DecodePayload(payload, new[] { n }).Single().Value);
+        Assert.Equal(3, Math.Floor(definition.DecodePayload(payload, definition.Values.Where(value => value.Id == "GEAR")).Single().Value));
+    }
+
+    [Fact]
     public void Ms43xBundledDefinitionMatchesCurrentFirmwareReplyShape()
     {
         var definition = BundledDefinitions.Load("ms43x");
