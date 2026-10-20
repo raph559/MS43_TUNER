@@ -124,6 +124,26 @@
         <Setter Property="ClipToBounds" Value="True" />
     </Style>
 
+    <!-- Filter pills (Compare kinds): outlined, filled with ink when on -->
+    <Style Selector="ToggleButton.pill">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Bezel2Brush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="999" />
+        <Setter Property="Padding" Value="10,2" />
+        <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="ToggleButton.pill:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource RaisedBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
+    </Style>
+    <Style Selector="ToggleButton.pill:checked /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource InkBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource InkBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource DialBrush}" />
+    </Style>
+
     <!-- Chips and plates -->
     <Style Selector="Border.chip">
         <Setter Property="BorderBrush" Value="{DynamicResource Bezel2Brush}" />

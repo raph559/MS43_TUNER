@@ -7,6 +7,7 @@ public sealed class ShellViewModel : ViewModelBase
 {
     public const string LiveTab = "Live";
     public const string TuneTab = "Tune";
+    public const string CompareTab = "Compare";
 
     private string _selectedTab = LiveTab;
     private bool _isNight = true;
@@ -15,6 +16,12 @@ public sealed class ShellViewModel : ViewModelBase
     {
         Live = live;
         Tune = tune;
+        Compare = new CompareViewModel(tune);
+        Compare.ShowInTuneRequested += (_, item) =>
+        {
+            tune.SelectedItem = item;
+            SelectedTab = TuneTab;
+        };
         App.SetTheme("Dark");
 
         if (tune.Settings.Variant is { } variant && live.AdxVariants.Contains(variant))
@@ -56,6 +63,8 @@ public sealed class ShellViewModel : ViewModelBase
 
     public TuneViewModel Tune { get; }
 
+    public CompareViewModel Compare { get; }
+
     public string SelectedTab
     {
         get => _selectedTab;
@@ -65,7 +74,9 @@ public sealed class ShellViewModel : ViewModelBase
             {
                 OnPropertyChanged(nameof(IsLive));
                 OnPropertyChanged(nameof(IsTune));
+                OnPropertyChanged(nameof(IsCompare));
                 Tune.LiveCursor.IsVisible = IsTune;
+                Compare.IsVisible = IsCompare;
             }
         }
     }
@@ -94,6 +105,22 @@ public sealed class ShellViewModel : ViewModelBase
             if (value)
             {
                 SelectedTab = TuneTab;
+            }
+            else
+            {
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool IsCompare
+    {
+        get => SelectedTab == CompareTab;
+        set
+        {
+            if (value)
+            {
+                SelectedTab = CompareTab;
             }
             else
             {

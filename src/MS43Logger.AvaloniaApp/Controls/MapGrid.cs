@@ -189,6 +189,8 @@ public sealed class MapGrid : Control
         var finite = values.Physical.Cast<double>().Where(double.IsFinite).ToList();
         var min = finite.Count > 0 ? finite.Min() : 0;
         var max = finite.Count > 0 ? finite.Max() : 1;
+        var largest = finite.Count > 0 ? finite.Max(Math.Abs) : 0;
+        var (middle, down, up) = (ThemeBrushes.Color(this, "PaneBrush"), ThemeBrushes.Color(this, "DownBrush"), ThemeBrushes.Color(this, "UpBrush"));
         var flash = _flashCells.Count > 0 ? Math.Max(0, 1 - (DateTime.UtcNow - _flashStart).TotalMilliseconds / FlashTime.TotalMilliseconds) : 0;
         var z = values.Table.Z;
 
@@ -198,7 +200,9 @@ public sealed class MapGrid : Control
             {
                 var bounds = CellBounds(r, c);
                 var physical = values.Physical[r, c];
-                var colour = double.IsFinite(physical) ? HeatRamp.Color(max > min ? (physical - min) / (max - min) : 0.5) : ThemeBrushes.Color(this, "RaisedColor");
+                var colour = !double.IsFinite(physical) ? ThemeBrushes.Color(this, "RaisedBrush")
+                    : editor.IsDelta ? HeatRamp.Diverging(largest > 0 ? physical / largest : 0, middle, down, up)
+                    : HeatRamp.Color(max > min ? (physical - min) / (max - min) : 0.5);
                 var text = new SolidColorBrush(HeatRamp.TextOn(colour));
                 context.DrawRectangle(new SolidColorBrush(colour), null, bounds, 3, 3);
                 if (flash > 0 && _flashCells.Contains((r, c)))
@@ -206,7 +210,8 @@ public sealed class MapGrid : Control
                     context.DrawRectangle(new SolidColorBrush(Colors.White, 0.5 * flash), null, bounds, 3, 3);
                 }
 
-                var shown = editor.ShowRaw
+                var shown = editor.IsDelta ? BinComparer.FormatDelta(physical, values.Raw[r, c], z, editor.ShowRaw)
+                    : editor.ShowRaw
                     ? values.Raw[r, c].ToString(CultureInfo.InvariantCulture)
                     : ValueCodec.Format(physical, values.Raw[r, c], z.DecimalPlaces, z.OutputType, z.Data.ElementBits).Replace('-', '−');
                 Text(context, shown, display, 12.5, text, new Point(bounds.Center.X, bounds.Center.Y - 8.5), 0.5);
@@ -327,6 +332,13 @@ public sealed class MapGrid : Control
         base.OnTextInput(e);
         if (Editor is not TableEditorViewModel editor || e.Text is not { Length: > 0 } text)
         {
+            return;
+        }
+
+        if (editor.IsReadOnly)
+        {
+            editor.Message = TableEditorViewModel.ReadOnlyMessage;
+            e.Handled = true;
             return;
         }
 
