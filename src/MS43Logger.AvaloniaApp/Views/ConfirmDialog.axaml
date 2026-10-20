@@ -1,17 +1,16 @@
-<Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        x:Class="MS43Logger.AvaloniaApp.Views.ConfirmDialog"
-        Title="Unsaved changes"
-        Width="440" SizeToContent="Height" CanResize="False"
-        WindowStartupLocation="CenterOwner">
-    <StackPanel Margin="22" Spacing="16">
-        <TextBlock Name="MessageText" Classes="display" FontSize="17" TextWrapping="Wrap" />
-        <TextBlock Classes="secondary" TextWrapping="Wrap"
-                   Text="Saving keeps a .bak of the file as it was and adds the changes to its edit log." />
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-            <Button Content="Cancel" Click="Cancel_Click" IsCancel="True" />
-            <Button Content="Don't save" Click="DontSave_Click" />
-            <Button Classes="primary" Content="Save" Click="Save_Click" IsDefault="True" />
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="MS43Logger.AvaloniaApp.Views.ConfirmDialog"
+             Width="440">
+    <!-- The save prompt (system 5.9, 7.4): title UI 16, the line about what Save keeps in UI 13 Ink2, and the buttons
+         right-aligned with the primary last. The dialog host gives Esc to Cancel and Enter to Save. -->
+    <StackPanel Spacing="8">
+        <TextBlock Name="MessageText" Classes="title" TextWrapping="Wrap" />
+        <TextBlock Name="DetailText" Classes="body" Foreground="{DynamicResource Ink2Brush}" TextWrapping="Wrap" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">
+            <Button Name="CancelButton" Content="Cancel" Click="Cancel_Click" />
+            <Button Name="DontSaveButton" Content="Don't save" Click="DontSave_Click" />
+            <Button Name="SaveButton" Classes="primary" Content="Save" Click="Save_Click" />
         </StackPanel>
     </StackPanel>
-</Window>
+</UserControl>

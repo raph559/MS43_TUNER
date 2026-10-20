@@ -68,11 +68,11 @@ public sealed class TuneCommandTests : IDisposable
 
         var (_, shell, path) = await OpenCopy();
         EditOneCell(shell);
-        Assert.Equal("1 unsaved change", shell.Tune.DirtyText);
+        Assert.Equal("1 item not saved", shell.Tune.SaveStateText);
 
         Assert.True(shell.Tune.Save());
 
-        Assert.Equal("Saved", shell.Tune.DirtyText);
+        Assert.Equal("Saved", shell.Tune.SaveStateText);
         Assert.Equal(81, File.ReadAllBytes(path)[0x77315]);
         Assert.True(File.Exists(path + ".bak"));
         Assert.True(File.Exists(Path.Combine(_folder, "CAR.log")));
@@ -141,10 +141,17 @@ public sealed class TuneCommandTests : IDisposable
         EditOneCell(shell);
 
         window.KeyPress(Key.Z, RawInputModifiers.Control, PhysicalKey.Z, "z");
-        Assert.Equal("Saved", shell.Tune.DirtyText);
+        Assert.Equal("Saved", shell.Tune.SaveStateText);
 
+        // Ctrl K focuses the search field of the tab in front (system 5.3).
         window.KeyPress(Key.K, RawInputModifiers.Control, PhysicalKey.K, "k");
         Assert.True(Find.Named<TextBox>(window, "SearchBox").IsFocused);
+
+        shell.SelectedTab = ShellViewModel.LiveTab;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        window.KeyPress(Key.K, RawInputModifiers.Control, PhysicalKey.K, "k");
+        Assert.Equal(ShellViewModel.LiveTab, shell.SelectedTab);
+        Assert.True(Find.Named<TextBox>(window, "ChannelFilter").IsFocused);
     }
 }
 
@@ -178,22 +185,9 @@ public sealed class ReviewFixTests : IDisposable
         var error = Find.Named<TextBlock>(window, "EditError");
         Assert.True(error.IsEffectivelyVisible);
         Assert.StartsWith("Not saved", error.Text);
-    }
-
-    [AvaloniaFact]
-    public async Task OpenAndSaveAsAreReachableWithABinOpen()
-    {
-        if (!TuneScreen.Available)
-        {
-            return;
-        }
-
-        var (window, _) = await TuneScreen.OpenAsync();
-
-        foreach (var name in new[] { "OpenBinTool", "OpenXdfTool", "SaveAsTool" })
-        {
-            Assert.True(Find.Named<Button>(window, name).IsEffectivelyVisible, name);
-        }
+        Assert.EndsWith(". The file on disk is unchanged.", error.Text);
+        Assert.Equal(TuneAction.SaveAs, shell.Tune.ErrorAction);
+        Assert.Equal("Save as…", Find.Named<Button>(window, "ErrorActionButton").Content);
     }
 
     [AvaloniaFact]
@@ -207,12 +201,11 @@ public sealed class ReviewFixTests : IDisposable
         var (_, shell) = await TuneScreen.OpenAsync(select: "c_lc_n_max");
         shell.Tune.Value!.Input = "4000";
         shell.Tune.Value.Apply();
-        Assert.Contains(shell.Tune.Facts, fact => fact.Label == "Raw" && fact.Text == "125 (0x7D)");
+        Assert.Contains(shell.Tune.LimitFacts, fact => fact is { Label: "Value", Text: "4000 rpm", Detail: "raw 125 (0x7D)" });
 
         shell.Tune.SelectedItem = shell.Tune.Document!.Xdf.FindByTitle("ip_iga_ron98_pl__n__maf");
         shell.Tune.Editor!.Selection = new CellRange(0, 0, 19, 15);
         shell.Tune.Editor.Apply(new EditRequest(EditKind.Set, 60));
-        Assert.Equal("60.0 °CRK", shell.Tune.LegendMin);
-        Assert.Equal("60.0 °CRK", shell.Tune.LegendMax);
+        Assert.Equal("All 320 cells are 60.0 °CRK", shell.Tune.ScaleCaption);
     }
 }

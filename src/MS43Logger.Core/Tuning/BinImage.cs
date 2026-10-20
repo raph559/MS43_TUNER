@@ -29,7 +29,7 @@ public sealed class BinImage
         ArgumentNullException.ThrowIfNull(bytes);
         if (bytes.Length != Size)
         {
-            throw new InvalidDataException($"{name} is {bytes.Length} bytes; an MS43 bin must be exactly {Size} bytes (512 KiB).");
+            throw new InvalidDataException($"{name} is {bytes.Length} bytes. An MS43 bin is exactly {Size} bytes (512 KiB).");
         }
 
         return new BinImage((byte[])bytes.Clone(), name);

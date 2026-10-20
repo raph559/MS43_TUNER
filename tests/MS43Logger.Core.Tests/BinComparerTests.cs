@@ -263,11 +263,13 @@ public class BinComparerTests
         var z = Synthetic().Tables[0].Z;
 
         Assert.Equal("+1.50", BinComparer.FormatDelta(1.5, 3, z, raw: false));
-        Assert.Equal("−0.38", BinComparer.FormatDelta(-0.375, -1, z, raw: false));
-        Assert.Equal("·", BinComparer.FormatDelta(0, 0, z, raw: false));
+        Assert.Equal("-0.38", BinComparer.FormatDelta(-0.375, -1, z, raw: false));
+        Assert.Equal("0.00", BinComparer.FormatDelta(0, 0, z, raw: false));
+        Assert.Equal("n/a", BinComparer.FormatDelta(double.NaN, 0, z, raw: false));
         Assert.Equal("+3", BinComparer.FormatDelta(2.6, 5, z with { OutputType = 2 }, raw: false));
         Assert.Equal("+4", BinComparer.FormatDelta(2, 4, z, raw: true));
-        Assert.Equal("−4", BinComparer.FormatDelta(-2, -4, z with { OutputType = 3 }, raw: false));
+        Assert.Equal("0", BinComparer.FormatDelta(0, 0, z, raw: true));
+        Assert.Equal("-4", BinComparer.FormatDelta(-2, -4, z with { OutputType = 3 }, raw: false));
     }
 
     [Fact]
@@ -284,7 +286,7 @@ public class BinComparerTests
         Assert.Contains("1 of 6 cells", text);
         Assert.Contains("+2.00 ms", text);
         Assert.Contains("Bytes outside the XDF", text);
-        Assert.Contains("0x03C43–0x03C43", text);
+        Assert.Contains("0x03C43 to 0x03C43", text);
         Assert.DoesNotContain("differ)", text);
         Assert.Contains("Boot block", text);
     }
@@ -335,6 +337,7 @@ public class BinComparerTests
         var text = ComparisonText.Format(comparison, TestData.CarBin, TestData.ReleaseBin, TestData.Xdf);
 
         Assert.Contains($"{comparison.Items.Count} items differ", text);
+        Assert.Contains("18 byte ranges (11907 bytes) outside the XDF", text);
         Assert.All(comparison.Items, item => Assert.Contains(item.Item.Title, text));
     }
 }

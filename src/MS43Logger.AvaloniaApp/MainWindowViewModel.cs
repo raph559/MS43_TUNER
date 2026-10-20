@@ -19,6 +19,8 @@ namespace MS43Logger.AvaloniaApp;
 
 public class MainWindowViewModel : INotifyPropertyChanged
 {
+    private readonly TimeProvider _time;
+    private readonly Func<string[]> _ports;
     private string _selectedPort;
     private ObservableCollection<string> _availablePorts;
     private ObservableCollection<DecodedValueViewModel> _liveValues;
@@ -31,8 +33,18 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private DispatcherTimer _uiTimer;
     private readonly Stopwatch _sessionStopwatch = new();
     private LiveLogger _logger;
-    private string _rateText = "No samples yet";
     private StreamWriter _csvWriter;
+    private static readonly HashSet<string> StatusInputs = new(StringComparer.Ordinal)
+    {
+        nameof(IsConnected), nameof(IsConnecting), nameof(SelectedPort), nameof(SelectedVariant),
+        nameof(EnableCsvLogging), nameof(CsvPath), nameof(ElapsedTime), nameof(SampleCount),
+    };
+
+    private bool _isConnecting;
+    private bool _hasNoSamplesYet;
+    private string _rateValue;
+    private bool _isSlowLink;
+    private string _rateDetail;
     private string _searchText = string.Empty;
     private bool _enableCsvLogging;
     private string _csvPath;
@@ -40,25 +52,55 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private double _samplesPerSecond;
     private bool _showPinnedOnly;
     private int _pinnedCount;
-    private string _selectedTheme = "Dark";
 
-    private readonly Stopwatch _accelStopwatch = new();
-    private string _time0To100 = "--";
-    private string _time0To200 = "--";
+    private RunStage _run;
+    private DateTimeOffset _launchedAt;
+    private string _time100 = "n/a";
+    private string _time200 = "n/a";
     private bool _reached100;
     private bool _reached200;
-    private bool _isPerformanceTestArmed;
-    private bool _isWaitingForLaunch;
+    private bool _hasSpeedChannel;
+    private ReadoutsMode _readouts = ReadoutsMode.Tiles;
+    private int _trendSeconds = 10;
+    private string _logFolder = AppSettings.DefaultLogFolder;
+    private bool _startCsvOnConnect;
+    private ConnectionMessage _banner;
+    private string _bannerDetail;
+    private string _connectionLog;
+    private bool _isStale;
+    private string _retryText;
+    private DateTimeOffset _sessionStart;
+    private DateTimeOffset? _lastSampleAt;
+    private DispatcherTimer _staleTimer;
+    private static readonly ConnectionMessage NoPort = new("No COM port found. Plug in the K-line cable, then rescan ports.", LiveAction.RescanPorts);
 
+    // Performance tests: the speed channel's ids (MS43X001 says VS, the stock definitions VEHICLESPEED), whatever their case.
+    private static readonly HashSet<string> SpeedIds = new(StringComparer.OrdinalIgnoreCase) { "VEHICLESPEED", "VS" };
+
+    private const string NoSpeedChannel = "This definition has no vehicle speed channel";
+
+    // A run waits for the car to stop, then times from the first sample above 1 km/h.
+    private enum RunStage
+    {
+        Idle,
+        WaitingForStop,
+        Ready,
+        Timing,
+    }
+
+    /// <summary>Starts a run of the Performance tests; the times read n/a until the car moves off.</summary>
     public void ArmPerformanceTest()
     {
-        _isPerformanceTestArmed = true;
-        _isWaitingForLaunch = false;
-        _accelStopwatch.Reset();
+        if (!HasSpeedChannel)
+        {
+            return;
+        }
+
         _reached100 = false;
         _reached200 = false;
-        Time0To100 = "Wait 0kmh";
-        Time0To200 = "Wait 0kmh";
+        Time100 = "n/a";
+        Time200 = "n/a";
+        Run = RunStage.WaitingForStop;
     }
 
     private static readonly HashSet<string> DefaultPinnedChannels = new(StringComparer.OrdinalIgnoreCase)
@@ -78,8 +120,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
     };
 
     public string[] AdxVariants { get; } = { "b22", "b25", "b30", "ms43x" };
-
-    public string[] ThemeModes { get; } = { "Dark", "Light" };
 
     private string _selectedVariant = "b30";
     public string SelectedVariant
@@ -127,7 +167,87 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     public bool IsNotConnected => !IsConnected;
 
-    public string ConnectionButtonText => IsConnected ? "Disconnect" : "Connect";
+    public string ConnectionButtonText => IsConnecting ? "Connecting…" : IsConnected ? "Disconnect" : "Connect";
+
+    /// <summary>True from Connect until the ECU answers or the attempt fails.</summary>
+    public bool IsConnecting
+    {
+        get => _isConnecting;
+        internal set
+        {
+            if (SetField(ref _isConnecting, value))
+            {
+                OnPropertyChanged(nameof(ConnectionButtonText));
+            }
+        }
+    }
+
+    /// <summary>
+    /// The status bar's connection line (system 5.11) in parts, so numbers can be set in Bahnschrift and the word
+    /// "Connected" in NowText: "Connected to COM1 · ms43x · Logging 00:04:12 to ms43-20261019-2225.csv · 9576 rows".
+    /// </summary>
+    public IReadOnlyList<StatusPart> StatusParts
+    {
+        get
+        {
+            if (IsConnecting)
+            {
+                return [new StatusPart($"Connecting to MS43 ({SelectedVariant}) on {SelectedPort}…")];
+            }
+
+            if (!IsConnected)
+            {
+                return [new StatusPart("Not connected")];
+            }
+
+            if (_retryText is not null)
+            {
+                return [new StatusPart(_retryText)];
+            }
+
+            var parts = new List<StatusPart> { new("Connected", IsNow: true), new($" to {SelectedPort} · "), new(SelectedVariant, IsId: true) };
+            if (EnableCsvLogging && !string.IsNullOrWhiteSpace(CsvPath))
+            {
+                parts.Add(new(" · Logging "));
+                parts.Add(new(ElapsedTime, IsNumber: true));
+                parts.Add(new($" to {Path.GetFileName(CsvPath)} · "));
+                parts.Add(new(SampleCount.ToString(CultureInfo.InvariantCulture), IsNumber: true));
+                parts.Add(new(" rows"));
+            }
+            else
+            {
+                parts.Add(new(" · Not writing a log"));
+            }
+
+            return parts;
+        }
+    }
+
+    /// <summary>The connection line without the word "Connected".</summary>
+    public string ConnectionDetail => string.Concat(StatusParts.Where(part => !part.IsNow).Select(part => part.Text));
+
+    /// <summary>Connected, before the first sample arrived.</summary>
+    public bool HasNoSamplesYet { get => _hasNoSamplesYet; private set => SetField(ref _hasNoSamplesYet, value); }
+
+    /// <summary>The logging rate in whole samples per second, "38".</summary>
+    public string RateValue { get => _rateValue; private set => SetField(ref _rateValue, value); }
+
+    /// <summary>Under 10 samples/s, which the header marks as a slow link.</summary>
+    public bool IsSlowLink { get => _isSlowLink; private set => SetField(ref _isSlowLink, value); }
+
+    /// <summary>"Between samples: 24 to 31 ms", the rate's tooltip.</summary>
+    public string RateDetail { get => _rateDetail; private set => SetField(ref _rateDetail, value); }
+
+    internal void ShowRate(RateStats stats)
+    {
+        SamplesPerSecond = stats?.SamplesPerSecond ?? 0;
+        HasNoSamplesYet = stats is null;
+        RateValue = stats?.SamplesPerSecond.ToString("0", CultureInfo.InvariantCulture);
+        IsSlowLink = stats is not null && stats.SamplesPerSecond < 10;
+        RateDetail = stats is null
+            ? null
+            : string.Format(CultureInfo.InvariantCulture, "Between samples: {0:0} to {1:0} ms", stats.MinMs, stats.MaxMs);
+    }
 
     public string StatusText
     {
@@ -148,62 +268,110 @@ public class MainWindowViewModel : INotifyPropertyChanged
         set => SetField(ref _elapsedTime, value);
     }
 
-    public string Time0To100
+    /// <summary>Seconds from the move-off to 100 km/h, "7.3", counting until it is reached; n/a before a run.</summary>
+    public string Time100
     {
-        get => _time0To100;
-        set => SetField(ref _time0To100, value);
-    }
-
-    public string Time0To200
-    {
-        get => _time0To200;
-        set => SetField(ref _time0To200, value);
-    }
-
-    private void UpdateAccelerationTimes(double speed)
-    {
-        if (!_isPerformanceTestArmed)
+        get => _time100;
+        private set
         {
-            return;
-        }
-
-        if (!_accelStopwatch.IsRunning)
-        {
-            if (speed <= 1.0 && !_isWaitingForLaunch)
+            if (SetField(ref _time100, value))
             {
-                _isWaitingForLaunch = true;
-                Time0To100 = "Ready";
-                Time0To200 = "Ready";
-            }
-            else if (_isWaitingForLaunch && speed > 1.0)
-            {
-                _accelStopwatch.Restart();
-                Time0To100 = "00.0s";
-                Time0To200 = "00.0s";
+                OnPropertyChanged(nameof(HasTime100));
             }
         }
-        else if (_accelStopwatch.IsRunning)
+    }
+
+    public bool HasTime100 => Time100 != "n/a";
+
+    public string Time200
+    {
+        get => _time200;
+        private set
         {
-            if (!_reached100)
+            if (SetField(ref _time200, value))
             {
-                Time0To100 = (_accelStopwatch.ElapsedMilliseconds / 1000.0).ToString("F1") + "s";
-                if (speed >= 100.0)
+                OnPropertyChanged(nameof(HasTime200));
+            }
+        }
+    }
+
+    public bool HasTime200 => Time200 != "n/a";
+
+    /// <summary>Whether the definition has a speed channel to time; without one "Start test" is off.</summary>
+    public bool HasSpeedChannel
+    {
+        get => _hasSpeedChannel;
+        private set
+        {
+            if (SetField(ref _hasSpeedChannel, value))
+            {
+                OnPropertyChanged(nameof(StartTestTip));
+                OnPropertyChanged(nameof(PerformanceStatus));
+            }
+        }
+    }
+
+    public string StartTestTip => HasSpeedChannel ? null : NoSpeedChannel;
+
+    /// <summary>What the run waits for: "Stop the car to start", "Ready: drive off", "Timing…"; null when no run is on.</summary>
+    public string PerformanceStatus => !HasSpeedChannel
+        ? NoSpeedChannel
+        : Run switch
+        {
+            RunStage.WaitingForStop => "Stop the car to start",
+            RunStage.Ready => "Ready: drive off",
+            RunStage.Timing => "Timing…",
+            _ => null,
+        };
+
+    private RunStage Run
+    {
+        get => _run;
+        set
+        {
+            _run = value;
+            OnPropertyChanged(nameof(PerformanceStatus));
+        }
+    }
+
+    // Times run between the samples' own arrival stamps, so a busy UI thread does not lengthen them.
+    private void UpdateAccelerationTimes(double speed, DateTimeOffset at)
+    {
+        switch (Run)
+        {
+            case RunStage.WaitingForStop when speed <= 1.0:
+                Run = RunStage.Ready;
+                break;
+            case RunStage.Ready when speed > 1.0:
+                _launchedAt = at;
+                Time100 = Seconds(TimeSpan.Zero);
+                Time200 = Seconds(TimeSpan.Zero);
+                Run = RunStage.Timing;
+                break;
+            case RunStage.Timing:
+                var elapsed = Seconds(at - _launchedAt);
+                if (!_reached100)
                 {
-                    _reached100 = true;
+                    Time100 = elapsed;
+                    _reached100 = speed >= 100.0;
                 }
-            }
-            if (!_reached200)
-            {
-                Time0To200 = (_accelStopwatch.ElapsedMilliseconds / 1000.0).ToString("F1") + "s";
-                if (speed >= 200.0)
+
+                if (!_reached200)
                 {
-                    _reached200 = true;
-                    _accelStopwatch.Stop();
-                    _isPerformanceTestArmed = false; // Disable arm after completion
+                    Time200 = elapsed;
+                    _reached200 = speed >= 200.0;
                 }
-            }
+
+                if (_reached200)
+                {
+                    Run = RunStage.Idle;
+                }
+
+                break;
         }
     }
+
+    private static string Seconds(TimeSpan span) => NumberFormat.Format(span.TotalSeconds, 1);
 
     public string SearchText
     {
@@ -252,21 +420,263 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     public IReadOnlyList<GaugeViewModel> Gauges { get; } = GaugeViewModel.CreateCluster();
 
-    /// <summary>Puts the rev counter's red zone at the open tune's limiter, or removes it.</summary>
-    public void SetRedline(double? rpm) => Gauges[0].RedFrom = rpm;
+    /// <summary>The band's gear cell (system 8): GEAR, in both the MS43X001 and the stock definitions.</summary>
+    public ReadoutViewModel GearReadout { get; } = new("Gear", string.Empty, 0, "GEAR");
 
-    private void ResolveGauges(IReadOnlyList<AdxValueDefinition> channels)
+    /// <summary>The band's speed: VS (MS43X001) or VEHICLESPEED (stock definitions), whole km/h.</summary>
+    public ReadoutViewModel SpeedReadout { get; } = new("Vehicle Speed", "km/h", 0, "VS", "VEHICLESPEED");
+
+    /// <summary>The engaged gear, 1 to 5; null in neutral, with the clutch in, or without a value (system 7.2: no slot lit).</summary>
+    public int? Gear => GearReadout.Value is double gear && double.IsFinite(gear) && Math.Round(gear) is >= 1 and <= 5 ? (int)Math.Round(gear) : null;
+
+    /// <summary>"4", or "n/a" when no gear is engaged or known.</summary>
+    public string GearText => Gear?.ToString(CultureInfo.InvariantCulture) ?? "n/a";
+
+    public double? VehicleSpeed => SpeedReadout.Value;
+
+    /// <summary>The rpm readout's caption (system 7.2): the open bin's limiter, or how to get one.</summary>
+    public string RevLimitCaption => Gauges[0].RedFrom is double limit
+        ? $"Rev limit {NumberFormat.Format(limit, 0)} rpm, read from the open bin"
+        : "Rev limit: open a bin to read it";
+
+    public bool HasRevLimit => Gauges[0].RedFrom is not null;
+
+    /// <summary>Tiles or dials in the band; everything else on the screen stays as it is (system 8).</summary>
+    public ReadoutsMode Readouts
     {
-        foreach (var gauge in Gauges)
+        get => _readouts;
+        set
         {
-            gauge.ChannelId = gauge.Candidates.FirstOrDefault(id => channels.Any(channel => channel.Id == id));
+            if (SetField(ref _readouts, value))
+            {
+                OnPropertyChanged(nameof(ShowsTiles));
+                OnPropertyChanged(nameof(ShowsDials));
+            }
         }
     }
 
-    public string RateText
+    public bool ShowsTiles => Readouts == ReadoutsMode.Tiles;
+
+    public bool ShowsDials => Readouts == ReadoutsMode.Dials;
+
+    /// <summary>The channel list's left column: the pinned channels, through the filter, in title order.</summary>
+    public ObservableCollection<DecodedValueViewModel> PinnedValues { get; } = new();
+
+    public bool HasPinned => TileValues.Count > 0;
+
+    /// <summary>The channel list's right column: the channels not pinned, through the filter; empty with Pinned only.</summary>
+    public ObservableCollection<DecodedValueViewModel> OtherValues { get; } = new();
+
+    /// <summary>Every pinned channel, in title order, for the tiles under the band; the filter never hides a tile.</summary>
+    public ObservableCollection<DecodedValueViewModel> TileValues { get; } = new();
+
+    /// <summary>"No channel matches "xyz"." while the filter leaves both columns empty (system 7.2); null otherwise.</summary>
+    public string NoMatchText => !string.IsNullOrWhiteSpace(SearchText) && PinnedValues.Count == 0 && OtherValues.Count == 0
+        ? $"No channel matches \"{SearchText.Trim()}\"."
+        : null;
+
+    /// <summary>No channel is pinned: the Pinned column says how to pin one (system 5.6).</summary>
+    public bool ShowsNoPins => TileValues.Count == 0 && string.IsNullOrWhiteSpace(SearchText);
+
+    /// <summary>The trend window in seconds (Settings: 10, 30 or 60). A change keeps the samples that still fit.</summary>
+    public int TrendSeconds
     {
-        get => _rateText;
-        set => SetField(ref _rateText, value);
+        get => _trendSeconds;
+        set
+        {
+            if (value > 0 && SetField(ref _trendSeconds, value))
+            {
+                foreach (var row in _allLiveValues)
+                {
+                    row.Retrend(TimeSpan.FromSeconds(value));
+                }
+
+                OnPropertyChanged(nameof(TrendLabel));
+            }
+        }
+    }
+
+    /// <summary>The list's trend column, "Last 10 s": the history is a time window, whatever the rate.</summary>
+    public string TrendLabel => $"Last {TrendSeconds.ToString(CultureInfo.InvariantCulture)} s";
+
+    /// <summary>Where new, automatically named logs go (Settings). A change renames the next log while not logging.</summary>
+    public string LogFolder
+    {
+        get => _logFolder;
+        set
+        {
+            if (!string.IsNullOrWhiteSpace(value) && SetField(ref _logFolder, value) && !IsConnected)
+            {
+                CsvPath = NextCsvPath;
+            }
+        }
+    }
+
+    /// <summary>Settings' "Start the CSV log on connect": the Write CSV log switch starts from it.</summary>
+    public bool StartCsvOnConnect
+    {
+        get => _startCsvOnConnect;
+        set
+        {
+            if (SetField(ref _startCsvOnConnect, value) && !IsConnected)
+            {
+                EnableCsvLogging = value;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The next log's path, "{LogFolder}\ms43-20261019-2225xx.csv" from the clock; it never names a file that exists, so
+    /// a second log in the same second becomes "-2", "-3" and so on.
+    /// </summary>
+    public string NextCsvPath
+    {
+        get
+        {
+            var name = "ms43-" + _time.GetLocalNow().ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+            var path = Path.Combine(LogFolder, name + ".csv");
+            for (var n = 2; File.Exists(path); n++)
+            {
+                path = Path.Combine(LogFolder, $"{name}-{n.ToString(CultureInfo.InvariantCulture)}.csv");
+            }
+
+            return path;
+        }
+    }
+
+    /// <summary>Creates the log folder when it is missing and returns <see cref="NextCsvPath"/>.</summary>
+    /// <summary>The Live banner's sentence (system 7.2), or null when there is nothing to report.</summary>
+    public string Banner => _banner?.Text;
+
+    public bool HasBanner => _banner is not null;
+
+    /// <summary>The banner's second line: how old the frozen values are.</summary>
+    public string BannerDetail { get => _bannerDetail; private set => SetField(ref _bannerDetail, value); }
+
+    public LiveAction BannerAction => _banner?.Action ?? LiveAction.None;
+
+    public string BannerActionText => BannerAction switch
+    {
+        LiveAction.Browse => "Browse…",
+        LiveAction.RescanPorts => "Rescan ports",
+        _ => null,
+    };
+
+    /// <summary>What went wrong, in full, for "Show details"; null until something failed.</summary>
+    public string ConnectionLog { get => _connectionLog; private set => SetField(ref _connectionLog, value); }
+
+    public bool HasConnectionLog => ConnectionLog is not null;
+
+    /// <summary>The link stopped: the values shown are the last sample's, in Ink3 (system 7.2).</summary>
+    public bool IsStale { get => _isStale; private set => SetField(ref _isStale, value); }
+
+    /// <summary>"Show details" asks for the connection log; no window opens on its own when something fails.</summary>
+    public event EventHandler ShowConnectionLogRequested;
+
+    public void ShowConnectionLog() => ShowConnectionLogRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>Connect failed: the banner names the cause and the fix.</summary>
+    internal void ReportConnectFailure(Exception error)
+    {
+        StatusText = "Not connected.";
+        ConnectionLog = error.ToString();
+        BannerDetail = null;
+        SetBanner(ConnectionMessages.NotConnected(error, SelectedPort, CsvPath));
+    }
+
+    /// <summary>The logger stopped: the banner says why and what was kept; values freeze in Ink3 if any arrived.</summary>
+    internal void ReportLoggingStopped(Exception error)
+    {
+        var context = new StopContext(SelectedPort, EnableCsvLogging && !string.IsNullOrWhiteSpace(CsvPath) ? Path.GetFileName(CsvPath) : null,
+            SampleCount, _time.GetUtcNow() - _sessionStart);
+        var frozen = SampleCount > 0 && _lastSampleAt is not null;
+        ConnectionLog = error.ToString();
+        Disconnect(keepValues: frozen);
+        SetBanner(ConnectionMessages.Stopped(error, context));
+        IsStale = frozen;
+        RefreshStaleLine();
+        if (frozen && Avalonia.Application.Current is not null)
+        {
+            _staleTimer = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => RefreshStaleLine());
+            _staleTimer.Start();
+        }
+    }
+
+    /// <summary>A session starts: the clock for its elapsed time, no banner, no frozen values.</summary>
+    internal void BeginSession()
+    {
+        StopStaleTimer();
+        _sessionStart = _time.GetUtcNow();
+        _lastSampleAt = null;
+        IsStale = false;
+        BannerDetail = null;
+        _retryText = null;
+        SetBanner(null);
+        SampleCount = 0;
+        IsConnected = true;
+    }
+
+    /// <summary>Renews the stale line from the clock: "…from the last sample, 9 s ago."</summary>
+    internal void RefreshStaleLine()
+    {
+        BannerDetail = IsStale && _lastSampleAt is { } last
+            ? ConnectionMessages.StaleLine((int)Math.Max(0, (_time.GetUtcNow() - last).TotalSeconds))
+            : null;
+    }
+
+    /// <summary>One or two timeouts in a row: the status line says the ECU did not answer; values keep their last sample.</summary>
+    internal void ShowRetrying(int timeouts)
+    {
+        _retryText = ConnectionMessages.Retrying(timeouts).Text;
+        OnPropertyChanged(nameof(StatusParts));
+        OnPropertyChanged(nameof(ConnectionDetail));
+    }
+
+    internal void ShowResumed()
+    {
+        _retryText = null;
+        OnPropertyChanged(nameof(StatusParts));
+        OnPropertyChanged(nameof(ConnectionDetail));
+    }
+
+    private void SetBanner(ConnectionMessage banner)
+    {
+        _banner = banner;
+        OnPropertyChanged(nameof(Banner));
+        OnPropertyChanged(nameof(HasBanner));
+        OnPropertyChanged(nameof(BannerAction));
+        OnPropertyChanged(nameof(BannerActionText));
+        OnPropertyChanged(nameof(HasConnectionLog));
+    }
+
+    private void StopStaleTimer()
+    {
+        _staleTimer?.Stop();
+        _staleTimer = null;
+    }
+
+    private IEnumerable<ReadoutViewModel> Readings => Gauges.Cast<ReadoutViewModel>().Append(GearReadout).Append(SpeedReadout);
+
+    /// <summary>Puts the rev counter's red zone at the open tune's limiter, or removes it.</summary>
+    public void SetRedline(double? rpm)
+    {
+        Gauges[0].RedFrom = rpm;
+        OnPropertyChanged(nameof(RevLimitCaption));
+        OnPropertyChanged(nameof(HasRevLimit));
+    }
+
+    private void ResolveGauges(IReadOnlyList<AdxValueDefinition> channels)
+    {
+        foreach (var reading in Readings)
+        {
+            reading.Resolve(channels, SanitizeUnits);
+        }
+
+        HasSpeedChannel = channels.Any(channel => SpeedIds.Contains(channel.Id));
+        if (!HasSpeedChannel)
+        {
+            Run = RunStage.Idle;
+        }
     }
 
     public bool ShowPinnedOnly
@@ -287,39 +697,56 @@ public class MainWindowViewModel : INotifyPropertyChanged
         set => SetField(ref _pinnedCount, value);
     }
 
-    public string SelectedTheme
+    public MainWindowViewModel(TimeProvider time = null, Func<string[]> ports = null)
     {
-        get => _selectedTheme;
-        set
+        _time = time ?? TimeProvider.System;
+        _ports = ports ?? SerialPort.GetPortNames;
+        GearReadout.PropertyChanged += (_, e) =>
         {
-            if (SetField(ref _selectedTheme, value))
+            if (e.PropertyName == nameof(ReadoutViewModel.Value))
             {
-                App.SetTheme(value);
+                OnPropertyChanged(nameof(Gear));
+                OnPropertyChanged(nameof(GearText));
             }
-        }
-    }
+        };
+        SpeedReadout.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ReadoutViewModel.Value))
+            {
+                OnPropertyChanged(nameof(VehicleSpeed));
+            }
+        };
+        PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is { } name && StatusInputs.Contains(name))
+            {
+                OnPropertyChanged(nameof(StatusParts));
+                OnPropertyChanged(nameof(ConnectionDetail));
+            }
+        };
 
-    public MainWindowViewModel()
-    {
-        AvailablePorts = new ObservableCollection<string>(SerialPort.GetPortNames());
-        SelectedPort = AvailablePorts.FirstOrDefault();
         LiveValues = new ObservableCollection<DecodedValueViewModel>();
-        App.SetTheme(SelectedTheme);
-        CsvPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            "MS43 Logs",
-            $"ms43-{DateTime.Now:yyyyMMdd-HHmmss}.csv");
+        RefreshPorts();
+        CsvPath = NextCsvPath;
         PreviewChannels();
     }
 
-    public event EventHandler<string> ConnectionFailed;
-
+    /// <summary>Lists the COM ports again; with none, the banner says to plug in the cable (system 7.2).</summary>
     public void RefreshPorts()
     {
-        AvailablePorts = new ObservableCollection<string>(SerialPort.GetPortNames());
+        AvailablePorts = new ObservableCollection<string>(_ports());
         if (!AvailablePorts.Contains(SelectedPort))
         {
             SelectedPort = AvailablePorts.FirstOrDefault();
+        }
+
+        if (AvailablePorts.Count == 0 && !IsConnected)
+        {
+            SetBanner(NoPort);
+        }
+        else if (ReferenceEquals(_banner, NoPort))
+        {
+            SetBanner(null);
         }
     }
 
@@ -336,6 +763,19 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task ConnectAsync()
     {
+        IsConnecting = true;
+        try
+        {
+            await ConnectCoreAsync();
+        }
+        finally
+        {
+            IsConnecting = false;
+        }
+    }
+
+    private async Task ConnectCoreAsync()
+    {
         if (string.IsNullOrWhiteSpace(SelectedPort))
         {
             StatusText = "Select a valid COM port before connecting.";
@@ -344,7 +784,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            StatusText = $"Connecting to MS43 ({SelectedVariant}) on {SelectedPort}...";
+            StatusText = $"Connecting to MS43 ({SelectedVariant}) on {SelectedPort}…";
             CurrentDefinition = BundledDefinitions.Load(SelectedVariant);
             var channels = CurrentDefinition.MatchChannels(Array.Empty<string>());
 
@@ -356,8 +796,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
             _session = Ds2Session.Create(CurrentDefinition, SelectedPort);
             await Task.Run(() => _session.Connect());
 
-            IsConnected = true;
-            SampleCount = 0;
+            BeginSession();
             ResetRate();
             ResolveGauges(channels);
             StatusText = BuildConnectedStatus(channels.Count);
@@ -376,9 +815,8 @@ public class MainWindowViewModel : INotifyPropertyChanged
         }
         catch (Exception ex)
         {
-            StatusText = $"Connect failed: {ex.Message}";
-            ConnectionFailed?.Invoke(this, ex.ToString());
             Disconnect();
+            ReportConnectFailure(ex);
         }
     }
 
@@ -392,14 +830,19 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            var channels = BundledDefinitions.Load(SelectedVariant).MatchChannels(Array.Empty<string>());
-            BuildChannelRows(channels);
-            ResolveGauges(channels);
+            PreviewChannels(BundledDefinitions.Load(SelectedVariant).MatchChannels(Array.Empty<string>()));
         }
         catch (Exception ex)
         {
             StatusText = $"Cannot read the {SelectedVariant} definition: {ex.Message}";
         }
+    }
+
+    /// <summary>Lists these channels and resolves the band and the Performance tests speed from them.</summary>
+    internal void PreviewChannels(IReadOnlyList<AdxValueDefinition> channels)
+    {
+        BuildChannelRows(channels);
+        ResolveGauges(channels);
     }
 
     private void BuildChannelRows(IReadOnlyList<AdxValueDefinition> channels)
@@ -408,13 +851,12 @@ public class MainWindowViewModel : INotifyPropertyChanged
         _allLiveValues.Clear();
         foreach (var channel in channels)
         {
-            _allLiveValues.Add(new DecodedValueViewModel
+            _allLiveValues.Add(new DecodedValueViewModel(TimeSpan.FromSeconds(TrendSeconds))
             {
                 Id = channel.Id,
                 Title = channel.DisplayName,
                 Units = SanitizeUnits(channel.Units),
-                Value = "–",
-                AccentBrush = GetAccentBrush(channel.Id, channel.DisplayName),
+                Value = "n/a",
                 IsPinned = pinned.Contains(channel.Id) || DefaultPinnedChannels.Contains(channel.Id),
             });
         }
@@ -432,12 +874,18 @@ public class MainWindowViewModel : INotifyPropertyChanged
             Dispatcher.UIThread.Post(() => ShowSample(sample));
         };
         logger.Status += (_, status) => Dispatcher.UIThread.Post(() =>
-            StatusText = status == "Resumed" ? BuildConnectedStatus(channels.Count) : status);
+        {
+            StatusText = status == "Resumed" ? BuildConnectedStatus(channels.Count) : status;
+            if (status == "Resumed")
+            {
+                ShowResumed();
+            }
+        });
+        logger.Retrying += (_, timeouts) => Dispatcher.UIThread.Post(() => ShowRetrying(timeouts));
         logger.Failed += (_, error) => Dispatcher.UIThread.Post(() =>
         {
             StatusText = $"Polling error: {error.Message}";
-            ConnectionFailed?.Invoke(this, "Polling error: " + error);
-            Disconnect();
+            ReportLoggingStopped(error);
         });
 
         return logger.RunAsync(_session, CurrentDefinition, channels, token);
@@ -457,13 +905,35 @@ public class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        ShowSample(sample.Values);
+        ShowSample(sample.Values, sample.Time);
         SampleShown?.Invoke(this, sample);
     }
 
-    internal void ShowSample(IReadOnlyList<DecodedValue> decoded)
+    /// <summary>Shows one sample; <paramref name="time"/> is when it arrived (the clock's now when not given).</summary>
+    internal void ShowSample(IReadOnlyList<DecodedValue> decoded, DateTimeOffset? time = null)
     {
+        var at = time ?? _time.GetUtcNow();
+        _lastSampleAt = _time.GetUtcNow();
         SampleCount++;
+
+        // The band shows what the last sample held: a channel missing from it reads n/a (system 7.2).
+        var inSample = new Dictionary<string, double>(StringComparer.Ordinal);
+        foreach (var decodedValue in decoded)
+        {
+            inSample[decodedValue.Definition.Id] = decodedValue.Value;
+        }
+
+        foreach (var reading in Readings)
+        {
+            reading.Value = reading.ChannelId is { } channel && inSample.TryGetValue(channel, out var reached) ? reached : null;
+        }
+
+        // So do the rows: a channel the sample did not hold reads n/a until it comes back; its trend stays.
+        foreach (var row in _allLiveValues.Where(row => !inSample.ContainsKey(row.Id)))
+        {
+            row.Value = "n/a";
+        }
+
         foreach (var decodedValue in decoded)
         {
             var id = decodedValue.Definition.Id;
@@ -471,13 +941,8 @@ public class MainWindowViewModel : INotifyPropertyChanged
             if (vm is not null)
             {
                 var digits = Math.Clamp(decodedValue.Definition.DigitCount, 0, 6);
-                vm.Value = decodedValue.Value.ToString($"F{digits}", CultureInfo.InvariantCulture);
-                vm.Push(decodedValue.Value);
-            }
-
-            foreach (var gauge in Gauges.Where(gauge => gauge.ChannelId == id))
-            {
-                gauge.Value = decodedValue.Value;
+                vm.Value = NumberFormat.Format(decodedValue.Value, digits);
+                vm.Push(at, decodedValue.Value);
             }
 
             if (id is "N" or "RPM")
@@ -485,9 +950,9 @@ public class MainWindowViewModel : INotifyPropertyChanged
                 EngineSpeedLevel = Math.Clamp(decodedValue.Value / 8000.0, 0, 1);
             }
 
-            if (string.Equals(id, "VEHICLESPEED", StringComparison.OrdinalIgnoreCase))
+            if (SpeedIds.Contains(id))
             {
-                UpdateAccelerationTimes(decodedValue.Value);
+                UpdateAccelerationTimes(decodedValue.Value, at);
             }
         }
     }
@@ -497,7 +962,11 @@ public class MainWindowViewModel : INotifyPropertyChanged
         return $"Connected to {SelectedPort}. Logging {channelCount} channels from {SelectedVariant.ToUpperInvariant()}.";
     }
 
-    public void Disconnect()
+    /// <summary>Disconnects; every value goes back to n/a and the next log gets a new name.</summary>
+    public void Disconnect() => Disconnect(keepValues: false);
+
+    // After a failure the values stay, frozen, under the banner that explains them.
+    private void Disconnect(bool keepValues)
     {
         _pollingCts?.Cancel();
         _pollingCts = null;
@@ -506,9 +975,20 @@ public class MainWindowViewModel : INotifyPropertyChanged
         _uiTimer = null;
 
         _sessionStopwatch.Stop();
-        foreach (var gauge in Gauges)
+        _retryText = null;
+        StopStaleTimer();
+        IsStale = false;
+        if (!keepValues)
         {
-            gauge.Value = null;
+            foreach (var reading in Readings)
+            {
+                reading.Value = null;
+            }
+
+            foreach (var row in _allLiveValues)
+            {
+                row.Clear();
+            }
         }
 
         ElapsedTime = "00:00:00";
@@ -532,6 +1012,9 @@ public class MainWindowViewModel : INotifyPropertyChanged
         _csvWriter?.Dispose();
         _csvWriter = null;
         StatusText = "Disconnected.";
+
+        // Connecting again never overwrites the log just closed.
+        CsvPath = NextCsvPath;
     }
 
     public void TogglePinned(DecodedValueViewModel channel)
@@ -548,6 +1031,8 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private void ApplyFilter()
     {
         LiveValues.Clear();
+        PinnedValues.Clear();
+        OtherValues.Clear();
         IEnumerable<DecodedValueViewModel> filtered = _allLiveValues;
         if (!string.IsNullOrWhiteSpace(SearchText))
         {
@@ -569,10 +1054,27 @@ public class MainWindowViewModel : INotifyPropertyChanged
         foreach (var value in filtered)
         {
             LiveValues.Add(value);
+            (value.IsPinned ? PinnedValues : OtherValues).Add(value);
         }
 
         PinnedCount = _allLiveValues.Count(value => value.IsPinned);
         VisibleChannelCount = LiveValues.Count;
+
+        // The tiles follow the pins only, never the filter.
+        var pins = _allLiveValues.Where(value => value.IsPinned).OrderBy(value => value.Title, StringComparer.OrdinalIgnoreCase).ToList();
+        if (!pins.SequenceEqual(TileValues))
+        {
+            TileValues.Clear();
+            foreach (var pin in pins)
+            {
+                TileValues.Add(pin);
+            }
+
+            OnPropertyChanged(nameof(HasPinned));
+        }
+
+        OnPropertyChanged(nameof(NoMatchText));
+        OnPropertyChanged(nameof(ShowsNoPins));
     }
 
     private void OpenCsvWriter(IReadOnlyList<AdxValueDefinition> channels)
@@ -583,18 +1085,25 @@ public class MainWindowViewModel : INotifyPropertyChanged
             throw new InvalidOperationException("CSV logging is enabled but no CSV path is set.");
         }
 
-        var directory = Path.GetDirectoryName(path);
-        if (!string.IsNullOrWhiteSpace(directory))
+        try
         {
-            Directory.CreateDirectory(directory);
-        }
+            var directory = Path.GetDirectoryName(path);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
 
-        _csvWriter?.Dispose();
-        _csvWriter = new StreamWriter(path, append: false);
-        var header = new List<string> { "timestamp_utc", "sample_index" };
-        header.AddRange(channels.Select(channel => channel.Id));
-        _csvWriter.WriteLine(string.Join(",", header));
-        _csvWriter.Flush();
+            _csvWriter?.Dispose();
+            _csvWriter = new StreamWriter(path, append: false);
+            var header = new List<string> { "timestamp_utc", "sample_index" };
+            header.AddRange(channels.Select(channel => channel.Id));
+            _csvWriter.WriteLine(string.Join(",", header));
+            _csvWriter.Flush();
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            throw new CsvWriteException(path, error);
+        }
     }
 
     private void WriteCsvRow(IReadOnlyList<DecodedValue> decoded)
@@ -616,25 +1125,27 @@ public class MainWindowViewModel : INotifyPropertyChanged
             return value.Value.ToString($"F{digits}", CultureInfo.InvariantCulture);
         }));
 
-        _csvWriter.WriteLine(string.Join(",", row));
-        _csvWriter.Flush();
+        try
+        {
+            _csvWriter.WriteLine(string.Join(",", row));
+            _csvWriter.Flush();
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            // The logger stops on it; the banner says which file failed and that the rows before are kept.
+            throw new CsvWriteException(CsvPath, error);
+        }
     }
 
     private void UpdateSampleRate()
     {
-        var stats = _logger?.Rate;
-
-        SamplesPerSecond = stats?.SamplesPerSecond ?? 0;
-        RateText = stats is null
-            ? "No samples yet"
-            : string.Format(CultureInfo.InvariantCulture, "{0:0} samples/s, {1:0}–{2:0} ms", stats.SamplesPerSecond, stats.MinMs, stats.MaxMs);
+        ShowRate(_logger?.Rate);
     }
 
     private void ResetRate()
     {
         _logger = null;
-        SamplesPerSecond = 0;
-        RateText = "No samples yet";
+        ShowRate(null);
     }
 
     private static string SanitizeUnits(string units)
@@ -644,14 +1155,10 @@ public class MainWindowViewModel : INotifyPropertyChanged
             return string.Empty;
         }
 
+        // The ADX writes "Engine Speed (rpm)"; an entry without the brackets holds a name ("Gear"), not a unit.
         var start = units.LastIndexOf('(');
         var end = units.LastIndexOf(')');
-        if (start >= 0 && end > start)
-        {
-            return units[(start + 1)..end];
-        }
-
-        return units;
+        return start >= 0 && end > start ? units[(start + 1)..end] : string.Empty;
     }
 
     public event PropertyChangedEventHandler PropertyChanged;
@@ -673,28 +1180,40 @@ public class MainWindowViewModel : INotifyPropertyChanged
         return true;
     }
 
-    private static IBrush GetAccentBrush(string id, string name)
-    {
-        var key = (id + " " + name).ToLowerInvariant();
-        if (key.Contains("rpm")) return new SolidColorBrush(Color.Parse("#ff6b35"));
-        if (key.Contains("temp") || key.Contains("coolant") || key.Contains("therm")) return new SolidColorBrush(Color.Parse("#ff4e6a"));
-        if (key.Contains("volt") || key.Contains("ubat") || key.Contains("battery")) return new SolidColorBrush(Color.Parse("#ffd60a"));
-        if (key.Contains("throttle") || key.Contains("pedal") || key.Contains("tps")) return new SolidColorBrush(Color.Parse("#2eff9b"));
-        if (key.Contains("speed") || key.Contains("velocity")) return new SolidColorBrush(Color.Parse("#c77dff"));
-        return new SolidColorBrush(Color.Parse("#00e5ff"));
-    }
 }
 
+/// <summary>One channel of the Live list (system 5.6): its title, id, unit, the last value and its trend.</summary>
 public class DecodedValueViewModel : INotifyPropertyChanged
 {
     private string _value;
     private bool _isPinned;
-
     private int _historyVersion;
+    private SampleHistory _history;
+
+    public DecodedValueViewModel(TimeSpan trend)
+    {
+        _history = new SampleHistory(trend);
+    }
 
     public string Id { get; set; }
 
-    public SampleHistory History { get; } = new();
+    public string Title { get; set; }
+
+    /// <summary>"Long Term Fuel Trim Multiplicative Bank 1 TIADFAC1": the row's tooltip, since the list trims long names.</summary>
+    public string FullName => $"{Title} {Id}";
+
+    public string Units { get; set; } = string.Empty;
+
+    /// <summary>The samples of the trend window, by time.</summary>
+    public SampleHistory History
+    {
+        get => _history;
+        private set
+        {
+            _history = value;
+            Raise(nameof(History));
+        }
+    }
 
     /// <summary>Changes with every new sample so the sparkline redraws.</summary>
     public int HistoryVersion
@@ -703,19 +1222,36 @@ public class DecodedValueViewModel : INotifyPropertyChanged
         private set
         {
             _historyVersion = value;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HistoryVersion)));
+            Raise(nameof(HistoryVersion));
         }
     }
 
-    public void Push(double value)
+    public void Push(DateTimeOffset time, double value)
     {
-        History.Add(value);
+        History.Add(time, value);
         HistoryVersion++;
     }
 
-    public string Title { get; set; }
-    public string Units { get; set; } = string.Empty;
-    public IBrush AccentBrush { get; set; } = new SolidColorBrush(Color.Parse("#00e5ff"));
+    /// <summary>A new trend length: a new window that keeps the samples that still fit.</summary>
+    public void Retrend(TimeSpan trend)
+    {
+        var history = new SampleHistory(trend);
+        foreach (var (time, value) in History.Points)
+        {
+            history.Add(time, value);
+        }
+
+        History = history;
+        HistoryVersion++;
+    }
+
+    /// <summary>Not connected: no value and no trend.</summary>
+    public void Clear()
+    {
+        Value = "n/a";
+        History.Clear();
+        HistoryVersion++;
+    }
 
     public bool IsPinned
     {
@@ -725,13 +1261,17 @@ public class DecodedValueViewModel : INotifyPropertyChanged
             if (_isPinned != value)
             {
                 _isPinned = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsPinned)));
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PinGlyph)));
+                Raise(nameof(IsPinned));
+                Raise(nameof(PinTip));
+                Raise(nameof(PinName));
             }
         }
     }
 
-    public string PinGlyph => IsPinned ? "★" : "☆";
+    /// <summary>The pin button's tooltip and accessible name (system 5.6).</summary>
+    public string PinTip => IsPinned ? "Unpin" : "Pin to top";
+
+    public string PinName => $"{(IsPinned ? "Unpin" : "Pin")} {Title}";
 
     public string Value
     {
@@ -741,10 +1281,19 @@ public class DecodedValueViewModel : INotifyPropertyChanged
             if (_value != value)
             {
                 _value = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Value)));
+                Raise(nameof(Value));
+                Raise(nameof(HasValue));
             }
         }
     }
 
+    /// <summary>False while the last sample did not hold the channel and the value reads "n/a".</summary>
+    public bool HasValue => !string.Equals(_value, "n/a", StringComparison.Ordinal);
+
     public event PropertyChangedEventHandler PropertyChanged;
+
+    private void Raise(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
+
+/// <summary>One run of the status bar's connection line: numbers in Bahnschrift, ids in Cascadia, "Connected" in NowText.</summary>
+public sealed record StatusPart(string Text, bool IsNumber = false, bool IsNow = false, bool IsId = false);

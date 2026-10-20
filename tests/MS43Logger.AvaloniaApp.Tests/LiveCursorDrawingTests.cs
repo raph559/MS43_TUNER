@@ -80,7 +80,7 @@ public class LiveCursorDrawingTests
     }
 
     [AvaloniaFact]
-    public async Task OrangeOutlinesTheCellsAroundTheEngine()
+    public async Task CursorDotAndTicksAreTheOnlyOrange()
     {
         if (!TuneScreen.Available)
         {
@@ -97,17 +97,25 @@ public class LiveCursorDrawingTests
         LiveFeed.Push(shell, ("N", 2480), ("MAFIGA", 1415));
         shell.Tune.LiveCursor.Tick();
         var fix = shell.Tune.Editor!.Live!.Fix;
+        var at = grid.CursorPoint(fix.Row!.Value.Position, fix.Col!.Value.Position);
+        var top = grid.CellBounds(0, 0).Top;
+        var left = grid.CellBounds(0, 0).Left;
         using var frame = new Frame(window);
 
-        Assert.True(frame.AnyNeedle(new Rect(InWindow(grid, window, grid.CursorPoint(fix.Row!.Value.Position, fix.Col!.Value.Position)), new Size(1, 1))));
+        Assert.True(frame.AnyNeedle(new Rect(InWindow(grid, window, at), new Size(1, 1))), "no dot at the fix");
+        Assert.True(frame.AnyNeedle(new Rect(InWindow(grid, window, new Point(at.X - 1, top - 5)), new Size(3, 4))), "no tick in the column header gutter");
+        Assert.True(frame.AnyNeedle(new Rect(InWindow(grid, window, new Point(left - 5, at.Y - 1)), new Size(4, 3))), "no tick in the row header gutter");
+
+        // No outlines around the cells the ECU reads, and no crosshair through far cells.
         var heavy = grid.CellBounds(6, 1);
-        Assert.True(frame.AnyOrangeNear(InWindow(grid, window, new Point(heavy.Left - 1, heavy.Center.Y))));
+        Assert.False(frame.AnyOrangeNear(InWindow(grid, window, new Point(heavy.Left - 1, heavy.Center.Y)), 1), "an outline around cell (6,1)");
         var far = grid.CellBounds(15, 12);
-        Assert.False(frame.AnyOrangeNear(InWindow(grid, window, new Point(far.Left - 1, far.Center.Y))));
+        Assert.False(frame.AnyOrangeNear(InWindow(grid, window, far.Center), 1), "orange at cell (15,12)");
         Screens.Save(window, "live-cursor-map-night");
 
         shell.IsNight = false;
         Screens.Save(window, "live-cursor-map-day");
+        shell.IsNight = true;
     }
 
     [AvaloniaFact]

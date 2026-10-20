@@ -2,182 +2,586 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="using:MS43Logger.AvaloniaApp"
              xmlns:controls="using:MS43Logger.AvaloniaApp.Controls"
+             xmlns:core="using:MS43Logger.Core.Tuning"
              x:Class="MS43Logger.AvaloniaApp.Views.TuneView"
              x:DataType="local:TuneViewModel">
-    <Panel>
-        <!-- Nothing open yet -->
-        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14" MaxWidth="440" IsVisible="{Binding !HasDocument}">
-            <TextBlock Classes="display" FontSize="21" Text="Open a bin to start tuning" HorizontalAlignment="Center" />
-            <TextBlock Classes="secondary" TextWrapping="Wrap" TextAlignment="Center"
-                       Text="Choose the 512 KiB file you flash with MS4X Flasher. The XDF you last used for its firmware opens with it; otherwise you are asked for one." />
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="10">
-                <Button Name="OpenBinButton" Classes="primary" Content="Open bin…" Click="OpenBin_Click" />
-                <Button Name="OpenXdfButton" Content="Open XDF…" Click="OpenXdf_Click" />
-            </StackPanel>
-            <TextBlock Text="{Binding ErrorMessage}" IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}"
-                       Foreground="{DynamicResource UpBrush}" TextWrapping="Wrap" TextAlignment="Center" />
-        </StackPanel>
+    <UserControl.Styles>
+        <!-- Rail (system 5.6, 8): 256 px Frame, 224 px below 1280. -->
+        <Style Selector="Border#RailHost">
+            <Setter Property="Width" Value="256" />
+        </Style>
+        <Style Selector="Window.compact Border#RailHost">
+            <Setter Property="Width" Value="224" />
+        </Style>
+        <!-- Rows draw their own state from the rail's data: the list's selection only lasts until the rail rebuilds. -->
+        <Style Selector="ListBox#RailList ListBoxItem">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="ListBox#RailList ListBoxItem:selected">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="FontWeight" Value="Normal" />
+        </Style>
+        <Style Selector="ListBox#RailList ListBoxItem:selected /template/ Border#PART_Bar">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Border.row">
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="CornerRadius" Value="8" />
+        </Style>
+        <Style Selector="Border.row.indented">
+            <Setter Property="Padding" Value="28,0,8,0" />
+        </Style>
+        <Style Selector="Border.row.current">
+            <Setter Property="Background" Value="{DynamicResource FillBrush}" />
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource Ink1Brush}" />
+        </Style>
+        <Style Selector="Border.row.current TextBlock.id">
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="Border.row.open">
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource Ink1Brush}" />
+        </Style>
+        <Style Selector="Border.currentbar">
+            <Setter Property="Margin" Value="-8,6,0,6" />
+        </Style>
+        <Style Selector="Border.currentbar.indented">
+            <Setter Property="Margin" Value="-28,6,0,6" />
+        </Style>
+        <!-- A category's count is Ink3, which falls under 4.5:1 on the pressed overlay (3.79 Night, 4.20 Day): it rises to Ink2. -->
+        <Style Selector="TextBlock.count">
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
+        <Style Selector="ListBox#RailList ListBoxItem:pressed TextBlock.count">
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+        </Style>
+        <Style Selector="TextBlock.id">
+            <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+        <Style Selector="TextBlock.group">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+            <Setter Property="Margin" Value="8,8,8,4" />
+            <Setter Property="VerticalAlignment" Value="Bottom" />
+        </Style>
 
-        <Grid ColumnDefinitions="264,*,340" IsVisible="{Binding HasDocument}">
-            <!-- Map rail -->
-            <Border Background="{DynamicResource PaneBrush}" BorderBrush="{DynamicResource BezelBrush}" BorderThickness="0,0,1,0">
-                <Grid RowDefinitions="Auto,Auto,Auto,*">
-                    <TextBox Name="SearchBox" Margin="14,14,14,6" Text="{Binding SearchText}" Watermark="Search maps and values   Ctrl K" />
-                    <CheckBox Grid.Row="1" Margin="16,0,16,4" Content="Changed only" IsChecked="{Binding ModifiedOnly}" />
-                    <CheckBox Name="DiffersOnlyBox" Grid.Row="2" Margin="16,0,16,4" Content="Differs from B" IsChecked="{Binding DiffersOnly}" IsVisible="{Binding HasCompare}"
+        <!-- Pane (system 8): padding 24, 16 below 1280; the toolbar and the grid 24 below what is above them, 16 below 1280. -->
+        <Style Selector="Border#PaneHost">
+            <Setter Property="Padding" Value="24" />
+        </Style>
+        <Style Selector="Window.compact Border#PaneHost">
+            <Setter Property="Padding" Value="16" />
+        </Style>
+        <Style Selector="WrapPanel#ToolBar, controls|TableLayout#TableArea">
+            <Setter Property="Margin" Value="0,24,0,0" />
+        </Style>
+        <Style Selector="Window.compact WrapPanel#ToolBar, Window.compact controls|TableLayout#TableArea">
+            <Setter Property="Margin" Value="0,16,0,0" />
+        </Style>
+        <Style Selector="Border.banner">
+            <Setter Property="Margin" Value="0,16,0,0" />
+        </Style>
+        <!-- A one-column table sits centred with its key line (system 8, owner); a map keeps the cells' left edge. -->
+        <Style Selector="controls|MapGrid#MapGrid">
+            <Setter Property="HorizontalAlignment" Value="Left" />
+        </Style>
+        <Style Selector="controls|TableLayout#TableArea.centred controls|MapGrid#MapGrid">
+            <Setter Property="HorizontalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="StackPanel#KeyArea">
+            <Setter Property="Margin" Value="50,12,0,0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="controls|TableLayout#TableArea.centred StackPanel#KeyArea">
+            <Setter Property="Margin" Value="0,12,0,0" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+        </Style>
+        <!-- A value's reading: the unit in UI 13 Ink3 on the Data 56 baseline (system 5.13). -->
+        <Style Selector="TextBlock#ValueReading Run.unit">
+            <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
+        <Style Selector="DockPanel#LimitsLegendLine TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+        </Style>
+        <!-- A switch's choices (system 5.13): an Edge-bordered list; the chosen row has the selected-row look and a check. -->
+        <Style Selector="ListBox#ChoiceList">
+            <Setter Property="Background" Value="{DynamicResource PaneBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource EdgeBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="6" />
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+        </Style>
+        <Style Selector="ListBox#ChoiceList ListBoxItem">
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="12,0,10,0" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="ListBox#ChoiceList ListBoxItem:selected /template/ Border#PART_Bar">
+            <Setter Property="Margin" Value="0,6" />
+        </Style>
+        <!-- The raw number is Ink2, Ink1 when chosen: Ink3 falls to 3.89:1 on a pressed chosen row (Day). -->
+        <Style Selector="TextBlock.choice-raw">
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="FontWeight" Value="Normal" />
+        </Style>
+        <Style Selector="ListBox#ChoiceList ListBoxItem:selected TextBlock.choice-raw">
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+        </Style>
+        <Style Selector="WrapPanel#KeyLine TextBlock, WrapPanel#ValueKeyLine TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!-- Inspector (system 8): 312 px Frame; below 1280 an overlay from the right, opened by Details. -->
+        <Style Selector="Panel#InspectorSlot">
+            <Setter Property="Grid.Column" Value="2" />
+        </Style>
+        <!-- The overlay starts under the title row (16 padding + 32 row + 8), so Details stays there to close it. -->
+        <Style Selector="Window.compact Panel#InspectorSlot">
+            <Setter Property="Grid.Column" Value="1" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="Margin" Value="0,56,0,0" />
+        </Style>
+        <Style Selector="Window.compact Border#InspectorHost">
+            <Setter Property="IsVisible" Value="{ReflectionBinding InspectorOpen}" />
+            <Setter Property="Background" Value="{DynamicResource PopupBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PopupEdgeBrush}" />
+            <Setter Property="BorderThickness" Value="1,0,0,0" />
+            <Setter Property="BoxShadow" Value="{DynamicResource PopupShadow}" />
+        </Style>
+        <Style Selector="Button#DetailsToggle">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="Window.compact Button#DetailsToggle">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+        <Style Selector="Border#InspectorHost TextBlock.h2">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="LineHeight" Value="18" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
+        </Style>
+        <Style Selector="Border.rule">
+            <Setter Property="Height" Value="1" />
+            <Setter Property="Background" Value="{DynamicResource HairlineBrush}" />
+            <Setter Property="Margin" Value="-16,16" />
+        </Style>
+        <Style Selector="Grid.fact TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid Name="TuneRoot" ColumnDefinitions="Auto,*,Auto" IsEnabled="{Binding !IsBusy}">
+        <!-- Rail -->
+        <Border Name="RailHost" Background="{DynamicResource FrameBrush}" BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="0,0,1,0"
+                Padding="12,12,8,8" IsVisible="{Binding HasDocument}">
+            <DockPanel>
+                <TextBox Name="SearchBox" DockPanel.Dock="Top" Margin="0,0,4,0" Height="32" Text="{Binding SearchText}" Watermark="Search items"
+                         AutomationProperties.Name="Search items">
+                    <TextBox.InnerLeftContent>
+                        <controls:StrokeIcon Data="{StaticResource Icon.Search}" Width="14" Height="14" Margin="0,0,8,0" VerticalAlignment="Center" />
+                    </TextBox.InnerLeftContent>
+                    <TextBox.InnerRightContent>
+                        <Border Classes="kbd" VerticalAlignment="Center" Margin="8,0,6,0">
+                            <TextBlock Text="Ctrl K" />
+                        </Border>
+                    </TextBox.InnerRightContent>
+                </TextBox>
+                <ToggleSwitch Name="ModifiedOnlySwitch" DockPanel.Dock="Top" Margin="4,8,0,0" IsChecked="{Binding ModifiedOnly}"
+                              OnContent="Changed only" OffContent="Changed only" AutomationProperties.Name="Changed only" />
+                <ToggleSwitch Name="DiffersOnlyBox" DockPanel.Dock="Top" Margin="4,4,0,0" IsChecked="{Binding DiffersOnly}" IsVisible="{Binding HasCompare}"
+                              OnContent="Differs from B" OffContent="Differs from B" AutomationProperties.Name="Differs from B"
                               ToolTip.Tip="{Binding CompareFileB, StringFormat='Items that differ from {0} (B on the Compare tab)'}" />
-                    <ListBox Name="RailList" Grid.Row="3" ItemsSource="{Binding Rail}" SelectionChanged="Rail_SelectionChanged" Padding="0,4,0,18">
-                        <ListBox.DataTemplates>
-                            <DataTemplate DataType="local:RailGroup">
-                                <TextBlock Text="{Binding Title}" Classes="muted" FontSize="12" Margin="0,10,0,2" />
-                            </DataTemplate>
-                            <DataTemplate DataType="local:RailCategory">
-                                <Grid ColumnDefinitions="*,Auto">
-                                    <TextBlock Text="{Binding Name}" Foreground="{DynamicResource Ink2Brush}" />
-                                    <TextBlock Grid.Column="1" Classes="num muted" Text="{Binding Count}" />
-                                </Grid>
-                            </DataTemplate>
-                            <DataTemplate DataType="local:RailItem">
-                                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="{Binding IsIndented, Converter={x:Static local:Converters.Indent}}">
-                                    <controls:ItemGlyph Kind="{Binding Kind}" VerticalAlignment="Center" Margin="0,0,9,0" />
-                                    <TextBlock Grid.Column="1" Classes="num" Text="{Binding Title}" TextTrimming="CharacterEllipsis"
-                                               FontWeight="{Binding IsCurrent, Converter={x:Static local:Converters.Bold}}" />
-                                    <Ellipse Grid.Column="2" Width="5" Height="5" Margin="6,0,0,0" Fill="{DynamicResource InkBrush}" IsVisible="{Binding IsModified}"
-                                             ToolTip.Tip="Changed since the last save" />
-                                    <Ellipse Grid.Column="3" Width="7" Height="7" Margin="6,0,0,0" Stroke="{DynamicResource Ink2Brush}" StrokeThickness="1.2"
-                                             IsVisible="{Binding IsDifferent}" ToolTip.Tip="Differs from B on the Compare tab" />
-                                    <TextBlock Grid.Column="4" Text="★" Margin="6,0,0,0" Foreground="{DynamicResource Ink2Brush}" IsVisible="{Binding IsPinned}" />
-                                </Grid>
-                            </DataTemplate>
-                        </ListBox.DataTemplates>
-                    </ListBox>
-                </Grid>
-            </Border>
-
-            <!-- The selected item -->
-            <Grid Grid.Column="1" RowDefinitions="Auto,Auto,Auto,*">
-                <StackPanel Margin="26,18,26,10" Spacing="6" IsVisible="{Binding SelectedItem, Converter={x:Static ObjectConverters.IsNotNull}}">
-                    <Grid ColumnDefinitions="*,Auto">
-                        <TextBlock Name="ItemTitle" Classes="display" FontSize="21" Text="{Binding SelectedItem.Title}" TextWrapping="Wrap" />
-                        <Button Grid.Column="1" Classes="ghost" Content="☆ Pin" Click="Pin_Click" VerticalAlignment="Center" ToolTip.Tip="Pin to the top of the rail" />
-                    </Grid>
-                    <WrapPanel ItemSpacing="6" LineSpacing="6">
-                        <Border Classes="chip"><TextBlock Text="{Binding SelectedKindText}" /></Border>
-                    </WrapPanel>
-                    <TextBlock Classes="secondary" Text="{Binding SelectedItem.Description}" TextWrapping="Wrap" MaxWidth="720" HorizontalAlignment="Left" />
+                <StackPanel DockPanel.Dock="Top" Margin="8,16,8,0" Spacing="8" IsVisible="{Binding NoMatchText, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <TextBlock Name="NoMatchText" Classes="body" Text="{Binding NoMatchText}" TextWrapping="Wrap" Foreground="{DynamicResource Ink2Brush}" />
+                    <Button Name="ClearSearchButton" Classes="quiet" Content="Clear search" Click="ClearSearch_Click" Margin="-10,0,0,0" />
                 </StackPanel>
-                <TextBlock Name="EditError" Grid.Row="1" Margin="26,0,26,10" Text="{Binding ErrorMessage}" TextWrapping="Wrap" Foreground="{DynamicResource UpBrush}"
-                           VerticalAlignment="Top" IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                <Border Grid.Row="1" Margin="26,0,26,10" Padding="12,9" CornerRadius="6" BorderThickness="3,1,1,1"
-                        BorderBrush="{DynamicResource UpBrush}" Background="{DynamicResource PaneBrush}"
-                        IsVisible="{Binding FirmwareWarning, Converter={x:Static ObjectConverters.IsNotNull}}">
-                    <TextBlock Text="{Binding FirmwareWarning}" TextWrapping="Wrap" />
-                </Border>
-                <Border Grid.Row="2" BorderBrush="{DynamicResource BezelBrush}" BorderThickness="0,0,0,1" Padding="26,4,26,14"
-                        IsVisible="{Binding SelectedItem, Converter={x:Static ObjectConverters.IsNotNull}}">
-                    <WrapPanel ItemSpacing="8" LineSpacing="8">
-                        <Border BorderBrush="{DynamicResource Bezel2Brush}" BorderThickness="1" CornerRadius="7" Background="{DynamicResource DialBrush}"
-                                IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBox Name="ToolValue" Width="90" BorderThickness="0" Background="Transparent" Classes="num" HorizontalContentAlignment="Right"
-                                         Watermark="Value" Text="{Binding ToolValue}" KeyDown="ToolValue_KeyDown" />
-                                <TextBlock Classes="muted" FontSize="12" Text="{Binding Editor.Units, FallbackValue=''}" VerticalAlignment="Center" Margin="0,0,10,0" />
-                            </StackPanel>
-                        </Border>
-                        <Button Content="Set" Tag="Set" Click="Tool_Click" ToolTip.Tip="Set the selected cells to the value" IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                        <Button Content="Add" Tag="Add" Click="Tool_Click" ToolTip.Tip="Add the value to the selected cells" IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                        <Button Content="Scale %" Tag="Scale" Click="Tool_Click" ToolTip.Tip="Change the selected cells by that many percent" IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                        <Button Content="Interpolate" Tag="Interpolate" Click="Tool_Click" ToolTip.Tip="Fill between the corners of the selection" IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                        <Button Content="Smooth" Tag="Smooth" Click="Tool_Click" ToolTip.Tip="Average each cell with its neighbours" IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                        <Border Width="1" Height="22" Background="{DynamicResource Bezel2Brush}" Margin="4,0" VerticalAlignment="Center" />
-                        <Button Content="Undo" Click="Undo_Click" IsEnabled="{Binding CanUndo}" ToolTip.Tip="{Binding UndoTip}" />
-                        <Button Content="Redo" Click="Redo_Click" IsEnabled="{Binding CanRedo}" />
-                        <Button Classes="primary" Content="Save" Click="Save_Click" ToolTip.Tip="Save (Ctrl S). A .bak keeps the file as it was." />
-                        <Button Name="SaveAsTool" Content="Save as…" Click="SaveAs_Click" ToolTip.Tip="Save to another file (Ctrl Shift S)" />
-                        <Border Width="1" Height="22" Background="{DynamicResource Bezel2Brush}" Margin="4,0" VerticalAlignment="Center" />
-                        <Button Name="OpenBinTool" Content="Open bin…" Click="OpenBin_Click" ToolTip.Tip="Open another bin (Ctrl O)" />
-                        <Button Name="OpenXdfTool" Content="XDF…" Click="OpenXdf_Click" ToolTip.Tip="Use another XDF with this bin" />
-                    </WrapPanel>
-                </Border>
-                <Grid Grid.Row="3" RowDefinitions="*,Auto" IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}">
-                    <ScrollViewer HorizontalScrollBarVisibility="Auto" Padding="26,8,26,20">
-                        <controls:MapGrid Name="MapGrid" Editor="{Binding Editor}" HorizontalAlignment="Left" VerticalAlignment="Top" MaxWidth="1240" />
-                    </ScrollViewer>
-                    <TextBlock Grid.Row="1" Margin="26,0,26,12" Text="{Binding Editor.Message}" TextWrapping="Wrap" Foreground="{DynamicResource Ink2Brush}"
-                               IsVisible="{Binding Editor.Message, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                </Grid>
-                <!-- Values, switches and flags -->
-                <StackPanel Grid.Row="3" Margin="26,10,26,20" Spacing="14" IsVisible="{Binding Value, Converter={x:Static ObjectConverters.IsNotNull}}">
-                    <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding Value.IsValue, FallbackValue=False}">
-                        <TextBlock Classes="num" FontSize="48" Text="{Binding Value.Current.Display}" VerticalAlignment="Bottom" />
-                        <TextBlock Classes="muted" FontSize="15" Text="{Binding Value.Units}" VerticalAlignment="Bottom" Margin="0,0,0,10" />
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding Value.IsValue, FallbackValue=False}">
-                        <TextBox Name="ValueInput" Width="140" Text="{Binding Value.Input}" Classes="num" KeyDown="ValueInput_KeyDown" />
-                        <Button Classes="primary" Content="Set value" Click="SetValue_Click" />
-                    </StackPanel>
-                    <ComboBox Name="ChoiceBox" MinWidth="320" ItemsSource="{Binding Value.Choices}" SelectedItem="{Binding Value.SelectedChoice}"
-                              IsVisible="{Binding Value.IsSwitch, FallbackValue=False}">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate x:DataType="local:ChoiceItem">
-                                <TextBlock Text="{Binding Text}" />
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-                    <ToggleSwitch Name="FlagSwitch" IsChecked="{Binding Value.IsOn}" OnContent="On" OffContent="Off"
-                                  IsVisible="{Binding Value.IsFlag, FallbackValue=False}" />
-                    <TextBlock Text="{Binding Value.Message}" Foreground="{DynamicResource Ink2Brush}" TextWrapping="Wrap"
-                               IsVisible="{Binding Value.Message, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False}" />
-                </StackPanel>
-
-                <StackPanel Grid.Row="3" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8"
-                            IsVisible="{Binding SelectedItem, Converter={x:Static ObjectConverters.IsNull}}">
-                    <TextBlock Classes="display" FontSize="17" Text="Pick a map, curve or value on the left" HorizontalAlignment="Center" />
-                    <TextBlock Classes="muted" Text="Search with Ctrl K. Pinned items stay at the top." HorizontalAlignment="Center" />
-                </StackPanel>
-            </Grid>
-
-            <!-- Inspector -->
-            <Border Name="InspectorHost" Grid.Column="2" Background="{DynamicResource PaneBrush}" BorderBrush="{DynamicResource BezelBrush}" BorderThickness="1,0,0,0">
-                <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel>
-                        <Border BorderBrush="{DynamicResource BezelBrush}" BorderThickness="0,0,0,1" Padding="18,16" IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}">
-                            <StackPanel Spacing="10">
-                                <Grid ColumnDefinitions="*,Auto">
-                                    <TextBlock Text="{Binding ShowsSurface, Converter={x:Static local:Converters.ShapeTitle}}" FontWeight="SemiBold" />
-                                    <TextBlock Grid.Column="1" Classes="muted" FontSize="12" Text="drag to turn" IsVisible="{Binding ShowsSurface}" />
+                <ListBox Name="RailList" Margin="0,8,0,0" ItemsSource="{Binding Rail}" SelectionChanged="Rail_SelectionChanged">
+                    <ListBox.DataTemplates>
+                        <DataTemplate DataType="local:RailGroup">
+                            <TextBlock Classes="group" Text="{Binding Title}" />
+                        </DataTemplate>
+                        <DataTemplate DataType="local:RailCategory">
+                            <Border Classes="row" Classes.open="{Binding IsExpanded}">
+                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                    <Panel Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center">
+                                        <controls:StrokeIcon Data="{StaticResource Icon.ChevronRight}" Width="14" Height="14" IsVisible="{Binding !IsExpanded}" />
+                                        <controls:StrokeIcon Data="{StaticResource Icon.ChevronDown}" Width="14" Height="14" IsVisible="{Binding IsExpanded}" />
+                                    </Panel>
+                                    <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" Classes="data12 count" Text="{Binding Count}" VerticalAlignment="Center" />
                                 </Grid>
-                                <controls:Surface3D Name="Surface" Height="250" Editor="{Binding Editor}" IsVisible="{Binding ShowsSurface}" />
-                                <controls:CurveChart Name="Curve" Height="220" Editor="{Binding Editor}" IsVisible="{Binding ShowsCurve}" />
-                                <TextBlock Name="LiveReadout" Classes="num readout" Classes.live="{Binding LiveCursor.ReadoutIsLive}" Text="{Binding LiveCursor.Readout}"
-                                           TextWrapping="Wrap" IsVisible="{Binding LiveCursor.Readout, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                            </StackPanel>
-                        </Border>
-                        <Border Padding="18,16" IsVisible="{Binding SelectedItem, Converter={x:Static ObjectConverters.IsNotNull}}">
-                            <StackPanel Spacing="10">
-                                <TextBlock Text="Details" FontWeight="SemiBold" />
-                                <ItemsControl ItemsSource="{Binding Facts}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="local:Fact">
-                                            <Grid ColumnDefinitions="96,*" Margin="0,0,0,6">
-                                                <TextBlock Classes="muted" Text="{Binding Label}" />
-                                                <TextBlock Grid.Column="1" Classes="num" Text="{Binding Text}" TextWrapping="Wrap" />
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                                <StackPanel Spacing="5" IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}" Margin="0,6,0,0">
-                                    <Border Height="8" CornerRadius="4" Background="{x:Static controls:HeatRamp.Brush}" />
-                                    <Grid ColumnDefinitions="*,*">
-                                        <TextBlock Classes="num muted" FontSize="12" Text="{Binding LegendMin}" />
-                                        <TextBlock Grid.Column="1" Classes="num muted" FontSize="12" Text="{Binding LegendMax}" HorizontalAlignment="Right" />
+                            </Border>
+                        </DataTemplate>
+                        <DataTemplate DataType="local:RailItem">
+                            <Border Classes="row" Classes.indented="{Binding IsIndented}" Classes.current="{Binding IsCurrent}">
+                                <Panel>
+                                    <Border Classes="currentbar" Classes.indented="{Binding IsIndented}" Width="2" HorizontalAlignment="Left"
+                                            Background="{DynamicResource Ink1Brush}" IsVisible="{Binding IsCurrent}" />
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <controls:ItemGlyph Kind="{Binding Kind}" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Classes="id" Text="{Binding Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding Title}" />
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" Margin="6,0,0,0" VerticalAlignment="Center">
+                                            <controls:StrokeIcon Name="ChangedMark" FillData="{StaticResource Mark.Changed}" Width="6" Height="6" VerticalAlignment="Center"
+                                                                 Foreground="{DynamicResource Ink1Brush}" IsVisible="{Binding IsModified}" ToolTip.Tip="Changed since the last save" />
+                                            <controls:StrokeIcon Name="DiffersMark" Data="{StaticResource Mark.Differs}" Width="8" Height="8" VerticalAlignment="Center"
+                                                                 Foreground="{DynamicResource Ink1Brush}" IsVisible="{Binding IsDifferent}" ToolTip.Tip="Differs from B on the Compare tab" />
+                                            <controls:StrokeIcon Name="PinnedMark" Data="{StaticResource Icon.PinFilled}" FillData="{StaticResource Icon.PinFilled.Fill}"
+                                                                 Width="12" Height="12" VerticalAlignment="Center" Foreground="{DynamicResource Ink1Brush}"
+                                                                 IsVisible="{Binding IsPinned}" ToolTip.Tip="Pinned" />
+                                        </StackPanel>
                                     </Grid>
+                                </Panel>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.DataTemplates>
+                </ListBox>
+            </DockPanel>
+        </Border>
+
+        <!-- Pane: title row, banners, toolbar, then the item -->
+        <Border Name="PaneHost" Grid.Column="1" Background="{DynamicResource PaneBrush}">
+            <DockPanel Name="TunePane">
+                <Grid Name="TitleRow" DockPanel.Dock="Top" Height="32" ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto"
+                      IsVisible="{Binding SelectedItem, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <controls:ItemGlyph Kind="{Binding SelectedKind}" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource Ink2Brush}" />
+                    <TextBlock Name="ItemTitle" Grid.Column="1" Classes="mono13" Text="{Binding SelectedItem.Title, FallbackValue=''}" VerticalAlignment="Center"
+                               Foreground="{DynamicResource Ink1Brush}" />
+                    <TextBlock Name="ItemDescription" Grid.Column="2" Classes="body" Margin="12,0,12,0" Text="{Binding SelectedItem.Description, FallbackValue=''}"
+                               Foreground="{DynamicResource Ink2Brush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                               ToolTip.Tip="{Binding SelectedItem.Description, FallbackValue=''}" />
+                    <Border Name="ReadOnlyChip" Grid.Column="3" Classes="chip" Margin="0,0,8,0" VerticalAlignment="Center" IsVisible="{Binding IsReadOnlyItem}">
+                        <TextBlock Text="Read-only" />
+                    </Border>
+                    <Button Name="PinButton" Grid.Column="4" Classes="quiet" Click="Pin_Click" VerticalAlignment="Center" ToolTip.Tip="Pin to the top of the rail"
+                            AutomationProperties.Name="{Binding PinText}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <controls:StrokeIcon Data="{StaticResource Icon.Pin}" Width="14" Height="14" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding PinText}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button Name="DetailsToggle" Grid.Column="5" Classes="quiet" Content="Details" Click="Details_Click" VerticalAlignment="Center"
+                            ToolTip.Tip="Edit limits, surface, details and colour scale" />
+                </Grid>
+                <!-- Info lines under the title (system 7.1): inline, the info icon, no box. -->
+                <DockPanel DockPanel.Dock="Top" Margin="0,8,0,0" IsVisible="{Binding IsReadOnlyItem}">
+                    <controls:StrokeIcon Data="{StaticResource Icon.Info}" Margin="0,1,8,0" VerticalAlignment="Top" />
+                    <TextBlock Name="ReadOnlyLine" Classes="body" Text="{Binding ReadOnlyReason}" TextWrapping="Wrap" Foreground="{DynamicResource Ink2Brush}" />
+                </DockPanel>
+                <DockPanel DockPanel.Dock="Top" Margin="0,8,0,0" IsVisible="{Binding IsAxis}">
+                    <controls:StrokeIcon Data="{StaticResource Icon.Info}" Margin="0,1,8,0" VerticalAlignment="Top" />
+                    <TextBlock Name="AxisRuleText" Classes="body" TextWrapping="Wrap" Foreground="{DynamicResource Ink2Brush}"
+                               Text="Breakpoints must not go down: an edit that makes one fall below its neighbour is refused." />
+                </DockPanel>
+
+                <Border Name="ErrorBanner" DockPanel.Dock="Top" Classes="banner warn" IsVisible="{Binding HasErrorBanner}">
+                    <DockPanel>
+                        <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource WarnBrush}" Width="16" Height="16"
+                                             Margin="0,0,8,0" VerticalAlignment="Center" />
+                        <Button Name="ErrorActionButton" DockPanel.Dock="Right" Margin="12,0,0,0" Content="{Binding ErrorActionText}" Click="ErrorAction_Click"
+                                VerticalAlignment="Center" IsVisible="{Binding ErrorActionText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                        <TextBlock Name="EditError" Classes="body" Text="{Binding ErrorMessage}" TextWrapping="Wrap" Foreground="{DynamicResource Ink1Brush}"
+                                   VerticalAlignment="Center" />
+                    </DockPanel>
+                </Border>
+                <Border Name="FirmwareBanner" DockPanel.Dock="Top" Classes="banner warn"
+                        IsVisible="{Binding FirmwareWarning, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <DockPanel>
+                        <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource WarnBrush}" Width="16" Height="16"
+                                             Margin="0,0,8,0" VerticalAlignment="Center" />
+                        <Button DockPanel.Dock="Right" Margin="12,0,0,0" Content="Use another XDF…" Click="UseAnotherXdf_Click" VerticalAlignment="Center" />
+                        <TextBlock Classes="body" Text="{Binding FirmwareWarning}" TextWrapping="Wrap" Foreground="{DynamicResource Ink1Brush}" VerticalAlignment="Center" />
+                    </DockPanel>
+                </Border>
+
+                <!-- Toolbar: cell operations on tables; Undo and Redo for every item. A read-only item disables it with the reason. -->
+                <WrapPanel Name="ToolBar" DockPanel.Dock="Top" ItemSpacing="12" LineSpacing="8"
+                           IsVisible="{Binding SelectedItem, Converter={x:Static ObjectConverters.IsNotNull}}"
+                           IsEnabled="{Binding !IsReadOnlyItem}" ToolTip.Tip="{Binding ReadOnlyReason}" ToolTip.ShowOnDisabled="True">
+                    <TextBox Name="ToolValue" Width="120" Height="32" Classes="data13" Watermark="Value" Text="{Binding ToolValue}" KeyDown="ToolValue_KeyDown"
+                             AutomationProperties.Name="Value" IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <TextBox.InnerRightContent>
+                            <TextBlock Classes="meta" Text="{Binding Editor.Units, FallbackValue=''}" VerticalAlignment="Center" Margin="6,0,10,0" />
+                        </TextBox.InnerRightContent>
+                    </TextBox>
+                    <Border Classes="toolgroup" IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Name="SetTool" Content="Set" Tag="Set" Click="Tool_Click" ToolTip.Tip="Set the selected cells to the value (Enter)" />
+                            <Button Name="AddTool" Content="Add" Tag="Add" Click="Tool_Click" ToolTip.Tip="Add the value to the selected cells" />
+                            <Button Name="ScaleTool" Content="Scale %" Tag="Scale" Click="Tool_Click" ToolTip.Tip="Change the selected cells by that many percent" />
+                        </StackPanel>
+                    </Border>
+                    <Border Classes="toolgroup" IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Name="InterpolateTool" Content="Interpolate" Tag="Interpolate" Click="Tool_Click"
+                                    IsEnabled="{Binding Editor.CanInterpolate, FallbackValue=False}"
+                                    ToolTip.Tip="{Binding Editor.InterpolateTip, FallbackValue=''}" ToolTip.ShowOnDisabled="True" />
+                            <Button Name="SmoothTool" Content="Smooth" Tag="Smooth" Click="Tool_Click" ToolTip.Tip="Average each cell with its neighbours" />
+                        </StackPanel>
+                    </Border>
+                    <!-- A value's exact entry (system 5.13): the Value field with its unit, then Set, secondary since Save is the primary. -->
+                    <TextBox Name="ValueInput" Width="120" Height="32" Classes="data13" Watermark="Value" Text="{Binding Value.Input, FallbackValue=''}"
+                             KeyDown="ValueInput_KeyDown" AutomationProperties.Name="Value" IsVisible="{Binding Value.IsValue, FallbackValue=False}">
+                        <TextBox.InnerRightContent>
+                            <TextBlock Classes="meta" Text="{Binding Value.Units, FallbackValue=''}" VerticalAlignment="Center" Margin="6,0,10,0" />
+                        </TextBox.InnerRightContent>
+                    </TextBox>
+                    <Button Name="SetValueButton" Content="Set" Click="SetValue_Click" IsVisible="{Binding Value.IsValue, FallbackValue=False}"
+                            ToolTip.Tip="Store the typed value, snapped to the nearest one the ECU can hold" />
+                    <Border Classes="toolgroup">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Name="UndoTool" Content="Undo" Click="Undo_Click" IsEnabled="{Binding CanUndo}" ToolTip.Tip="{Binding UndoTip}" ToolTip.ShowOnDisabled="True" />
+                            <Button Name="RedoTool" Content="Redo" Click="Redo_Click" IsEnabled="{Binding CanRedo}" ToolTip.Tip="{Binding RedoTip}" ToolTip.ShowOnDisabled="True" />
+                        </StackPanel>
+                    </Border>
+                </WrapPanel>
+
+                <Panel>
+                    <!-- A table: the grid, then the key line -->
+                    <controls:TableLayout Name="TableArea" Classes.centred="{Binding CentreGrid}" IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <!-- The column axis (system 8): its units in UI 12 Ink2, its id in Cascadia Ink3. -->
+                        <StackPanel Name="AxisLine" Orientation="Horizontal" Spacing="8" Margin="50,0,0,4" Height="16"
+                                    IsVisible="{Binding !CentreGrid}">
+                            <TextBlock Classes="label" Text="{Binding Editor.Values.X.Units, FallbackValue=''}" VerticalAlignment="Center" />
+                            <TextBlock Classes="mono" FontSize="12" Text="{Binding Editor.Values.X.Name, FallbackValue=''}" Foreground="{DynamicResource Ink3Brush}"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto">
+                            <controls:MapGrid Name="MapGrid" Editor="{Binding Editor}" VerticalAlignment="Top" MaxWidth="1240" />
+                        </ScrollViewer>
+                        <StackPanel Name="KeyArea" Spacing="4">
+                            <DockPanel IsVisible="{Binding Editor.Message, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False}">
+                                <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource WarnBrush}" Width="14" Height="14"
+                                                     Margin="0,1,8,0" VerticalAlignment="Top" />
+                                <TextBlock Name="EditMessage" Classes="body" Text="{Binding Editor.Message, FallbackValue=''}" TextWrapping="Wrap" />
+                            </DockPanel>
+                            <WrapPanel Name="KeyLine" ItemSpacing="24" LineSpacing="4">
+                                <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding !Editor.IsTyping, FallbackValue=True}">
+                                    <Border Width="16" Height="12" CornerRadius="4" BorderThickness="2" BorderBrush="{DynamicResource Ink1Brush}" VerticalAlignment="Center" />
+                                    <controls:NumberText Name="KeySelection" Value="{Binding Editor.SelectionText, FallbackValue=''}" />
                                 </StackPanel>
+                                <controls:NumberText Name="KeyTyping" Value="{Binding Editor.TypingHint, FallbackValue=''}" Foreground="{DynamicResource Ink1Brush}"
+                                                     IsVisible="{Binding Editor.IsTyping, FallbackValue=False}" />
+                                <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding Editor.ChangedText, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False}">
+                                    <controls:StrokeIcon FillData="{StaticResource Mark.Changed}" Width="8" Height="8" Foreground="{DynamicResource Ink1Brush}" VerticalAlignment="Center" />
+                                    <controls:NumberText Name="KeyChanged" Value="{Binding Editor.ChangedText, FallbackValue=''}" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding LiveCursor.Readout, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                    <Ellipse Width="8" Height="8" StrokeThickness="1.5" Stroke="{DynamicResource Ink2Brush}" VerticalAlignment="Center" />
+                                    <TextBlock Name="LiveReadout" Classes.live="{Binding LiveCursor.ReadoutIsLive}" Text="{Binding LiveCursor.Readout}" />
+                                </StackPanel>
+                                <controls:NumberText Name="KeyUndo" Value="{Binding UndoTip}" IsVisible="{Binding CanUndo}" />
+                            </WrapPanel>
+                        </StackPanel>
+                    </controls:TableLayout>
+
+                    <!-- A value, switch or flag (system 5.13, 5.14): the item, then its key line. -->
+                    <StackPanel Name="ValueArea" HorizontalAlignment="Left" Margin="0,24,0,0"
+                                IsVisible="{Binding Value, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <!-- A value: the Data 56 reading with its unit, then the slider between - and +. -->
+                        <StackPanel IsVisible="{Binding Value.IsValue, FallbackValue=False}">
+                            <!-- The runs touch: whitespace between them would be a space set at 56 px. -->
+                            <TextBlock Name="ValueReading" Classes="data56" Foreground="{DynamicResource Ink1Brush}"><Run
+                                Text="{Binding Value.ReadingText, FallbackValue='', Mode=OneWay}" /><Run Classes="unit" Text="{Binding Value.ReadingUnits, FallbackValue='', Mode=OneWay}" /></TextBlock>
+                            <Grid Name="SliderRow" ColumnDefinitions="Auto,*,Auto" HorizontalAlignment="Left" MaxWidth="600" Margin="0,16,0,0"
+                                  IsEnabled="{Binding !IsReadOnlyItem}">
+                                <Button Name="StepDownButton" Classes="icon" VerticalAlignment="Top" Click="StepDown_Click"
+                                        ToolTip.Tip="{Binding Value.StepDownTip, FallbackValue=''}" AutomationProperties.Name="One step down">
+                                    <controls:StrokeIcon Data="{StaticResource Icon.Minus}" />
+                                </Button>
+                                <controls:ValueSlider Name="ValueSlider" Grid.Column="1" Margin="16,0"
+                                                      Minimum="{Binding Value.SpanLow, FallbackValue=0}" Maximum="{Binding Value.SpanHigh, FallbackValue=1}"
+                                                      Value="{Binding Value.Current.Physical, FallbackValue=0}"
+                                                      Pending="{Binding Value.PendingValue, FallbackValue={x:Null}}"
+                                                      TickLow="{Binding Value.TickLow, FallbackValue={x:Null}}" TickHigh="{Binding Value.TickHigh, FallbackValue={x:Null}}"
+                                                      MinLabel="{Binding Value.SpanLowLabel, FallbackValue=''}" MaxLabel="{Binding Value.SpanHighLabel, FallbackValue=''}"
+                                                      ToolTip.Tip="{Binding Value.SliderTip, FallbackValue=''}"
+                                                      AutomationProperties.Name="{Binding SelectedItem.Title, FallbackValue=''}" />
+                                <Button Name="StepUpButton" Grid.Column="2" Classes="icon" VerticalAlignment="Top" Click="StepUp_Click"
+                                        ToolTip.Tip="{Binding Value.StepUpTip, FallbackValue=''}" AutomationProperties.Name="One step up">
+                                    <controls:StrokeIcon Data="{StaticResource Icon.Plus}" />
+                                </Button>
+                            </Grid>
+                            <!-- The legend of the XDF ticks, led by the tick it explains (system 5.14). -->
+                            <DockPanel Name="LimitsLegendLine" Margin="0,12,0,0"
+                                       IsVisible="{Binding Value.LimitsLegend, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False}">
+                                <Border DockPanel.Dock="Left" Width="2" Height="12" Margin="1,2,9,0" VerticalAlignment="Top" Background="{DynamicResource Ink2Brush}" />
+                                <controls:NumberText Name="LimitsLegend" Value="{Binding Value.LimitsLegend, FallbackValue=''}" TextWrapping="Wrap" />
+                            </DockPanel>
+                        </StackPanel>
+
+                        <!-- A switch: its choices as a list you pick one from (system 5.13); picking writes at once. -->
+                        <ListBox Name="ChoiceList" Width="360" HorizontalAlignment="Left"
+                                 ItemsSource="{Binding Value.Choices, FallbackValue={x:Null}}" SelectedItem="{Binding Value.SelectedChoice, FallbackValue={x:Null}}"
+                                 IsVisible="{Binding Value.IsSwitch, FallbackValue=False}" IsEnabled="{Binding !IsReadOnlyItem}"
+                                 AutomationProperties.Name="{Binding SelectedItem.Title, FallbackValue=''}">
+                            <ListBox.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Spacing="2" />
+                                </ItemsPanelTemplate>
+                            </ListBox.ItemsPanel>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="local:ChoiceItem">
+                                    <Grid ColumnDefinitions="16,*,Auto">
+                                        <TextBlock Classes="data12 choice-raw" Text="{Binding Value}" TextAlignment="Right" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Text}" Margin="12,0" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                        <controls:StrokeIcon Grid.Column="2" Data="{StaticResource Icon.Check}" VerticalAlignment="Center"
+                                                             Foreground="{DynamicResource Ink1Brush}" IsVisible="{Binding $parent[ListBoxItem].IsSelected}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <!-- A flag: the switch of system 5.5 with its state written beside it. -->
+                        <ToggleSwitch Name="FlagSwitch" IsChecked="{Binding Value.IsOn, FallbackValue=False}" OnContent="On" OffContent="Off"
+                                      IsVisible="{Binding Value.IsFlag, FallbackValue=False}" IsEnabled="{Binding !IsReadOnlyItem}"
+                                      AutomationProperties.Name="{Binding SelectedItem.Title, FallbackValue=''}" />
+
+                        <!-- The key line: what a drag will write, the last edit, and a refusal or warning above them. -->
+                        <StackPanel Name="ValueKeyArea" Spacing="4" Margin="0,12,0,0">
+                            <DockPanel IsVisible="{Binding Value.Message, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False}">
+                                <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource WarnBrush}" Width="14" Height="14"
+                                                     Margin="0,1,8,0" VerticalAlignment="Top" />
+                                <TextBlock Name="ValueMessage" Classes="body" Text="{Binding Value.Message, FallbackValue=''}" TextWrapping="Wrap" />
+                            </DockPanel>
+                            <WrapPanel Name="ValueKeyLine" ItemSpacing="24" LineSpacing="4">
+                                <controls:NumberText Name="ValueDragText" Value="{Binding Value.DragText, FallbackValue=''}"
+                                                     IsVisible="{Binding Value.DragText, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False}" />
+                                <controls:NumberText Name="ValueKeyUndo" Value="{Binding UndoTip}" IsVisible="{Binding CanUndo}" />
+                            </WrapPanel>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Bin open, nothing picked (system 7.1) -->
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="480" Spacing="8" IsVisible="{Binding NothingSelected}">
+                        <TextBlock Classes="empty-title" Text="Pick a map, curve or value on the left" TextAlignment="Center" TextWrapping="Wrap" />
+                        <TextBlock Classes="body" Text="Search with Ctrl K. Pinned items stay at the top." TextAlignment="Center" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource Ink2Brush}" />
+                    </StackPanel>
+
+                    <!-- First run, and the first open (system 5.10, 7.1) -->
+                    <Panel Name="EmptyBlock" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="480" IsVisible="{Binding !HasDocument}">
+                        <StackPanel Spacing="8" IsVisible="{Binding !IsBusy}">
+                            <TextBlock Name="EmptyTitle" Classes="empty-title" Text="Open a bin to start tuning" TextAlignment="Center" TextWrapping="Wrap" />
+                            <TextBlock Classes="body" TextWrapping="Wrap" TextAlignment="Center" Foreground="{DynamicResource Ink2Brush}"
+                                       Text="Choose the 512 KiB file you flash with MS4X Flasher. The XDF you last used for its firmware opens with it; otherwise you are asked for one." />
+                            <TextBlock Name="XdfNeededText" Classes="body" Text="{Binding ErrorMessage}" TextWrapping="Wrap" TextAlignment="Center"
+                                       Foreground="{DynamicResource Ink1Brush}" IsVisible="{Binding NeedsXdf}" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8" Margin="0,16,0,0">
+                                <Button Name="OpenBinButton" Classes.primary="{Binding !NeedsXdf}" Content="Open bin…" Click="OpenBin_Click" />
+                                <Button Name="OpenXdfButton" Classes.primary="{Binding NeedsXdf}" Content="Open XDF…" Click="OpenXdf_Click" />
                             </StackPanel>
-                        </Border>
+                        </StackPanel>
+                        <StackPanel Spacing="12" Width="320" IsVisible="{Binding IsBusy}">
+                            <ProgressBar Name="EmptyBusyBar" IsIndeterminate="True" Width="240" HorizontalAlignment="Center" />
+                            <TextBlock Name="EmptyBusyText" Classes="body" Text="{Binding BusyText}" TextAlignment="Center" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Panel>
+                </Panel>
+            </DockPanel>
+        </Border>
+
+        <!-- Inspector -->
+        <Panel Name="InspectorSlot" IsVisible="{Binding HasDocument}">
+            <Border Name="InspectorHost" Width="312" Background="{DynamicResource FrameBrush}" BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="1,0,0,0">
+                <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="16">
+                        <StackPanel IsVisible="{Binding HasLimits}">
+                            <TextBlock Classes="h2" Text="Edit limits" />
+                            <ItemsControl Name="LimitFacts" Margin="0,4,0,0" ItemsSource="{Binding LimitFacts}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="local:Fact">
+                                        <Grid Classes="fact" ColumnDefinitions="Auto,*" MinHeight="24">
+                                            <TextBlock Text="{Binding Label}" Foreground="{DynamicResource Ink2Brush}" VerticalAlignment="Center" Margin="0,0,12,0" />
+                                            <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,4">
+                                                <controls:NumberText Value="{Binding Text}" IsId="{Binding TextIsId}" Foreground="{DynamicResource Ink1Brush}" TextAlignment="Right"
+                                                                     HorizontalAlignment="Right" TextWrapping="Wrap" />
+                                                <controls:NumberText Value="{Binding Detail}" Foreground="{DynamicResource Ink2Brush}" TextAlignment="Right" HorizontalAlignment="Right"
+                                                                     TextWrapping="Wrap" IsVisible="{Binding Detail, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Border Classes="rule" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="8" IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <TextBlock Classes="h2" Text="{Binding ShapeTitle}" />
+                            <controls:Surface3D Name="Surface" Height="176" Editor="{Binding Editor}" IsVisible="{Binding ShowsSurface}"
+                                                AutomationProperties.Name="Surface; the arrow keys turn it" />
+                            <TextBlock Classes="label" Text="{Binding SurfaceHint}" TextWrapping="Wrap" IsVisible="{Binding ShowsSurface}" />
+                            <controls:CurveChart Name="Curve" Height="176" Editor="{Binding Editor}" IsVisible="{Binding ShowsCurve}" />
+                            <TextBlock Classes="label" Text="Points take the colour of their cells; the selected one is framed." TextWrapping="Wrap"
+                                       IsVisible="{Binding ShowsCurve}" />
+                            <Border Classes="rule" Margin="-16,8,-16,16" />
+                        </StackPanel>
+
+                        <!-- An axis's users (system 5.13), from the XDF's axis links. -->
+                        <StackPanel IsVisible="{Binding IsAxis}">
+                            <TextBlock Classes="h2" Text="Used by" />
+                            <ItemsControl Name="UsedByList" Margin="0,4,0,0" ItemsSource="{Binding UsedBy}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="core:XdfItem">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" MinHeight="24">
+                                            <controls:ItemGlyph Kind="{Binding Converter={x:Static local:Converters.TableKind}}" Foreground="{DynamicResource Ink2Brush}"
+                                                                VerticalAlignment="Center" />
+                                            <TextBlock Classes="id" Text="{Binding Title}" Foreground="{DynamicResource Ink1Brush}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Classes="body" Margin="0,4,0,0" Text="No table in this XDF uses this axis." TextWrapping="Wrap"
+                                       Foreground="{DynamicResource Ink2Brush}" IsVisible="{Binding HasNoUsers}" />
+                            <Border Classes="rule" />
+                        </StackPanel>
+
+                        <StackPanel IsVisible="{Binding SelectedItem, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <TextBlock Classes="h2" Text="Details" />
+                            <ItemsControl Name="DetailFacts" Margin="0,4,0,0" ItemsSource="{Binding DetailFacts}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="local:Fact">
+                                        <Grid Classes="fact" ColumnDefinitions="Auto,*" MinHeight="24">
+                                            <TextBlock Text="{Binding Label}" Foreground="{DynamicResource Ink2Brush}" VerticalAlignment="Center" Margin="0,0,12,0" />
+                                            <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,4">
+                                                <controls:NumberText Value="{Binding Text}" IsId="{Binding TextIsId}" Foreground="{DynamicResource Ink1Brush}" TextAlignment="Right"
+                                                                     HorizontalAlignment="Right" TextWrapping="Wrap" />
+                                                <controls:NumberText Value="{Binding Detail}" Foreground="{DynamicResource Ink2Brush}" TextAlignment="Right" HorizontalAlignment="Right"
+                                                                     TextWrapping="Wrap" IsVisible="{Binding Detail, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <!-- Colour scale (system 2.1, 2.2) -->
+                        <StackPanel Spacing="8" IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <Border Classes="rule" />
+                            <TextBlock Classes="h2" Text="Colour scale" />
+                            <controls:ColourScale Name="ScaleBar" MinLabel="{Binding ScaleMinLabel}" MidLabel="{Binding ScaleMidLabel}" MaxLabel="{Binding ScaleMaxLabel}" />
+                            <controls:NumberText Classes="label" Value="{Binding ScaleCaption}" TextWrapping="Wrap" />
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </Border>
-        </Grid>
-    </Panel>
+        </Panel>
+    </Grid>
 </UserControl>

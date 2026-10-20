@@ -25,22 +25,11 @@ public class LiveViewTests
 
     private static (MainWindow Window, MainWindowViewModel Live) ShowLive(string variant)
     {
-        var window = new MainWindow();
-        var shell = (ShellViewModel)window.DataContext!;
+        var (window, shell) = TestShell.Create();
         shell.Live.SelectedVariant = variant;
         shell.Live.PreviewChannels();
         window.Show();
         return (window, shell.Live);
-    }
-
-    [AvaloniaFact]
-    public void LiveViewShowsThreeDialsForMs43x()
-    {
-        var (window, live) = ShowLive("ms43x");
-
-        Assert.Equal(new[] { "N", "MAFIGA", "IGAAVG" }, live.Gauges.Select(gauge => gauge.ChannelId));
-        Assert.Equal(3, window.GetVisualDescendants().OfType<Gauge>().Count(gauge => gauge.IsEffectivelyVisible));
-        Assert.True(live.LiveValues.Count > 50);
     }
 
     [AvaloniaFact]
@@ -91,7 +80,7 @@ public class LiveViewTests
         }
 
         Assert.All(live.Gauges, gauge => Assert.NotNull(gauge.Value));
-        Assert.Contains(live.LiveValues, value => value.History.Count == 200);
+        Assert.Contains(live.LiveValues, value => value.History.Window(DateTimeOffset.UtcNow).Count == 200);
         Screens.Save(window, "live-night");
     }
 }

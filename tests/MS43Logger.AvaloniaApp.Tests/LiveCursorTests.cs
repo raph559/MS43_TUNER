@@ -51,7 +51,7 @@ public class LiveCursorTests
 
         var (window, shell, _) = await LiveFeed.OpenAsync();
         var cursor = shell.Tune.LiveCursor;
-        Assert.Equal("Live input: N (rpm) on rows × MAFIGA (mg/stk) on columns. Start logging to see the engine on this map.", cursor.Readout);
+        Assert.Equal("Live input: N (rpm) on rows, MAFIGA (mg/stk) on columns. Connect to see the engine's position on this map.", cursor.Readout);
         Assert.False(cursor.ReadoutIsLive);
 
         LiveFeed.Push(shell, ("N", 2480), ("MAFIGA", 1415));
@@ -61,7 +61,11 @@ public class LiveCursorTests
         Assert.Equal((5, 1), (live.Fix.Cells[0].Row, live.Fix.Cells[0].Col));
         Assert.False(live.IsStale);
         Assert.True(cursor.ReadoutIsLive);
-        Assert.StartsWith("2480 rpm · ", cursor.Readout);
+        Assert.StartsWith("Live 2480 rpm · ", cursor.Readout);
+        Assert.Contains(" · map ", cursor.Readout);
+        Assert.EndsWith(" °CRK", cursor.Readout);
+        Assert.DoesNotContain("→", cursor.Readout);
+        Assert.DoesNotContain("\u2212", cursor.Readout);
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
         Assert.Equal(cursor.Readout, Find.Named<TextBlock>(window, "LiveReadout").Text);
     }
@@ -150,6 +154,55 @@ public class LiveCursorTests
 
         Assert.True(shell.Tune.Editor!.Live!.IsStale);
         Assert.False(cursor.ReadoutIsLive);
+        Assert.EndsWith(" (stale)", cursor.Readout);
+    }
+
+    [AvaloniaFact]
+    public async Task TrailSettingChangesTheTrail()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (_, shell, time) = await LiveFeed.OpenAsync();
+        var cursor = shell.Tune.LiveCursor;
+        cursor.Trail = TrailMode.Off;
+        for (var i = 0; i < 3; i++)
+        {
+            LiveFeed.Push(shell, ("N", 2480 + 100 * i), ("MAFIGA", 1415));
+            cursor.Tick();
+            time.Advance(TimeSpan.FromMilliseconds(100));
+        }
+
+        Assert.Empty(shell.Tune.Editor!.Live!.Trail);
+
+        cursor.Trail = TrailMode.Long;
+        LiveFeed.Push(shell, ("N", 2480), ("MAFIGA", 1415));
+        cursor.Tick();
+        time.Advance(TimeSpan.FromSeconds(2));
+        LiveFeed.Push(shell, ("N", 2600), ("MAFIGA", 1415));
+        cursor.Tick();
+
+        Assert.Equal(2, shell.Tune.Editor.Live!.Trail.Count);
+    }
+
+    [AvaloniaFact]
+    public async Task TrailFollowsTheSetting()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (_, shell, _) = await LiveFeed.OpenAsync();
+        Assert.Equal(TrailMode.Short, shell.Tune.LiveCursor.Trail);
+
+        var settings = new SettingsViewModel(shell.Tune.Settings, shell) { IsTrailLong = true };
+
+        Assert.Equal(TrailMode.Long, shell.Tune.LiveCursor.Trail);
+        settings.IsTrailOff = true;
+        Assert.Equal(TrailMode.Off, shell.Tune.LiveCursor.Trail);
     }
 
     [AvaloniaFact]
@@ -169,7 +222,7 @@ public class LiveCursorTests
         shell.Live.Disconnect();
         Assert.Null(shell.Tune.Editor.Live);
         Assert.False(shell.Tune.LiveCursor.ReadoutIsLive);
-        Assert.EndsWith("Start logging to see the engine on this map.", shell.Tune.LiveCursor.Readout);
+        Assert.EndsWith("Connect to see the engine's position on this map.", shell.Tune.LiveCursor.Readout);
     }
 
     [AvaloniaFact]
@@ -191,7 +244,7 @@ public class LiveCursorTests
         shell.Tune.LiveCursor.Tick();
 
         Assert.Null(shell.Tune.Editor!.Live);
-        Assert.EndsWith("Start logging to see the engine on this map.", shell.Tune.LiveCursor.Readout);
+        Assert.EndsWith("Connect to see the engine's position on this map.", shell.Tune.LiveCursor.Readout);
     }
 
     [AvaloniaFact]

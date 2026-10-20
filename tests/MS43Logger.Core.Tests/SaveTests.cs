@@ -55,6 +55,31 @@ public sealed class SaveTests : IDisposable
     }
 
     [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void SaveWithoutBackupWritesNoBak()
+    {
+        var d = OpenCopy();
+        new EditHistory(d).Apply(TableEdits.Step(d, Ignition(d), new CellRange(0, 0, 0, 0), 1), "Step");
+
+        d.Save(now: When, options: new SaveOptions(KeepBackup: false));
+
+        Assert.False(File.Exists(d.Path + ".bak"));
+        Assert.False(d.BackupWritten);
+        Assert.True(File.Exists(Path.Combine(_folder, "CAR.log")));
+    }
+
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void SaveWithoutEditLogWritesNoLog()
+    {
+        var d = OpenCopy();
+        new EditHistory(d).Apply(TableEdits.Step(d, Ignition(d), new CellRange(0, 0, 0, 0), 1), "Step");
+
+        d.Save(now: When, options: new SaveOptions(AppendEditLog: false));
+
+        Assert.False(File.Exists(Path.Combine(_folder, "CAR.log")));
+        Assert.True(File.Exists(d.Path + ".bak"));
+    }
+
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
     public void FirstSaveWritesBakOnce()
     {
         var d = OpenCopy();
@@ -149,5 +174,27 @@ public sealed class SaveTests : IDisposable
         Assert.EndsWith(
             "created by TunerPro.\r\n" + new string('*', 74) + "\r\n10/19/2026 21:14:05  Table:     ip_iga_ron98_pl__n__maf changed.\r\n",
             File.ReadAllText(log));
+    }
+
+    // The bin is in place before the log is appended: a log that cannot be written must not hide that (final review, Important 1).
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void ALockedEditLogStillSavesTheBin()
+    {
+        var d = OpenCopy();
+        new EditHistory(d).Apply(TableEdits.Step(d, Ignition(d), new CellRange(0, 0, 0, 0), 1), "Step");
+        var image = d.Image.ToArray();
+        var changed = 0;
+        d.Changed += (_, _) => changed++;
+
+        using (File.Open(EditLog.PathFor(d.Path!), FileMode.Create, FileAccess.ReadWrite, FileShare.None))
+        {
+            var error = Assert.Throws<EditLogException>(() => d.Save(now: When));
+            Assert.Equal(EditLog.PathFor(d.Path!), error.LogPath);
+            Assert.IsAssignableFrom<IOException>(error.InnerException);
+        }
+
+        Assert.Equal(image, File.ReadAllBytes(d.Path!));
+        Assert.False(d.IsModified);
+        Assert.Equal(1, changed);
     }
 }

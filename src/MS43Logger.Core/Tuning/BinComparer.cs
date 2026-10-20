@@ -170,26 +170,25 @@ public static class BinComparer
         return new TableComparison(a, b, a with { Raw = raw, Physical = physical }, changed, axes, largest);
     }
 
-    /// <summary>Signed text for one B − A value: "+1.50", "−0.38" (U+2212), "·" for no change. Hex and ASCII items show raw counts.</summary>
+    /// <summary>
+    /// Signed text for one B − A value: "+1.50", "-0.38" (ASCII minus: Bahnschrift has no U+2212), and no change as
+    /// the item's own zero ("0.00"). Hex and ASCII items show raw counts.
+    /// </summary>
     public static string FormatDelta(double delta, long rawDelta, XdfZ z, bool raw)
     {
         ArgumentNullException.ThrowIfNull(z);
         if (raw || z.OutputType is 3 or 4)
         {
-            return rawDelta == 0 ? "·" : (rawDelta > 0 ? "+" : "−") + Math.Abs(rawDelta).ToString(CultureInfo.InvariantCulture);
+            return rawDelta == 0 ? "0" : (rawDelta > 0 ? "+" : "-") + Math.Abs(rawDelta).ToString(CultureInfo.InvariantCulture);
         }
 
         if (double.IsNaN(delta))
         {
-            return "—";
+            return "n/a";
         }
 
-        if (delta == 0)
-        {
-            return "·";
-        }
-
-        return (delta > 0 ? "+" : "−") + ValueCodec.Format(Math.Abs(delta), 0, z.DecimalPlaces, z.OutputType, z.Data.ElementBits);
+        var size = ValueCodec.Format(Math.Abs(delta), 0, z.DecimalPlaces, z.OutputType, z.Data.ElementBits);
+        return delta == 0 ? size : (delta > 0 ? "+" : "-") + size;
     }
 
     private static bool Readable(BinImage image, XdfData data) =>

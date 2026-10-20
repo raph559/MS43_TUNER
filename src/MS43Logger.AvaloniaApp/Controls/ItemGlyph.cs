@@ -1,15 +1,19 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Documents;
 using Avalonia.Media;
 using MS43Logger.Core.Tuning;
 
 namespace MS43Logger.AvaloniaApp.Controls;
 
-/// <summary>A 13 px symbol for an item's kind: four squares for a map, a line for a curve or axis, a dot for a value, a switch for a switch or flag.</summary>
+/// <summary>
+/// An item's kind as its icon from the app's set (system 6): the Kind.* geometry drawn exactly as a StrokeIcon draws it,
+/// in the text colour of the row around it.
+/// </summary>
 public sealed class ItemGlyph : Control
 {
     public static readonly StyledProperty<ItemKind> KindProperty = AvaloniaProperty.Register<ItemGlyph, ItemKind>(nameof(Kind));
-    public static readonly StyledProperty<IBrush?> ForegroundProperty = AvaloniaProperty.Register<ItemGlyph, IBrush?>(nameof(Foreground));
+    public static readonly StyledProperty<IBrush?> ForegroundProperty = TextElement.ForegroundProperty.AddOwner<ItemGlyph>();
 
     static ItemGlyph()
     {
@@ -18,8 +22,9 @@ public sealed class ItemGlyph : Control
 
     public ItemGlyph()
     {
-        Width = 13;
-        Height = 13;
+        Width = 16;
+        Height = 16;
+        ActualThemeVariantChanged += (_, _) => InvalidateVisual();
     }
 
     public ItemKind Kind { get => GetValue(KindProperty); set => SetValue(KindProperty, value); }
@@ -28,45 +33,12 @@ public sealed class ItemGlyph : Control
 
     public override void Render(DrawingContext context)
     {
-        var brush = Foreground ?? ThemeBrushes.Get(this, "Ink3Brush");
-        var pen = new Pen(brush, 1.4);
-        switch (Kind)
-        {
-            case ItemKind.Map:
-                context.DrawRectangle(brush, null, new Rect(1, 1, 5, 5), 1, 1);
-                context.DrawRectangle(brush, null, new Rect(7, 7, 5, 5), 1, 1);
-                context.DrawRectangle(new SolidColorBrush(Colors.Gray, 0.0), pen, new Rect(7.5, 1.5, 4, 4), 1, 1);
-                context.DrawRectangle(new SolidColorBrush(Colors.Gray, 0.0), pen, new Rect(1.5, 7.5, 4, 4), 1, 1);
-                break;
-            case ItemKind.Curve:
-            case ItemKind.Axis:
-                var curve = new StreamGeometry();
-                using (var g = curve.Open())
-                {
-                    g.BeginFigure(new Point(1, 11), false);
-                    if (Kind == ItemKind.Axis)
-                    {
-                        g.LineTo(new Point(12, 2));
-                    }
-                    else
-                    {
-                        g.CubicBezierTo(new Point(4, 10), new Point(5, 3), new Point(8, 3));
-                        g.CubicBezierTo(new Point(10, 3), new Point(11, 6), new Point(12, 6));
-                    }
-
-                    g.EndFigure(false);
-                }
-
-                context.DrawGeometry(null, pen, curve);
-                break;
-            case ItemKind.Switch:
-            case ItemKind.Flag:
-                context.DrawRectangle(null, pen, new Rect(1, 3.5, 11, 6), 3, 3);
-                context.DrawEllipse(brush, null, new Point(9, 6.5), 1.6, 1.6);
-                break;
-            default:
-                context.DrawEllipse(brush, null, new Point(6.5, 6.5), 3, 3);
-                break;
-        }
+        var key = "Kind." + Kind;
+        StrokeIcon.Draw(
+            context,
+            this.TryFindResource(key, ActualThemeVariant, out var data) ? data as Geometry : null,
+            this.TryFindResource(key + ".Fill", ActualThemeVariant, out var fill) ? fill as Geometry : null,
+            Foreground ?? ThemeBrushes.Get(this, "Ink2Brush"),
+            Bounds.Size);
     }
 }

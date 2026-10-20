@@ -124,7 +124,7 @@ public class ValueCodecTests
             Assert.Equal("160", ValueCodec.Format(159.99999, 480, 1, 2, 16));
             Assert.Equal("0x0014", ValueCodec.Format(20, 20, 0, 3, 16));
             Assert.Equal("12.35", ValueCodec.Format(12.3456, 0, null, null, 8));
-            Assert.Equal("—", ValueCodec.Format(double.NaN, 0, 1, null, 8));
+            Assert.Equal("n/a", ValueCodec.Format(double.NaN, 0, 1, null, 8));
             Assert.Equal("0.0", ValueCodec.Format(-0.01, 0, 1, null, 8));
         }
         finally

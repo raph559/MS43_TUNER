@@ -17,8 +17,14 @@ public class TuneViewTests
         shell.Tune.ToggleCategory("Ignition");
 
         Assert.Equal("CAR_current_43X001_SP95_STAGE1.bin", window.FindControl<TextBlock>("PlateFile")!.Text);
-        Assert.Equal("Saved", window.FindControl<TextBlock>("PlateDirty")!.Text);
-        Assert.Equal("ip_iga_ron98_pl__n__maf", Find.Named<TextBlock>(window, "ItemTitle").Text);
+        Assert.Equal("Saved", Find.Named<TextBlock>(window, "SaveStateText").Text);
+        var title = Find.Named<TextBlock>(window, "ItemTitle");
+        Assert.Equal("ip_iga_ron98_pl__n__maf", title.Text);
+        Assert.Equal(13, title.FontSize);
+        Assert.Equal(Avalonia.Media.FontWeight.SemiBold, title.FontWeight);
+        Assert.Contains("Cascadia Mono", title.FontFamily.ToString());
+        Assert.Equal("Target ignition angle for RON98 during part and full load", Find.Named<TextBlock>(window, "ItemDescription").Text);
+        Assert.IsType<ToggleSwitch>(Find.Named<Control>(window, "ModifiedOnlySwitch"));
         Screens.Save(window, "tune-rail");
     }
 }

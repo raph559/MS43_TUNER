@@ -111,6 +111,19 @@ public class EditHistoryTests
         Assert.Empty(changedTables);
     }
 
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void ClipboardWritesNaForMissingCells()
+    {
+        var d = Open();
+        var values = d.Reader.ReadTable(Ignition(d));
+        var physical = (double[,])values.Physical.Clone();
+        physical[18, 1] = double.NaN;
+
+        var text = TableClipboard.Format(values with { Physical = physical }, new CellRange(18, 0, 18, 1));
+
+        Assert.Equal("31.5\tn/a", text);
+    }
+
     [Fact]
     public void ParseFrenchSpreadsheetText()
     {

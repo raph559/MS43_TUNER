@@ -1,7 +1,10 @@
 using System.IO;
+using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.Platform.Storage;
+using Avalonia.VisualTree;
 
 namespace MS43Logger.AvaloniaApp.Views;
 
@@ -10,6 +13,21 @@ public partial class LiveView : UserControl
     public LiveView()
     {
         InitializeComponent();
+
+        // Avalonia skips layout inside a hidden subtree and keeps its ancestors' measures, so a tile reading that changed
+        // while the window was too small for the tiles would come back arranged at its old width. Showing the section
+        // again lays out everything in it afresh.
+        var pins = this.FindControl<StackPanel>("PinsSection")!;
+        pins.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == IsVisibleProperty && e.NewValue is true)
+            {
+                foreach (var part in pins.GetVisualDescendants().OfType<Layoutable>())
+                {
+                    part.InvalidateMeasure();
+                }
+            }
+        };
     }
 
     private MainWindowViewModel? ViewModel => DataContext as MainWindowViewModel;
@@ -41,6 +59,31 @@ public partial class LiveView : UserControl
         if (file?.Path is { IsAbsoluteUri: true } path)
         {
             ViewModel.CsvPath = path.LocalPath;
+        }
+    }
+
+    // The banner's way out: another file for a CSV that cannot be written, or the port list again.
+    private void BannerAction_Click(object? sender, RoutedEventArgs e)
+    {
+        switch (ViewModel?.BannerAction)
+        {
+            case LiveAction.Browse:
+                BrowseCsvButton_Click(sender, e);
+                break;
+            case LiveAction.RescanPorts:
+                ViewModel.RefreshPorts();
+                break;
+        }
+    }
+
+    private void ShowDetails_Click(object? sender, RoutedEventArgs e) => ViewModel?.ShowConnectionLog();
+
+    private void ClearFilter_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is { } live)
+        {
+            live.SearchText = string.Empty;
+            this.FindControl<TextBox>("ChannelFilter")?.Focus();
         }
     }
 

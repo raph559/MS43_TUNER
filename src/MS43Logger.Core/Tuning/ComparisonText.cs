@@ -74,12 +74,13 @@ public static class ComparisonText
             {
                 var size = $"{Count(range.Length)} {(range.Length == 1 ? "byte" : "bytes")}";
                 var differing = range.Differing < range.Length ? $" ({Count(range.Differing)} differ)" : string.Empty;
-                text.Append($"  0x{range.Offset:X5}–0x{range.End:X5}  {size,12}  {range.Area}{differing}\n");
+                text.Append($"  0x{range.Offset:X5} to 0x{range.End:X5}  {size,12}  {range.Area}{differing}\n");
             }
         }
 
         return text.ToString();
     }
 
-    private static string Count(int value) => value.ToString("N0", CultureInfo.InvariantCulture);
+    // No digit grouping (system 3.3): "11907 bytes".
+    private static string Count(int value) => value.ToString(CultureInfo.InvariantCulture);
 }

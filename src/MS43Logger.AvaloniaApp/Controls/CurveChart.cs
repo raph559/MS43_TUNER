@@ -1,18 +1,27 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using MS43Logger.AvaloniaApp.Theme;
 using MS43Logger.Core.Tuning;
 
 namespace MS43Logger.AvaloniaApp.Controls;
 
-/// <summary>A curve (or an axis) as a line over its breakpoints, with the selected points highlighted.</summary>
+/// <summary>
+/// A curve (or an axis) as a chart (system 5.13): square points filled with their cell's map colour and an Ink2 edge,
+/// the selected point framed in Ink1, an Ink2 line and axes, a hairline grid at round ticks. The round dot is kept for
+/// the live cursor.
+/// </summary>
 public sealed class CurveChart : Control
 {
     public static readonly StyledProperty<TableEditorViewModel?> EditorProperty = AvaloniaProperty.Register<CurveChart, TableEditorViewModel?>(nameof(Editor));
+
+    private const double PointSize = 7;
+    private const double Inset = 8;
 
     public CurveChart()
     {
@@ -20,6 +29,18 @@ public sealed class CurveChart : Control
     }
 
     public TableEditorViewModel? Editor { get => GetValue(EditorProperty); set => SetValue(EditorProperty, value); }
+
+    /// <summary>Where point <paramref name="index"/> is drawn: a 7 px square on its breakpoint and value.</summary>
+    public Rect PointRect(int index) =>
+        Layout() is { } chart && index >= 0 && index < chart.Count && double.IsFinite(chart.Ys[index])
+            ? new Rect(chart.At(index) - new Point(PointSize / 2, PointSize / 2), new Size(PointSize, PointSize))
+            : default;
+
+    /// <summary>The x axis's tick labels as drawn: breakpoint values, or "1", "5", "10" for an axis's numbered breakpoints.</summary>
+    public IReadOnlyList<string> XTickLabels => Layout() is { } chart ? chart.XTicks.Select(tick => Format(tick, chart.XStep)).ToList() : [];
+
+    /// <summary>The unit at the x axis's end: the row axis's unit, or "breakpoint" for an axis.</summary>
+    public string? XAxisUnits => Layout()?.AxisUnits;
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
@@ -43,72 +64,59 @@ public sealed class CurveChart : Control
     public override void Render(DrawingContext context)
     {
         var size = Bounds.Size;
-        context.DrawRectangle(ThemeBrushes.Get(this, "SunkenBrush"), null, new Rect(size), 8, 8);
-        if (Editor?.Values is not TableValues values)
+        var pane = ThemeBrushes.Color(this, "PaneBrush");
+        context.DrawRectangle(new SolidColorBrush(pane), new Pen(ThemeBrushes.Get(this, "HairlineBrush"), 1), new RoundedRect(new Rect(size).Deflate(0.5), 8));
+        if (Editor is not { } editor || Layout() is not { } chart)
         {
             return;
         }
 
-        var vertical = values.Cols == 1;
-        var count = vertical ? values.Rows : values.Cols;
-        var ys = Enumerable.Range(0, count).Select(i => vertical ? values.Physical[i, 0] : values.Physical[0, i]).ToArray();
-        var axis = vertical ? values.Y : values.X;
-        var xs = axis.Values.Count == count && axis.Values.All(double.IsFinite) && axis.Values.Distinct().Count() == count
-            ? axis.Values.ToArray()
-            : Enumerable.Range(0, count).Select(i => (double)i).ToArray();
-        var finite = ys.Where(double.IsFinite).ToList();
-        if (count < 1 || finite.Count == 0)
-        {
-            return;
-        }
-
-        double xMin = xs.Min(), xMax = xs.Max(), yMin = finite.Min(), yMax = finite.Max();
-        if (xMax - xMin < 1e-9)
-        {
-            xMax = xMin + 1;
-        }
-
-        if (yMax - yMin < 1e-9)
-        {
-            yMin -= 1;
-            yMax += 1;
-        }
-
-        var plot = new Rect(40, 14, Math.Max(10, size.Width - 56), Math.Max(10, size.Height - 40));
-        Point At(int i) => new(plot.Left + (xs[i] - xMin) / (xMax - xMin) * plot.Width, plot.Bottom - (ys[i] - yMin) / (yMax - yMin) * plot.Height);
-
-        var grid = new Pen(ThemeBrushes.Get(this, "BezelBrush"), 1);
-        var font = new Typeface(ThemeBrushes.Font(this, "DisplayFont"));
+        var ink1 = ThemeBrushes.Get(this, "Ink1Brush");
+        var ink2 = ThemeBrushes.Get(this, "Ink2Brush");
         var ink3 = ThemeBrushes.Get(this, "Ink3Brush");
-        for (var i = 0; i <= 4; i++)
+        var data = new Typeface(ThemeBrushes.Font(this, "DataFont"));
+        var ui = new Typeface(ThemeBrushes.Font(this, "UiFont"));
+        var plot = chart.Plot;
+
+        var hairline = new Pen(ThemeBrushes.Get(this, "HairlineBrush"), 1);
+        foreach (var tick in chart.YTicks)
         {
-            var y = plot.Top + plot.Height * i / 4;
-            context.DrawLine(grid, new Point(plot.Left, y), new Point(plot.Right, y));
-            Text(context, Format(yMax - (yMax - yMin) * i / 4, yMax - yMin), font, ink3, new Point(plot.Left - 6, y - 7), 1);
+            var y = chart.Y(tick);
+            context.DrawLine(hairline, new Point(plot.Left, y), new Point(plot.Right, y));
+            Text(context, Format(tick, chart.YStep), data, ink3, new Point(plot.Left - 6, y), 1, 0.5);
         }
 
-        Text(context, Format(xMin, xMax - xMin), font, ink3, new Point(plot.Left, plot.Bottom + 6), 0);
-        Text(context, Format(xMax, xMax - xMin), font, ink3, new Point(plot.Right, plot.Bottom + 6), 1);
+        foreach (var tick in chart.XTicks)
+        {
+            Text(context, Format(tick, chart.XStep), data, ink3, new Point(chart.X(tick), plot.Bottom + 4), 0.5, 0);
+        }
+
+        // The y axis rises 6 px above the top tick, and its unit sits over it with the baseline 10 px above that tick.
+        var axes = new Pen(ink2, 1.5);
+        context.DrawLine(axes, plot.BottomLeft, plot.TopLeft - new Point(0, 6));
+        context.DrawLine(axes, plot.BottomLeft, plot.BottomRight);
+        Baseline(context, editor.Units, ui, ink3, new Point(plot.Left - 6, plot.Top - 10));
+        Text(context, chart.AxisUnits, ui, ink3, new Point(plot.Right, plot.Bottom + 18), 1, 0);
 
         var line = new StreamGeometry();
         using (var g = line.Open())
         {
             var started = false;
-            for (var i = 0; i < count; i++)
+            for (var i = 0; i < chart.Count; i++)
             {
-                if (!double.IsFinite(ys[i]))
+                if (!double.IsFinite(chart.Ys[i]))
                 {
                     continue;
                 }
 
                 if (!started)
                 {
-                    g.BeginFigure(At(i), false);
+                    g.BeginFigure(chart.At(i), false);
                     started = true;
                 }
                 else
                 {
-                    g.LineTo(At(i));
+                    g.LineTo(chart.At(i));
                 }
             }
 
@@ -118,74 +126,165 @@ public sealed class CurveChart : Control
             }
         }
 
-        var ink2 = ThemeBrushes.Get(this, "Ink2Brush");
-        context.DrawGeometry(null, new Pen(ink2, 2), line);
-        for (var i = 0; i < count; i++)
+        context.DrawGeometry(null, new Pen(ink2, 1.5, lineJoin: PenLineJoin.Round), line);
+
+        var night = ThemeBrushes.IsNight(this);
+        var range = editor.ColourRange;
+        var edge = new Pen(ink2, 1);
+        for (var i = 0; i < chart.Count; i++)
         {
-            if (!double.IsFinite(ys[i]))
+            if (!double.IsFinite(chart.Ys[i]))
             {
                 continue;
             }
 
-            var selected = Editor.Selection is CellRange range && (vertical ? range.Contains(i, 0) : range.Contains(0, i));
-            context.DrawEllipse(selected ? ThemeBrushes.Get(this, "InkBrush") : ink2, null, At(i), selected ? 4.5 : 3, selected ? 4.5 : 3);
+            var cell = chart.Vertical ? (i, 0) : (0, i);
+            var fill = range.Hatched.Contains(cell) ? pane
+                : MapRamp.Color(range.IsConstant ? 0.5 : (chart.Ys[i] - range.Min) / (range.Max - range.Min), night);
+            var square = PointRect(i);
+            context.DrawRectangle(new SolidColorBrush(fill), edge, square.Deflate(0.5));
+            if (editor.Selection is CellRange selection && selection.Contains(cell.Item1, cell.Item2))
+            {
+                context.DrawRectangle(null, new Pen(ink1, 2), square.Inflate(2));
+            }
         }
 
-        if (Editor.Live is { } live && (vertical ? live.Fix.Row : live.Fix.Col) is AxisPosition position)
+        if (editor.Live is { } live && (chart.Vertical ? live.Fix.Row : live.Fix.Col) is AxisPosition position && double.IsFinite(live.Fix.Value))
         {
-            // The engine's position: a line at the fractional point, the points the ECU reads ringed by weight, the trail, the value.
-            var colour = ThemeBrushes.Cursor(this, live.IsStale);
-            double X(double index)
+            // The engine's position: a round Now dot with a Pane halo; an Ink3 ring once samples stop.
+            var at = new Point(chart.XAt(position.Position), chart.Y(Math.Clamp(live.Fix.Value, chart.YMin, chart.YMax)));
+            var halo = new SolidColorBrush(pane);
+            if (live.IsStale)
             {
-                var i = Math.Min((int)index, count - 1);
-                var next = Math.Min(i + 1, count - 1);
-                return plot.Left + (xs[i] + (index - i) * (xs[next] - xs[i]) - xMin) / (xMax - xMin) * plot.Width;
+                context.DrawEllipse(null, new Pen(halo, 5), at, 3.25, 3.25);
+                context.DrawEllipse(null, new Pen(ink3, 1.5), at, 3.25, 3.25);
             }
-
-            double Y(double value) => plot.Bottom - (Math.Clamp(value, yMin, yMax) - yMin) / (yMax - yMin) * plot.Height;
-            double ValueAt(double index)
+            else
             {
-                var i = Math.Min((int)index, count - 1);
-                var next = Math.Min(i + 1, count - 1);
-                return ys[i] + (index - i) * (ys[next] - ys[i]);
-            }
-
-            var x = X(position.Position);
-            context.DrawLine(new Pen(new SolidColorBrush(colour, 0.7), 1), new Point(x, plot.Top), new Point(x, plot.Bottom));
-            foreach (var cell in live.Fix.Cells)
-            {
-                var i = vertical ? cell.Row : cell.Col;
-                if (double.IsFinite(ys[i]))
-                {
-                    context.DrawEllipse(null, new Pen(new SolidColorBrush(colour, 0.35 + 0.65 * cell.Weight), 1 + 2 * cell.Weight), At(i), 6.5, 6.5);
-                }
-            }
-
-            foreach (var point in live.Trail)
-            {
-                var index = vertical ? point.Row : point.Col;
-                if (double.IsFinite(ValueAt(index)))
-                {
-                    context.DrawEllipse(new SolidColorBrush(colour, point.Opacity), null, new Point(X(index), Y(ValueAt(index))), 2.5, 2.5);
-                }
-            }
-
-            if (double.IsFinite(live.Fix.Value))
-            {
-                context.DrawEllipse(new SolidColorBrush(colour), new Pen(ThemeBrushes.Get(this, "DialBrush"), 1.5), new Point(x, Y(live.Fix.Value)), 4.5, 4.5);
+                context.DrawEllipse(halo, null, at, 6, 6);
+                context.DrawEllipse(ThemeBrushes.Get(this, "NowBrush"), null, at, 4, 4);
             }
         }
     }
 
-    /// <summary>Enough decimals that neighbouring scale labels differ.</summary>
-    private static string Format(double value, double span) =>
-        value.ToString(span >= 40 ? "0" : span >= 4 ? "0.#" : "0.##", CultureInfo.InvariantCulture).Replace('-', '−');
-
-    private static void Text(DrawingContext context, string text, Typeface font, IBrush brush, Point at, double align)
+    private Chart? Layout()
     {
-        var formatted = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, font, 11.5, brush);
-        context.DrawText(formatted, new Point(at.X - formatted.Width * align, at.Y));
+        if (Editor?.Values is not TableValues values || Bounds.Width < 40 || Bounds.Height < 40)
+        {
+            return null;
+        }
+
+        var vertical = values.Cols == 1;
+        var count = vertical ? values.Rows : values.Cols;
+        var ys = Enumerable.Range(0, count).Select(i => vertical ? values.Physical[i, 0] : values.Physical[0, i]).ToArray();
+        var axis = vertical ? values.Y : values.X;
+
+        // An axis's breakpoints are numbered 1 to n (system 5.13), as its grid's rows are.
+        var numbered = vertical && Editor?.NumberRows == true;
+        var xs = numbered ? Enumerable.Range(1, count).Select(i => (double)i).ToArray()
+            : axis.Values.Count == count && axis.Values.All(double.IsFinite) && axis.Values.Distinct().Count() == count
+            ? axis.Values.ToArray()
+            : Enumerable.Range(0, count).Select(i => (double)i).ToArray();
+        var finite = ys.Where(double.IsFinite).ToList();
+        if (count < 1 || finite.Count == 0)
+        {
+            return null;
+        }
+
+        var (yMin, yMax, yStep, yTicks) = Ticks(finite.Min(), finite.Max());
+        var (xMin, xMax, xStep, xTicks) = numbered ? Breakpoints(count) : Ticks(xs.Min(), xs.Max());
+        var plot = new Rect(44, 22, Math.Max(10, Bounds.Width - 60), Math.Max(10, Bounds.Height - 62));
+        return new Chart(plot, xs, ys, count, vertical, xMin, xMax, yMin, yMax, xStep, yStep, xTicks, yTicks, numbered ? "breakpoint" : axis.Units);
+    }
+
+    /// <summary>Round ticks over [min, max]: a step of 1, 2, 2.5, 3, 4 or 5 times a power of ten, about four steps across.</summary>
+    private static (double Min, double Max, double Step, IReadOnlyList<double> Ticks) Ticks(double min, double max)
+    {
+        if (max - min < 1e-9)
+        {
+            (min, max) = (min - 1, max + 1);
+        }
+
+        var rough = (max - min) / 4;
+        var magnitude = Math.Pow(10, Math.Floor(Math.Log10(rough)));
+        var step = new[] { 1, 2, 2.5, 3, 4, 5, 10 }.Select(factor => factor * magnitude).First(candidate => candidate >= rough * 0.999);
+        var low = Math.Floor(min / step + 1e-9) * step;
+        var high = Math.Ceiling(max / step - 1e-9) * step;
+        var ticks = new List<double>();
+        for (var tick = low; tick <= high + step * 1e-6; tick += step)
+        {
+            ticks.Add(Math.Round(tick / step) * step);
+        }
+
+        return (low, high, step, ticks);
+    }
+
+    // Numbered breakpoints run from 1 to n, ticked at 1 and then at round steps: 1, 5, 10, 15, 20.
+    private static (double Min, double Max, double Step, IReadOnlyList<double> Ticks) Breakpoints(int count)
+    {
+        var step = Ticks(1, Math.Max(2, count)).Step;
+        var ticks = new List<double> { 1 };
+        for (var tick = step; tick <= count + 1e-9; tick += step)
+        {
+            if (tick > 1)
+            {
+                ticks.Add(tick);
+            }
+        }
+
+        return (1, Math.Max(2, count), step, ticks);
+    }
+
+    // A tick value with no more decimals than its step needs, and an ASCII minus.
+    private static string Format(double value, double step)
+    {
+        var decimals = step >= 1 ? 0 : step >= 0.1 ? 1 : 2;
+        var text = value.ToString("F" + decimals, CultureInfo.InvariantCulture);
+        return text.StartsWith('-') && text.AsSpan(1).IndexOfAnyExcept("0.") < 0 ? text[1..] : text;
+    }
+
+    private static void Text(DrawingContext context, string text, Typeface face, IBrush brush, Point at, double alignX, double alignY)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        var formatted = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, face, 12, brush);
+        formatted.SetFontFeatures(Typography.Tabular);
+        context.DrawText(formatted, new Point(at.X - formatted.Width * alignX, at.Y - formatted.Height * alignY));
+    }
+
+    // Right-aligned text placed by its baseline.
+    private static void Baseline(DrawingContext context, string text, Typeface face, IBrush brush, Point at)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        var formatted = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, face, 12, brush);
+        context.DrawText(formatted, new Point(at.X - formatted.Width, at.Y - formatted.Baseline));
     }
 
     private void OnEditorChanged(object? sender, PropertyChangedEventArgs e) => InvalidateVisual();
+
+    private sealed record Chart(Rect Plot, double[] Xs, double[] Ys, int Count, bool Vertical, double XMin, double XMax, double YMin, double YMax,
+        double XStep, double YStep, IReadOnlyList<double> XTicks, IReadOnlyList<double> YTicks, string AxisUnits)
+    {
+        // The points keep 8 px from both ends of the x range, so the first one never sits on the y axis (mockup).
+        public double X(double value) => Plot.Left + Inset + (value - XMin) / (XMax - XMin) * (Plot.Width - 2 * Inset);
+
+        public double Y(double value) => Plot.Bottom - (value - YMin) / (YMax - YMin) * Plot.Height;
+
+        public Point At(int index) => new(X(Xs[index]), Y(Ys[index]));
+
+        /// <summary>The x of a fractional breakpoint position, between its two breakpoints.</summary>
+        public double XAt(double position)
+        {
+            var i = Math.Clamp((int)Math.Floor(position), 0, Count - 1);
+            var next = Math.Min(i + 1, Count - 1);
+            return X(Xs[i] + (position - i) * (Xs[next] - Xs[i]));
+        }
+    }
 }

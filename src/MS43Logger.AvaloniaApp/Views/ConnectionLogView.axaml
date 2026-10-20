@@ -1,0 +1,29 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="MS43Logger.AvaloniaApp.Views.ConnectionLogView"
+             Width="560">
+    <UserControl.Styles>
+        <!-- The log reads as a record, not a field: Cascadia 12 behind a Hairline edge, selectable but read-only. -->
+        <Style Selector="TextBox#LogText">
+            <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="BorderBrush" Value="{DynamicResource HairlineBrush}" />
+        </Style>
+        <Style Selector="TextBox#LogText:pointerover /template/ Border#PART_BorderElement">
+            <Setter Property="BorderBrush" Value="{DynamicResource HairlineBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <!-- "Show details" on a Live banner (system 7.2): what the banner said, then the full error to copy into a report.
+         It replaces the all-caps error window. -->
+    <DockPanel>
+        <TextBlock DockPanel.Dock="Top" Classes="title" Text="Connection failed" />
+        <TextBlock Name="ReasonText" DockPanel.Dock="Top" Classes="body" Foreground="{DynamicResource Ink2Brush}" TextWrapping="Wrap"
+                   Margin="0,8,0,0" />
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
+            <Button Name="CloseButton" Classes="primary" Content="Close" Click="Close_Click" />
+        </StackPanel>
+        <TextBox Name="LogText" Margin="0,16,0,0" IsReadOnly="True" TextWrapping="Wrap" MinHeight="96" MaxHeight="280"
+                 AutomationProperties.Name="Connection log" />
+    </DockPanel>
+</UserControl>
