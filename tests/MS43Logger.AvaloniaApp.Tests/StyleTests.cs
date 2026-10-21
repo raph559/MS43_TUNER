@@ -290,6 +290,32 @@ public class StyleTests
         return bytes;
     }
 
+    // The amber banner's stripe and icon are non-text cues: 3:1 on both surfaces a banner sits on (performance spec 5).
+    [AvaloniaTheory]
+    [InlineData("Dark")]
+    [InlineData("Light")]
+    public void CautionReadsOnFillAndPane(string theme)
+    {
+        var variant = theme == "Dark" ? ThemeVariant.Dark : ThemeVariant.Light;
+        Color Token(string key) => Assert.IsType<Color>(Application.Current!.TryGetResource(key, variant, out var value) ? value : null);
+
+        var caution = Token("CautionColor");
+        foreach (var surface in new[] { "FillColor", "PaneColor" })
+        {
+            var ratio = SettingsTests.Contrast(caution, Token(surface));
+            Assert.True(ratio >= 3, $"Caution {caution} is {ratio:0.00}:1 on {surface} ({theme})");
+        }
+    }
+
+    [AvaloniaFact]
+    public void CautionBannerHasACautionStripe()
+    {
+        var banner = Show(new Border { Classes = { "banner", "caution" }, Child = new TextBlock { Text = "Oil 71 °C: not at working temperature yet (80 °C)." } });
+
+        Assert.Equal(Color.Parse("#E8A33D"), Solid(banner.BorderBrush));
+        Assert.Equal(new Thickness(3, 0, 0, 0), banner.BorderThickness);
+    }
+
     [AvaloniaFact]
     public void DisabledFieldsLoseTheirEdgeButKeepReadableText()
     {

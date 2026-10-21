@@ -33,6 +33,7 @@ public class ThemeTokensTests
     [InlineData("Now", "#EA5B0C", "#FF7A1A")]
     [InlineData("NowText", "#B4470A", "#FF7A1A")]
     [InlineData("Warn", "#B42318", "#FF6259")]
+    [InlineData("Caution", "#A15C00", "#E8A33D")]
     [InlineData("Map1", "#CCF1EA", "#02423A")]
     [InlineData("Map2", "#9EDFE0", "#005C5E")]
     [InlineData("Map3", "#6DC7DB", "#077688")]
@@ -95,6 +96,8 @@ public class ThemeTokensTests
             ("Sparkline", new Sparkline { History = history, Width = 80, Height = 24 }),
             ("MapGrid", new MapGrid { Editor = TableEditorViewModel.Snapshot(CompareGridTests.Row(1, 2, 3), new HashSet<(int, int)>()), Width = 220, Height = 70 }),
             ("Gauge", new Gauge { Minimum = 0, Maximum = 8000, Value = 2480, Width = 160, Height = 160 }),
+            ("RunChart", new RunChart { TraceA = [new Point(2000, 40), new Point(7000, 118)], TraceB = [new Point(2000, 38), new Point(7000, 112)], LabelA = "A", LabelB = "B", Width = 220, Height = 140 }),
+            ("CylinderBars", new CylinderBars { Values = [0, 0.4, 0, 1.6, 0, 0], Width = 160, Height = 80 }),
         };
 
         var unchanged = new List<string>();

@@ -6,6 +6,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.VisualTree;
 using MS43Logger.AvaloniaApp.Views;
 using MS43Logger.Core;
+using MS43Logger.Core.Tests;
 using MS43Logger.Core.Tuning;
 
 namespace MS43Logger.AvaloniaApp.Tests;
@@ -18,13 +19,14 @@ internal sealed record GateState(string Screen, string State, Func<Task<GateWind
     public override string ToString() => Name;
 }
 
-/// <summary>The window a state opened, its shell (null for the Performance tests window) and its clock.</summary>
-internal sealed record GateWindow(Window Window, ShellViewModel? Shell, ManualTime Time);
+/// <summary>The window a state opened, its shell and its clock.</summary>
+internal sealed record GateWindow(Window Window, ShellViewModel Shell, ManualTime Time);
 
 /// <summary>
 /// Every screen and state the restyle's gate checks (plan Task 15): Tune's item kinds and its first run, Live's
 /// states, Compare's views, Settings with and without a save failure, the save prompt, the connection log and the
-/// Performance tests window. States that need the owner's car files are left out when the files are missing.
+/// Performance tab's run, results and compare states. States that need the owner's car files are left out when the files
+/// are missing.
 /// </summary>
 internal static class GateScreens
 {
@@ -69,21 +71,65 @@ internal static class GateScreens
             shell.Live.ReportConnectFailure(new UnauthorizedAccessException("Access to the port 'COM1' is denied."));
             shell.Live.ShowConnectionLog();
         }));
-        yield return new GateState("performance", "timing", Performance);
+
+        // The Performance tab (performance spec 9.1, 9.2): a pull ready to arm, running with cylinder 4 knocking, its result,
+        // the saved results, two of them compared, and a pull waiting on a cold engine (spec 5: the red and amber banners).
+        yield return new GateState("performance", "run", () => Performance(shell => Warm(shell)));
+        yield return new GateState("performance", "running", () => Performance(shell =>
+        {
+            Warm(shell);
+            shell.Performance.Run.Arm();
+            var pull = Pull();
+            for (var i = 0; i < pull.Count && shell.Performance.Run.KnockWarning is null; i++)
+            {
+                shell.Live.ShowSample(pull[i]);
+            }
+        }));
+        yield return new GateState("performance", "result", () => Performance(shell =>
+        {
+            Warm(shell);
+            shell.Performance.Run.Arm();
+            PerfFeed.Feed(shell, Pull());
+        }));
+        yield return new GateState("performance", "results", () => Performance(shell =>
+        {
+            shell.Performance.IsResultsMode = true;
+            shell.Performance.Results.ShowCold = true;
+        }));
+        yield return new GateState("performance", "compare", () => Performance(shell =>
+        {
+            var results = shell.Performance.Results;
+            shell.Performance.IsResultsMode = true;
+            foreach (var row in results.Rows.Where(row => !row.IsCold))
+            {
+                row.IsPicked = true;
+            }
+
+            results.Compare();
+        }));
+        yield return new GateState("performance", "cold", () => Performance(shell =>
+        {
+            Connect(shell);
+            shell.Performance.Run.Arm();
+            PerfFeed.Feed(shell, SyntheticRuns.Idle(PerfFeed.Ms43x, 1, coolantC: 64, oilC: 60));
+        }));
+    }
+
+    /// <summary>
+    /// Closes a state's window. A state's finished run is a picture, not the owner's: it is dropped first, or the close would
+    /// ask about it (performance spec 2) and leave the window open, holding the keyboard while the next state is checked.
+    /// </summary>
+    public static void Close(GateWindow opened)
+    {
+        opened.Shell.Performance.Run.Discard();
+        opened.Window.Close();
+        Dispatcher.UIThread.RunJobs();
     }
 
     public static void Theme(GateWindow opened, bool night)
     {
-        if (opened.Shell is { } shell)
-        {
-            shell.IsNight = night;
-            shell.IsDay = !night;
-        }
-        else
-        {
-            Avalonia.Application.Current!.RequestedThemeVariant = night ? Avalonia.Styling.ThemeVariant.Dark : Avalonia.Styling.ThemeVariant.Light;
-        }
-
+        opened.Shell.IsNight = night;
+        opened.Shell.IsDay = !night;
         Dispatcher.UIThread.RunJobs();
     }
 
@@ -115,12 +161,13 @@ internal static class GateScreens
         return Sized(new GateWindow(window, shell, time));
     }
 
-    private static Task<GateWindow?> Shell(Action<ShellViewModel> arrange, bool settings = false) => Shell((shell, _) => arrange(shell), settings);
+    private static Task<GateWindow?> Shell(Action<ShellViewModel> arrange, bool settings = false, AppSettings? saved = null) =>
+        Shell((shell, _) => arrange(shell), settings, saved);
 
-    private static Task<GateWindow?> Shell(Action<ShellViewModel, ManualTime> arrange, bool settings = false)
+    private static Task<GateWindow?> Shell(Action<ShellViewModel, ManualTime> arrange, bool settings = false, AppSettings? saved = null)
     {
         var time = new ManualTime();
-        var (window, shell) = TestShell.Create(AppSettings.Load(TestShell.NewFolder()), new MainWindowViewModel(time, () => ["COM1"]));
+        var (window, shell) = TestShell.Create(saved ?? AppSettings.Load(TestShell.NewFolder()), new MainWindowViewModel(time, () => ["COM1"]));
         shell.Live.SelectedVariant = "ms43x";
         window.Show();
         var opened = Sized(new GateWindow(window, shell, time));
@@ -152,22 +199,39 @@ internal static class GateScreens
         return Task.FromResult<GateWindow?>(opened);
     }
 
-    private static Task<GateWindow?> Performance()
+    // The Performance tab with the pedal calibrated and three saved 3rd gear pulls, the earliest made cold.
+    private static Task<GateWindow?> Performance(Action<ShellViewModel> arrange)
     {
-        var time = new ManualTime();
-        var live = new MainWindowViewModel(time, () => ["COM1"]) { SelectedVariant = "ms43x" };
-        var window = new PerformanceWindow { DataContext = live };
-        window.Show();
-        Dispatcher.UIThread.RunJobs();
-        live.ArmPerformanceTest();
-        Speed(live, 0);
-        time.Advance(TimeSpan.FromSeconds(0.5));
-        Speed(live, 2);
-        time.Advance(TimeSpan.FromSeconds(7.3));
-        Speed(live, 100);
-        Dispatcher.UIThread.RunJobs();
-        return Task.FromResult<GateWindow?>(new GateWindow(window, null, time));
+        var folder = TestShell.NewFolder();
+        PerfFeed.SaveResult(folder, "Morning", 6.4, minute: 0, cold: true);
+        PerfFeed.SaveResult(folder, "Baseline", 6.2, minute: 1);
+        PerfFeed.SaveResult(folder, "Ignition +1.5", 6.0, minute: 2);
+        var settings = AppSettings.Load(folder);
+        settings.FullPedal = SyntheticRuns.FullPedal;
+        return Shell(shell =>
+        {
+            shell.SelectedTab = ShellViewModel.PerformanceTab;
+            Dispatcher.UIThread.RunJobs();
+            arrange(shell);
+        }, saved: settings);
     }
+
+    // Connected to the ms43x definition, the header showing the logger's rate (spec 6.6: over 15 samples/s).
+    private static void Connect(ShellViewModel shell)
+    {
+        PerfFeed.Connect(shell);
+        shell.Live.ShowRate(new RateStats(30.2, 33.1, 31, 36, 100));
+    }
+
+    // Connected with a warm engine idling, so no banner shows and the ready check can pass.
+    private static void Warm(ShellViewModel shell)
+    {
+        Connect(shell);
+        PerfFeed.Feed(shell, SyntheticRuns.Idle(PerfFeed.Ms43x, 1));
+    }
+
+    // A 3rd gear pull from 1700 to 6500 rpm in 6 s, cylinder 4 retarding 1.6 degrees from 5000 to 5600 rpm.
+    private static IReadOnlyList<LiveSample> Pull() => SyntheticRuns.Pull(PerfFeed.Ms43x, 3, 1700, 6500, 6.0, knockCyl4: 1.6);
 
     // Logging with the mockups' sample values (system 11.1) at the logger's 38 samples/s, connected, in Tiles or Dials.
     private static void Logging(ShellViewModel shell, ManualTime time, bool dials)
@@ -189,8 +253,6 @@ internal static class GateScreens
 
     private static void Sample(MainWindowViewModel live, params (string Id, double Value)[] values) =>
         live.ShowSample(values.Select(value => new DecodedValue(Ms43x.Single(channel => channel.Id == value.Id), value.Value)).ToList());
-
-    private static void Speed(MainWindowViewModel live, double kmh) => Sample(live, ("VS", kmh));
 
     private static ItemDifference Item(CompareViewModel compare, string title) =>
         compare.Result!.Items.Single(item => item.Item.Title == title);

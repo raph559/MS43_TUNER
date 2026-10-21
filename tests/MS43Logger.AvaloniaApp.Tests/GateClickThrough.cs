@@ -1,10 +1,14 @@
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using MS43Logger.AvaloniaApp.Controls;
 using MS43Logger.AvaloniaApp.Views;
+using MS43Logger.Core.Performance;
+using MS43Logger.Core.Tests;
 using MS43Logger.Core.Tuning;
 
 namespace MS43Logger.AvaloniaApp.Tests;
@@ -20,7 +24,7 @@ internal static class GateClickThrough
     /// <summary>The header and status bar, on every screen; their script is "shell".</summary>
     public static readonly string[] ShellControls =
     [
-        "TabLive", "TabTune", "TabCompare", "FileMenuButton", "SaveButton", "ConnectionButton", "ConnectButton", "SettingsButton",
+        "TabLive", "TabTune", "TabCompare", "TabPerformance", "FileMenuButton", "SaveButton", "ConnectionButton", "ConnectButton", "SettingsButton",
         "NightButton", "DayButton", "ReadoutsTiles", "ReadoutsDials", "RescanButton", "MinimizeButton", "MaximizeButton", "CloseButton",
     ];
 
@@ -36,9 +40,9 @@ internal static class GateClickThrough
 
     private static bool NotShell(Control control) => !IsShell(control);
 
-    private static (MainWindow Window, ShellViewModel Shell) Open(bool night, Func<string[]> ports, double width = 1024, double height = 680)
+    private static (MainWindow Window, ShellViewModel Shell) Open(bool night, Func<string[]> ports, double width = 1024, double height = 680, string? folder = null)
     {
-        var (window, shell) = TestShell.Create(AppSettings.Load(TestShell.NewFolder()), new MainWindowViewModel(new ManualTime(), ports));
+        var (window, shell) = TestShell.Create(AppSettings.Load(folder ?? TestShell.NewFolder()), new MainWindowViewModel(new ManualTime(), ports));
         shell.Live.SelectedVariant = "ms43x";
         window.Width = width;
         window.Height = height;
@@ -64,6 +68,7 @@ internal static class GateClickThrough
 
         c.Press("TabTune", "shows the Tune screen", () => shell.SelectedTab == ShellViewModel.TuneTab);
         c.Press("TabCompare", "shows the Compare screen", () => shell.SelectedTab == ShellViewModel.CompareTab);
+        c.Press("TabPerformance", "shows the Performance screen", () => shell.SelectedTab == ShellViewModel.PerformanceTab && shell.Performance.IsVisible);
         c.Press("TabLive", "shows the Live screen", () => shell.SelectedTab == ShellViewModel.LiveTab);
 
         var file = c.Named<Button>("FileMenuButton");
@@ -79,7 +84,7 @@ internal static class GateClickThrough
 
         var before = scans;
         c.Press("RescanButton", "lists the COM ports again", () => scans == before + 1);
-        c.Note(c.Named<Button>("ConnectButton"), "not pressed: it opens the machine's real serial port (its label and states: ConnectIsPrimaryOnlyOnLive, LiveStateTests); Disconnect is pressed in the live script");
+        c.Note(c.Named<Button>("ConnectButton"), "not pressed: it opens the machine's real serial port (its label and states: ConnectIsPrimaryOnlyOnLiveAndPerformance, LiveStateTests); Disconnect is pressed in the live script");
         c.Press("SettingsButton", "opens Settings", () => c.Dialogs.IsOpen && window.GetVisualDescendants().OfType<SettingsView>().Any());
         c.Dialogs.Close();
         c.Press("DayButton", "switches to Day and saves it", () => shell.IsDay && shell.Tune.Settings.Theme == ThemeMode.Day);
@@ -129,11 +134,9 @@ internal static class GateClickThrough
         c.Press("CsvSwitch", "turns the CSV log on", () => live.EnableCsvLogging);
         var path = live.CsvPath;
         c.Press("BrowseCsvButton", "Browse… " + Picker, () => live.CsvPath == path);
-        c.Press("PerformanceButton", "opens the Performance tests window", () => window.OwnedWindows.OfType<PerformanceWindow>().Any());
-        foreach (var owned in window.OwnedWindows.ToList())
-        {
-            owned.Close();
-        }
+        c.Press("PerformanceButton", "opens the Performance tab", () => shell.IsPerformance);
+        shell.SelectedTab = ShellViewModel.LiveTab;
+        Dispatcher.UIThread.RunJobs();
 
         c.Press("PinnedOnlySwitch", "lists the pinned channels only", () => live.ShowPinnedOnly);
         live.ShowPinnedOnly = false;
@@ -501,15 +504,233 @@ internal static class GateClickThrough
         return Task.FromResult<GateClicks?>(c);
     }
 
+    // The Performance tab (performance spec 9.1, 9.2): the rail; each test's Run side, a pull run through to its result and
+    // the setup steps; then the saved results, two compared, one opened, renamed and deleted. Samples reach the tab through
+    // Live, as from the car; Connect itself is the shell's and is not pressed.
     private static Task<GateClicks?> PerformanceAsync(bool night)
     {
-        var live = new MainWindowViewModel(new ManualTime(), () => ["COM1"]) { SelectedVariant = "ms43x" };
-        Avalonia.Application.Current!.RequestedThemeVariant = night ? Avalonia.Styling.ThemeVariant.Dark : Avalonia.Styling.ThemeVariant.Light;
-        var window = new PerformanceWindow { DataContext = live };
-        window.Show();
+        // Three saved 3rd gear pulls, the earliest cold; the pedal not calibrated yet.
+        var folder = TestShell.NewFolder();
+        PerfFeed.SaveResult(folder, "Morning", 6.4, minute: 0, cold: true);
+        PerfFeed.SaveResult(folder, "Baseline", 6.2, minute: 1);
+        PerfFeed.SaveResult(folder, "Ignition +1.5", 6.0, minute: 2);
+        var (window, shell) = Open(night, () => ["COM1"], folder: folder);
+        var performance = shell.Performance;
+        var run = performance.Run;
+        var results = performance.Results;
+        var settings = shell.Tune.Settings;
+        shell.SelectedTab = ShellViewModel.PerformanceTab;
         Dispatcher.UIThread.RunJobs();
-        var c = new GateClicks(window, null);
-        c.PressLast(c.Named<Button>("StartTestButton"), window, "starts a run: \"Stop the car to start\"", () => live.PerformanceStatus == "Stop the car to start");
+        var c = new GateClicks(window, shell);
+        var arm = c.Named<Button>("ArmButton");
+
+        PerformanceTestEntry Entry(string key) => performance.Entries.OfType<PerformanceTestEntry>().Single(entry => entry.Key == key);
+        void Choose(string key)
+        {
+            c.Named<ListBox>("PerformanceTests").SelectedItem = Entry(key);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Same(Entry(key), performance.SelectedEntry);
+        }
+
+        void Enter(string name, string text, Func<bool> holds, string effect)
+        {
+            var box = c.Named<TextBox>(name);
+            box.Text = text;
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(holds(), $"{name}: expected \"{effect}\"");
+            c.Note(box, effect);
+        }
+
+        // The rail.
+        c.Press("ResultsModeButton", "shows the saved results", () => performance.IsResultsMode && c.Named<Control>("ResultsList").IsEffectivelyVisible);
+        c.Press("RunModeButton", "shows the chosen test's Run side", () => performance.IsRunMode && c.Named<Control>("RunPane").IsEffectivelyVisible);
+        c.Press("PerformanceCollapseButton", "folds the rail to its strip and saves it", () => performance.RailCollapsed && settings.PerformanceRailCollapsed);
+        c.Press("PerformanceExpandButton", "shows the rail again", () => !performance.RailCollapsed && !settings.PerformanceRailCollapsed);
+        var handle = c.Named<Border>("PerformanceResizeHandle");
+        var width = c.Named<Border>("PerformanceRail").Bounds.Width;
+        handle.Focus(NavigationMethod.Tab);
+        window.KeyPressQwerty(PhysicalKey.ArrowRight, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(width + 16, settings.PerformanceRailWidth);
+        c.Note(handle, "the rail's edge: an arrow key moves it 16 px and saves the width; dragged as the Compare list's (CompareRailTests, the same RailSizer)");
+        performance.SetRailWidth(null, save: true);
+
+        // A pull while disconnected: its gear, band and baseline; Arm is off and says why under it (system 5.9).
+        Assert.Equal("pull", performance.SelectedEntry.Key);
+        c.Press("Gear2", "picks 2nd and its band, 1500 to 6400 rpm", () => run.SelectedGear == 2 && run.StartRpm == "1500" && run.EndRpm == "6400");
+        c.Press("Gear4", "picks 4th, 1500 to 4500 rpm", () => run.SelectedGear == 4 && run.StartRpm == "1500" && run.EndRpm == "4500");
+        c.Press("Gear3", "picks 3rd, 2000 to 6400 rpm without a bin open", () => run.SelectedGear == 3 && run.StartRpm == "2000" && run.EndRpm == "6400");
+        Enter("StartRpmBox", "2500", () => run.StartRpm == "2500", "the band's start as typed, used when Arm is pressed");
+        Enter("EndRpmBox", "6000", () => run.EndRpm == "6000", "the band's end as typed");
+        run.StartRpm = "2000";
+        run.EndRpm = "6400";
+        var picker = c.Named<ComboBox>("BaselinePicker");
+        Assert.Equal(["None", "Ignition +1.5", "Baseline"], run.BaselineChoices.Select(choice => choice.Text));
+        picker.SelectedItem = run.BaselineChoices.Single(choice => choice.Text == "Baseline");
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(run.SelectedBaseline?.Text == "Baseline" && run.BaselineTrace is { Count: > 0 });
+        c.Note(picker, "Compare against: None or a saved warm pull of this gear, newest first; the one chosen is dashed behind the live run");
+        Assert.False(arm.IsEffectivelyEnabled);
+        Assert.Equal("Connect to the car to run a test.", c.Named<NumberText>("ArmTipText").Value);
+        c.Note(arm, "Arm pull is off while disconnected, the reason in the line under it: \"Connect to the car to run a test.\"");
+        c.Audit(window, NotShell);
+
+        // Connected with the pedal not calibrated: the way to the Pedal step (spec 4.4).
+        PerfFeed.Connect(shell);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("Calibrate the pedal first.", run.ArmTip);
+        c.PressLast(c.Named<Button>("CalibratePedalButton"), window, "Calibrate the pedal (shown until it is): opens the Pedal step",
+            () => performance.SelectedEntry.Key == "pedal", NotShell);
+        c.Audit(window, NotShell);
+        c.Press(arm, "Read pedal: asks for the pedal held floored", () => run.Stage == RunStage.Running && c.Named<Control>("CancelRunButton").IsEffectivelyVisible);
+        c.PressLast(c.Named<Button>("CancelRunButton"), window, "stops the test and keeps nothing; Arm shows again", () => run.Stage is null && arm.IsEffectivelyVisible, NotShell);
+        run.Arm();
+        PerfFeed.Feed(shell, PerfFeed.Steady(2.5, 0, 0, values: [("PVS", SyntheticRuns.FullPedal), ("TCO", 92), ("TOIL", 88)]));
+        Assert.True(settings.FullPedal is { } full && Math.Abs(full - SyntheticRuns.FullPedal) < 0.5);
+        c.Note("Pedal held floored for 2 s (fed through Live): its reading is saved as the full pedal");
+
+        // A pull from the rail, through its ready check and running view to its result.
+        Choose("pull");
+        c.Note("PerformanceTests rows (list items): choosing one shows that test's Run side; a run of another test goes on");
+        Assert.Contains("primary", arm.Classes);
+        c.Press(arm, "Arm pull (connected, pedal calibrated): the ready check shows and the options are fixed",
+            () => run.Stage == RunStage.Waiting && c.Named<Control>("ReadyChecks").IsEffectivelyVisible && !c.Named<ToggleButton>("Gear2").IsEffectivelyEnabled);
+        c.Audit(window, NotShell);
+        var pull = SyntheticRuns.Pull(PerfFeed.Ms43x, 3, 1700, 6500, 6.0, knockCyl4: 1.6);
+        // Up to the first sample with cylinder 4 knocking (5000 to 5600 rpm).
+        var fed = 0;
+        while (run.KnockWarning is null && fed < pull.Count)
+        {
+            shell.Live.ShowSample(pull[fed++]);
+        }
+
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(RunStage.Running, run.Stage);
+        var rpm = c.Named<ReadingText>("RunRpm");
+        Assert.True(rpm.IsEffectivelyVisible && rpm.Value == run.RpmText);
+        c.Note(rpm, "the running rpm in Data 56 (asserted equal to the run's)");
+        var progress = c.Named<ReadoutBar>("RunProgress");
+        Assert.True(progress.Minimum == 2000 && progress.Maximum == 6400 && progress.FillFraction is > 0 and < 1);
+        c.Note(progress, "the progress over the band, 2000 to 6400 rpm (asserted part filled)");
+        var knock = c.Named<CylinderBars>("KnockBars");
+        Assert.True(knock.IsLive && knock.Values is { Count: 6 } && run.KnockWarning is not null);
+        c.Note(knock, "six live knock bars; cylinder 4 at 1.6 degrees also gets the warning line under them (asserted)");
+        var chart = c.Named<RunChart>("LiveRunChart");
+        Assert.True(chart.IsRunning && chart.IsLive && chart.TraceA is { Count: > 0 } && chart.TraceB is { Count: > 0 });
+        c.Note(chart, "this run's rpm against time, the baseline dashed behind it (asserted both traces)");
+        c.Audit(window, NotShell);
+
+        PerfFeed.Feed(shell, pull.Skip(fed));
+        var save = c.Named<Button>("SaveResultButton");
+        Assert.True(run.HasResult && save.Classes.Contains("primary") && run.Name.StartsWith("3rd pull ", StringComparison.Ordinal));
+        Enter("ResultNameBox", "Gate pull", () => run.Name == "Gate pull", "the result's name, pre-filled as \"3rd pull\" and the time, edited inline");
+        Enter("ResultDescriptionBox", "Stock bin", () => run.Description == "Stock bin", "the description, optional");
+        c.Press("DirectionA", "marks the road as driven A", () => run.Direction == "A");
+        c.Press("DirectionB", "marks it B", () => run.Direction == "B");
+        GateClicks.Activate(c.Named<ToggleButton>("DirectionB"));
+        Assert.Null(run.Direction);
+        c.Note("DirectionB pressed again: clears the direction (one direction)");
+        run.Direction = "A";
+        c.Press(save, "writes the result with its tune, conditions and samples to the results; Saved shows",
+            () => run.IsSaved && !save.IsEffectivelyEnabled && results.Rows.Any(row => row.Name == "Gate pull"));
+        c.Press("RunAgainButton", "drops the run from the pane and arms the pull again", () => run.Stage == RunStage.Waiting);
+        PerfFeed.Feed(shell, pull);
+        Assert.True(run.HasResult);
+        c.PressLast(c.Named<Button>("DiscardResultButton"), window, "drops the run unsaved; Arm shows again", () => run.Stage is null && arm.IsEffectivelyVisible, NotShell);
+
+        // The other tests.
+        Choose("knock");
+        Assert.Equal([4], run.GearChoices);
+        c.Audit(window, NotShell);
+        Choose("rollon");
+        c.Press("Gear4", "Roll-on: picks 4th, 80 to 120 km/h", () => run.SelectedGear == 4 && run.StartKmh == "80" && run.EndKmh == "120");
+        c.Press("Gear3", "Roll-on: picks 3rd, 60 to 100 km/h", () => run.SelectedGear == 3 && run.StartKmh == "60" && run.EndKmh == "100");
+        Enter("StartKmhBox", "50", () => run.StartKmh == "50", "the roll-on's start speed as typed");
+        Enter("EndKmhBox", "110", () => run.EndKmh == "110", "its end speed");
+        c.Press(arm, "Arm roll-on: the ready check shows", () => run.Stage == RunStage.Waiting);
+        run.Cancel();
+        c.Audit(window, NotShell);
+        Choose("standing");
+        c.Press(arm, "Arm standing start: waits for the car stopped", () => run.Stage == RunStage.Waiting && run.Checks.Any(check => check.Label == "Stopped"));
+        run.Cancel();
+        c.Audit(window, NotShell);
+        Choose("link");
+        c.Press(arm, "Start link test: counts the samples", () => run.Stage is RunStage.Waiting or RunStage.Running);
+        run.Cancel();
+        c.Audit(window, NotShell);
+
+        Choose("calibration");
+        c.Press(arm, "Start capture: captures each gear held steady", () => run.IsCapturing);
+        PerfFeed.Feed(shell, PerfFeed.Steady(4, 3000, 5, values: [("VS", 100), ("PVS", 20), ("TCO", 92), ("TOIL", 88)]));
+        Assert.True(run.CanSaveCalibration);
+        Enter("GpsSpeedBox", "97", () => run.GpsVsKmh == "100", "the GPS speed as typed; the speedometer's reading at that moment fills GpsVsBox");
+        Enter("GpsVsBox", "100", () => run.GpsVsKmh == "100", "the speedometer's reading, editable");
+        c.PressLast(c.Named<Button>("SaveCalibrationButton"), window, "saves 5th corrected by GPS over speedometer and ends the capture",
+            () => Math.Abs(settings.KmhPerRpm[5] - 0.97 * 100 / 3000) < 1e-9 && settings.GpsChecked[5] && run.Stage is null, NotShell);
+
+        Choose("car");
+        Enter("MassBox", "1520", () => settings.TestMassKg == 1520, "the test mass with the driver, saved as typed");
+        Enter("TyreBox", "225/45 R17", () => settings.TyreSize == "225/45 R17", "the tyre size, saved once it reads");
+        c.Press("GearboxAutomatic", "an automatic gearbox, saved", () => settings.Automatic);
+        c.Press("GearboxManual", "a manual one, saved", () => !settings.Automatic);
+        c.Audit(window, NotShell);
+        run.MassKg = "1480";
+        run.TyreSize = "205/55 R16";
+
+        // The saved results (spec 9.1).
+        performance.IsResultsMode = true;
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(3, results.Rows.Count);
+        c.Press("ShowColdSwitch", "lists the cold runs too", () => results.ShowCold && results.Rows.Count == 4);
+        c.Press("ShowColdSwitch", "hides them again", () => !results.ShowCold && results.Rows.Count == 3);
+        Enter("ResultsSearchBox", "Ignition", () => results.Rows.Count == 1, "filters the results as typed; Ctrl K puts the keyboard here (PerformanceViewTests.CtrlBTogglesTheRailOnPerformance)");
+        results.SearchText = "";
+        Dispatcher.UIThread.RunJobs();
+
+        Control Row<T>(string name, string result)
+            where T : Control => GateClicks.Pressable(window).OfType<T>().Single(control => control.Name == name && control.DataContext is ResultRow { Name: var shown } && shown == result);
+        c.Press(Row<CheckBox>("PickBox", "Baseline"), "ticks a result to compare (each row's tick)", () => results.PickedCount == 1 && !c.Named<Button>("CompareButton").IsEffectivelyEnabled);
+        GateClicks.Activate(Row<CheckBox>("PickBox", "Ignition +1.5"));
+        Assert.True(results.CanCompare);
+        c.Press("CompareButton", "compares the two ticked results, the earlier as A", () => results.HasComparison && !results.ShowsList);
+        var compare = c.Named<RunChart>("CompareChart");
+        Assert.True(compare.TraceA is { Count: > 0 } && compare.TraceB is { Count: > 0 } && compare.LabelA == "A: Baseline");
+        c.Note(compare, "A solid and B dashed against rpm (asserted both traces; their look in RunChartTests)");
+        foreach (var (name, metric, what) in new[]
+                 {
+                     ("MetricTorque", ComparisonMetric.Torque, "torque"), ("MetricIgnition", ComparisonMetric.Ignition, "ignition"),
+                     ("MetricKnock", ComparisonMetric.Knock, "knock"), ("MetricVanos", ComparisonMetric.Vanos, "VANOS intake"),
+                     ("MetricAfr", ComparisonMetric.Afr, "AFR target"), ("MetricMaf", ComparisonMetric.Maf, "airflow"),
+                     ("MetricRpm", ComparisonMetric.Rpm, "engine speed against time"), ("MetricPower", ComparisonMetric.Power, "power"),
+                 })
+        {
+            c.Press(name, $"draws the {what} of both runs", () => results.Comparison?.Metric == metric);
+        }
+
+        c.PressLast(c.Named<Button>("CloseComparisonButton"), window, "Back to the list: closes the comparison", () => !results.HasComparison && results.ShowsList, NotShell);
+
+        var baseline = results.Rows.Single(row => row.Name == "Baseline").FileName;
+        c.Press(Row<Button>("OpenResultButton", "Baseline"), "Open: the whole stored result, read-only but for its name, description and direction", () => results.Opened?.FileName == baseline);
+        Enter("OpenedNameBox", "Before", () => results.Opened!.Name == "Before", "the stored result's name");
+        Enter("OpenedDescriptionBox", "Stock ignition", () => results.Opened!.Description == "Stock ignition", "its description");
+        c.Press("OpenedDirectionA", "marks it as driven A", () => results.Opened!.Direction == "A");
+        c.Press("OpenedDirectionB", "marks it B", () => results.Opened!.Direction == "B");
+        c.Press("SaveDetailsButton", "writes the name, description and direction into its file",
+            () => performance.Store.Load(baseline) is { Name: "Before", Description: "Stock ignition", Direction: "B" });
+        c.PressLast(c.Named<Button>("CloseOpenedButton"), window, "Back to the list: closes the result", () => !results.HasOpened && results.Rows.Any(row => row.Name == "Before"), NotShell);
+        c.Press(Row<Button>("RenameButton", "Before"), "Rename: opens the result on its name, selected", () => results.HasOpened && c.Named<TextBox>("OpenedNameBox").IsFocused);
+        results.CloseOpened();
+        Dispatcher.UIThread.RunJobs();
+
+        var files = Directory.GetFiles(Path.Combine(folder, "results")).Length;
+        c.Press(Row<Button>("DeleteResultButton", "Gate pull"), "Delete…: asks first in the confirm dialog",
+            () => c.Dialogs.IsOpen && window.GetVisualDescendants().OfType<ConfirmActionDialog>().Any());
+        c.Press("ConfirmCancelButton", "closes the question and keeps the file", () => !c.Dialogs.IsOpen && Directory.GetFiles(Path.Combine(folder, "results")).Length == files);
+        GateClicks.Activate(Row<Button>("DeleteResultButton", "Gate pull"));
+        var dialog = window.GetVisualDescendants().OfType<ConfirmActionDialog>().Single();
+        c.PressLast(Find.Named<Button>(dialog, "ConfirmActionButton"), dialog, "Delete: removes the result's file and its row",
+            () => !c.Dialogs.IsOpen && Directory.GetFiles(Path.Combine(folder, "results")).Length == files - 1 && results.Rows.All(row => row.Name != "Gate pull"));
+        c.Audit(window, NotShell);
         return Task.FromResult<GateClicks?>(c);
     }
 }

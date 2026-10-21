@@ -143,6 +143,24 @@ public sealed class ReadoutBandTests
         Assert.Null(Find.Named<GearSlots>(window, "GearSlots").Gear);
     }
 
+    // GEAR carries the high bits of N as its fraction (4.59 is 4th near 5000 rpm), so rounding read one gear high
+    // (performance spec 4.1).
+    [AvaloniaFact]
+    public void GearIsFlooredNotRounded()
+    {
+        var (window, shell) = ShowLive();
+        shell.Live.IsConnected = true;
+
+        Sample(shell.Live, ("GEAR", 4.59375));
+
+        Assert.Equal(4, shell.Live.Gear);
+        Assert.Equal(4, Find.Named<GearSlots>(window, "GearSlots").Gear);
+
+        Sample(shell.Live, ("GEAR", 0.6));
+
+        Assert.Null(shell.Live.Gear);
+    }
+
     [AvaloniaFact]
     public void OutOfScaleValuePrintsTrueValue()
     {

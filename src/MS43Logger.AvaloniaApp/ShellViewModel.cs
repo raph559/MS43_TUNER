@@ -5,12 +5,13 @@ using Avalonia.Styling;
 
 namespace MS43Logger.AvaloniaApp;
 
-/// <summary>The window: header tabs, theme, and the two screens.</summary>
+/// <summary>The window: header tabs, theme, and the screens.</summary>
 public sealed class ShellViewModel : ViewModelBase
 {
     public const string LiveTab = "Live";
     public const string TuneTab = "Tune";
     public const string CompareTab = "Compare";
+    public const string PerformanceTab = "Performance";
 
     private string _selectedTab = LiveTab;
     private System.Threading.Tasks.Task? _start;
@@ -20,6 +21,7 @@ public sealed class ShellViewModel : ViewModelBase
         Live = live;
         Tune = tune;
         Compare = new CompareViewModel(tune);
+        Performance = new PerformanceViewModel(live, tune);
         Compare.ShowInTuneRequested += (_, item) =>
         {
             tune.SelectedItem = item;
@@ -64,6 +66,8 @@ public sealed class ShellViewModel : ViewModelBase
                 if (!live.IsConnected)
                 {
                     tune.LiveCursor.Clear();
+                    // A run ends incomplete with what it measured (review focus 1).
+                    Performance.LinkLost();
                 }
                 else if (live.SelectedPort is { Length: > 0 } connected && connected != tune.Settings.LastPort)
                 {
@@ -74,6 +78,17 @@ public sealed class ShellViewModel : ViewModelBase
         };
 
         live.SampleShown += (_, sample) => tune.LiveCursor.Push(sample, live.CurrentDefinition);
+        // On every tab, so a run survives switching tabs; Live has already fed its warm-up monitor the same frame (performance
+        // spec 5).
+        live.SampleShown += (_, sample) => Performance.Push(sample, live.LastFrame, live.CurrentDefinition);
+        // A finished run to save takes the primary from Connect (minor review, findings 20 and 33).
+        Performance.Run.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(PerformanceRunViewModel.CanSave))
+            {
+                OnPropertyChanged(nameof(ConnectIsPrimary));
+            }
+        };
         tune.LiveCursor.IsVisible = IsTune;
 
         tune.DocumentOpened += (_, _) =>
@@ -123,6 +138,8 @@ public sealed class ShellViewModel : ViewModelBase
 
     public CompareViewModel Compare { get; }
 
+    public PerformanceViewModel Performance { get; }
+
     public string SelectedTab
     {
         get => _selectedTab;
@@ -133,10 +150,12 @@ public sealed class ShellViewModel : ViewModelBase
                 OnPropertyChanged(nameof(IsLive));
                 OnPropertyChanged(nameof(IsTune));
                 OnPropertyChanged(nameof(IsCompare));
+                OnPropertyChanged(nameof(IsPerformance));
                 OnPropertyChanged(nameof(ConnectIsPrimary));
                 OnPropertyChanged(nameof(SaveIsPrimary));
                 Tune.LiveCursor.IsVisible = IsTune;
                 Compare.IsVisible = IsCompare;
+                Performance.IsVisible = IsPerformance;
             }
         }
     }
@@ -181,6 +200,22 @@ public sealed class ShellViewModel : ViewModelBase
             if (value)
             {
                 SelectedTab = CompareTab;
+            }
+            else
+            {
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool IsPerformance
+    {
+        get => SelectedTab == PerformanceTab;
+        set
+        {
+            if (value)
+            {
+                SelectedTab = PerformanceTab;
             }
             else
             {
@@ -237,11 +272,14 @@ public sealed class ShellViewModel : ViewModelBase
         Live.StartCsvOnConnect = Tune.Settings.StartCsvOnConnect;
     }
 
-    /// <summary>Connect is the screen's one primary action only on Live, and only until connected (system 5.1).</summary>
-    public bool ConnectIsPrimary => IsLive && !Live.IsConnected;
+    /// <summary>
+    /// Connect is the screen's one primary action on Live and on Performance, where a test needs the link, and only until
+    /// connected (system 5.1, performance spec 9.1); on Performance a finished run to save keeps Save result the primary.
+    /// </summary>
+    public bool ConnectIsPrimary => (IsLive || (IsPerformance && !Performance.Run.CanSave)) && !Live.IsConnected;
 
-    /// <summary>Save is the primary action on Tune and Compare; on Live, Connect is.</summary>
-    public bool SaveIsPrimary => !IsLive;
+    /// <summary>Save is the primary action on Tune and Compare; on Live Connect is, on Performance Connect or the test's Arm.</summary>
+    public bool SaveIsPrimary => IsTune || IsCompare;
 
     // A lit segment pressed again sends false. That changes nothing, except while the theme follows Windows, where
     // pressing the theme in effect fixes it.

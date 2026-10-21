@@ -388,12 +388,6 @@ public sealed class GateTests
             foreach (var (theme, night) in new[] { ("night", true), ("day", false) })
             {
                 GateScreens.Theme(opened, night);
-                if (opened.Shell is null)
-                {
-                    Screens.Save(opened.Window, $"restyle-{state.Name}-{theme}");
-                    continue;
-                }
-
                 foreach (var (width, height) in new[] { (1440, 900), (1024, 680) })
                 {
                     opened.Window.Width = width;
@@ -403,7 +397,7 @@ public sealed class GateTests
                 }
             }
 
-            opened.Window.Close();
+            GateScreens.Close(opened);
         }
     }
 
@@ -424,7 +418,7 @@ public sealed class GateTests
                 check(opened);
             }
 
-            opened.Window.Close();
+            GateScreens.Close(opened);
         }
     }
 }

@@ -7,10 +7,13 @@ internal static class LivePayloads
 {
     public static byte[] Build(AdxDefinition adx, params (string Channel, long Raw)[] values) => Build(adx, Array.Empty<(int, byte)>(), values);
 
-    /// <summary>Also sets whole frame bytes, as the ECU lays them out, for the status bytes and selectors.</summary>
+    /// <summary>
+    /// Also sets whole frame bytes, as the ECU lays them out, for the status bytes and selectors. The frame is as long as the
+    /// definition's reply (73 bytes for ms43x, 82 for the stock v2.9 ones).
+    /// </summary>
     public static byte[] Build(AdxDefinition adx, (int Offset, byte Value)[] bytes, params (string Channel, long Raw)[] values)
     {
-        var payload = new byte[73];
+        var payload = new byte[adx.GetMonitorExchange().Response.PacketSize];
         foreach (var (offset, value) in bytes)
         {
             payload[offset] = value;

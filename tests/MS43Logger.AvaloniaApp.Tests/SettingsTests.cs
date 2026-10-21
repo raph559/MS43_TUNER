@@ -144,7 +144,7 @@ public sealed class SettingsTests : IDisposable
     }
 
     /// <summary>WCAG 2 contrast ratio.</summary>
-    private static double Contrast(Color a, Color b)
+    internal static double Contrast(Color a, Color b)
     {
         static double Channel(byte value)
         {

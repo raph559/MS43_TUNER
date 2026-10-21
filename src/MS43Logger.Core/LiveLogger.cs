@@ -4,10 +4,32 @@ namespace MS43Logger.Core;
 public interface IPayloadSource
 {
     byte[] PollPayload();
+
+    /// <summary>
+    /// When the request whose reply the last <see cref="PollPayload"/> returned went out, as <see cref="System.Diagnostics.Stopwatch.GetTimestamp"/>;
+    /// null when the source sends one request per call, so the time before the call is that request's.
+    /// </summary>
+    long? LastRequestTimestamp => null;
+
+    /// <summary>The requests the last <see cref="PollPayload"/> sent: 1, or more when it retried a timed-out one inside the call.</summary>
+    int LastAttempts => 1;
 }
 
+/// <param name="Time">The wall clock once the reply was decoded; for display and file names only.</param>
 /// <param name="Payload">The frame's data bytes as polled; channels' raw values are read from it.</param>
-public sealed record LiveSample(DateTimeOffset Time, long Index, IReadOnlyList<DecodedValue> Values, ReadOnlyMemory<byte> Payload = default);
+/// <param name="RequestedAt">When the request went out, on the run's monotonic clock (zero at the run's start): the closest
+/// stamp to when the DME latched the values, so test math uses it (performance spec 4.2).</param>
+/// <param name="RepliedAt">When the reply had been read, on the same clock.</param>
+/// <param name="Retries">Requests the source sent again inside the poll after a timeout; <paramref name="RequestedAt"/> is the
+/// one that got the reply.</param>
+public sealed record LiveSample(
+    DateTimeOffset Time,
+    long Index,
+    IReadOnlyList<DecodedValue> Values,
+    ReadOnlyMemory<byte> Payload = default,
+    TimeSpan RequestedAt = default,
+    TimeSpan RepliedAt = default,
+    int Retries = 0);
 
 /// <summary>
 /// The polling loop: poll, decode, publish, pause. Same rules as before the move out of the window:
@@ -62,7 +84,7 @@ public sealed class LiveLogger
 
     private async Task Loop(IPayloadSource source, AdxDefinition definition, IReadOnlyList<AdxValueDefinition> channels, CancellationToken token)
     {
-        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         var timeouts = 0;
         long index = 0;
 
@@ -70,10 +92,21 @@ public sealed class LiveLogger
         {
             try
             {
+                var requestedAt = System.Diagnostics.Stopwatch.GetElapsedTime(started);
                 var payload = source.PollPayload();
+                var repliedAt = System.Diagnostics.Stopwatch.GetElapsedTime(started);
+                // A source that retried inside the call stamps the request that got the reply: the first one timed out
+                // about a listen timeout before the values were latched (performance spec 4.2).
+                if (source.LastRequestTimestamp is { } sent
+                    && System.Diagnostics.Stopwatch.GetElapsedTime(started, sent) is var resent && resent > requestedAt && resent <= repliedAt)
+                {
+                    requestedAt = resent;
+                }
+
+                var retries = Math.Max(source.LastAttempts - 1, 0);
                 lock (_rateLock)
                 {
-                    _rate.Record(clock.Elapsed);
+                    _rate.Record(repliedAt);
                 }
 
                 var values = definition.DecodePayload(payload, channels);
@@ -83,7 +116,7 @@ public sealed class LiveLogger
                     Status?.Invoke(this, "Resumed");
                 }
 
-                SampleReceived?.Invoke(this, new LiveSample(DateTimeOffset.UtcNow, index++, values, payload));
+                SampleReceived?.Invoke(this, new LiveSample(DateTimeOffset.UtcNow, index++, values, payload, requestedAt, repliedAt, retries));
                 if (_pause > TimeSpan.Zero)
                 {
                     await Task.Delay(_pause, token);

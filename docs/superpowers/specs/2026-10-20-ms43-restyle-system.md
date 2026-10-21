@@ -1,6 +1,6 @@
 # MS43 Tuner design system
 
-Companion to `2026-10-20-ms43-restyle-design.md`. The one system every MS43 Tuner screen (Live, Tune, Compare, Settings and the dialogs) is rebuilt on. Day uses look A and Night uses look B (the owner picked both, R-37). One layout, two skins: the files differ only in the colour token values in section 1 and the map stop values in section 2. Everything else in this document applies to both themes unchanged.
+Companion to `2026-10-20-ms43-restyle-design.md`. The one system every MS43 Tuner screen (Live, Tune, Compare, Performance, Settings and the dialogs) is rebuilt on. Day uses look A and Night uses look B (the owner picked both, R-37). One layout, two skins: the files differ only in the colour token values in section 1 and the map stop values in section 2. Everything else in this document applies to both themes unchanged.
 
 Sources: `.superpowers/design/2026-10-20-restyle/first-drafts/dir-a.html` (Day) and `first-drafts/dir-b.html` (Night), local only and not committed because the mockups carry the owner's car data; the four screen audits; the app code (`src/MS43Logger.AvaloniaApp`, `src/MS43Logger.Core`), the installed fonts in `C:\Windows\Fonts`. Every contrast ratio below was produced by `antislop-human/contrast-check.py`. Helper scripts used to derive the colours: `.superpowers/design/2026-10-20-restyle/clean/tools/` (local only).
 
@@ -36,6 +36,7 @@ Three surface tones in all (R-29): frame, pane, fill.
 | `Now` | Live marks: cursor dot, value arcs and bars, gear slot, connected dot, now-ticks | `#EA5B0C` | `#FF7A1A` | The one accent (lead decision). Day fill keeps 3:1 on Pane and Frame. |
 | `NowText` | Live text: rate, "Connected", live cursor readout | `#B4470A` | `#FF7A1A` | Day orange darkened to pass 4.5:1 as text; Night orange already passes. |
 | `Warn` | Warning and error icon, banner stripe, inline error icon | `#B42318` | `#FF6259` | One signal red for every warning and error, always with an icon and text. It sits 12 (Day) and 22 (Night) degrees of OKLCH hue redder than orange, and Day red is much darker than Day orange (1.88:1 apart); the icon and text, not the hue, carry the meaning. |
+| `Caution` | Amber: the caution banner's stripe and icon (5.8), a suspect run's flag icon, a condition mismatch in a Performance comparison | `#A15C00` | `#E8A33D` | Added with the Performance tab (performance spec 5): oil below working temperature is worth a look but is not a danger, so it cannot take `Warn`, and orange means now. Only ever a stripe or an icon beside `Ink1` text, never text or a fill, so amber is never the only cue. |
 | `Hover` | Overlay on any surface under the pointer | `Ink1` at 6 % | `Ink1` at 8 % | An overlay instead of a fourth surface tone. |
 | `Pressed` | Overlay while pressed | `Ink1` at 12 % | `Ink1` at 14 % | Same reason; the pressed label stays 4.5:1 or more (below). |
 | `Shadow` | The one Day elevation (popups only) | `0 8 24 -8 #3D121826` | none | See section 4. |
@@ -53,6 +54,7 @@ Text needs 4.5:1, non-text (edges, marks, focus) needs 3:1.
 | `Ink3` | 5.89 / 5.34 / 4.97 | 5.81 / 5.53 / 4.66 | text |
 | `NowText` | 5.46 / 4.96 / 4.61 | 7.55 / 7.19 / 6.06 | text |
 | `Warn` | 6.57 / 5.97 / 5.55 | 6.70 / 6.38 / 5.37 | icon, stripe, may be text |
+| `Caution` | 5.19 / 4.71 / 4.38 | 9.13 / 8.70 / 7.33 | icon, stripe (never text) |
 | `Edge` | 4.22 / 3.83 / 3.56 | 4.29 / 4.08 / 3.44 | control boundary |
 | `Now` (fill) | 3.50 / 3.18 / **2.96** | 7.55 / 7.19 / 6.06 | non-text marks |
 | `Hairline` | 1.27 / 1.15 / 1.07 | 1.31 / 1.25 / 1.05 | decorative only |
@@ -81,9 +83,11 @@ Orange marks the thing that moves with the engine and the state of the link. Liv
 | The app mark's arc and needle while logging (5.1) | The app mark at rest |
 | Logging rate ("38 samples/s") | Sparkline lines and end dots (Ink2 line, Ink1 end dot) |
 | Live cursor readout under the grid | Idle live-cursor legend (drawn as an Ink2 outline dot) |
+| Performance, while a run is live: the knock bars' fill, the run's progress bar fill, the newest point of the live run chart (the `Now` dot) | Run traces on every chart, live or stored (5.17); knock bars in a stored result (Ink2) |
 | | Static zones such as the rev limiter band (Ink2) |
+| | The caution banner (amber `Caution`, 1.1) |
 
-When samples stop (link lost, cursor stale after 1 s), every orange mark turns `Ink3` and the screen shows the age. An idle screen (not connected) shows zero orange.
+When samples stop (link lost, cursor stale after 1 s), every orange mark turns `Ink3` and the screen shows the age; the live run chart's `Now` dot becomes an `Ink3` ring. An idle screen (not connected) shows zero orange.
 
 ---
 
@@ -176,9 +180,9 @@ Data values: grid cells, breakpoints, Live readings and channel values, rate, el
 | Data 12 | Bahnschrift | 12 / 16 | 400 (600 selected headers) | grid cells, breakpoints, counts, ticks | Fits "-23.6" in a 44 px column at the 1024 px minimum. |
 | Data 13 | Bahnschrift | 13 / 18 | 400, 600 | numbers inside 13 px lines, Value field | Matches the surrounding UI 13 line. |
 | Data 16 | Bahnschrift | 16 / 20 | 600 | Live channel values, edit-limit value | Glanceable in the car. |
-| Data 24 | Bahnschrift | 24 / 28 | 400 | strip readouts, gear and speed, pinned tiles | Context readings. |
+| Data 24 | Bahnschrift | 24 / 28 | 400 | strip readouts, gear and speed, pinned tiles, a run's elapsed time and result figures | Context readings. |
 | Data 40 | Bahnschrift | 40 / 44 | 400 | load and advance on dials | Second tier. |
-| Data 56 | Bahnschrift | 56 / 60 | 400 | rpm on dials; load and advance in tiles; a value's reading on the Tune pane | Primary reading. |
+| Data 56 | Bahnschrift | 56 / 60 | 400 | rpm on dials; load and advance in tiles; a value's reading on the Tune pane; the running reading on Performance | Primary reading. |
 | Data 88 | Bahnschrift | 88 / 92 | 350 (SemiLight) | rpm in the tiles layout only | Hero; SemiLight keeps the large figure from turning heavy. Never 300. |
 
 ### 3.3 Numbers (checked against `bahnschrift.ttf`)
@@ -247,25 +251,25 @@ All controls are 32 px tall (Live list rows and pins 32 px hit areas for use in 
 Left to right:
 
 1. **App mark and wordmark.** The owner kept the app's dial mark, redrawn in the icon style of section 6: a 20 px dial, a 270 degree arc open at the bottom and a needle, 1.5 px stroke, butt caps. At rest: arc `Ink3`, needle `Ink2` at the rest position. While connected and logging: arc and needle in `Now`, the needle at the current engine speed (0 to 8000 rpm over the 270 degree sweep), redrawn with the live readings and never tweened. Then the wordmark "MS43 Tuner", UI 16 SemiBold `Ink1`. Below 1280 px wide the wordmark is hidden (the window title carries it) and the mark stays.
-2. **Tabs** Live / Tune / Compare: text tabs, 48 px tall hit areas. Selected: `Ink1` SemiBold and a 2 px `Ink1` underline on the header's bottom edge. Others: `Ink2`, hover overlay. Not a segmented pill (R-30).
+2. **Tabs** Live / Tune / Compare / Performance: text tabs, 48 px tall hit areas, 12 px side padding. Selected: `Ink1` SemiBold and a 2 px `Ink1` underline on the header's bottom edge. Others: `Ink2`, hover overlay. Not a segmented pill (R-30). No tab has a shortcut. Below 1280 px the tab padding drops to 8 px and the margins after the mark and after the tabs to 8 px, so the fourth tab fits at 1024 px in the header's worst state (connected on a slow link, unsaved edits; `HeaderTests.HeaderAndStatusBarNeverOverlap`).
 3. **File block** (all tabs): file menu button = bin name, UI 13 SemiBold, middle ellipsis, then a chevron. Menu: "Open bin…" (Ctrl O), "Use another XDF…", "Save as…" (Ctrl Shift S). At 1280 px and wider a second line under the name: "Firmware" `Ink3` + `MS43X001` Cascadia `Ink2` + "XDF" `Ink3` + XDF file name `Ink2`, UI 12. Then the **save-state chip** and **Save**.
    - Clean: chip "Saved" with a check icon.
    - Dirty: chip "1 item not saved" (count of items, from `ModifiedItems`) with the changed triangle, `Ink1` SemiBold, never orange. Grid key and rail say cells and items with the same nouns (copy rule 9.3).
-   - **Save**: primary button on Tune and on Compare after a copy; disabled when clean with the tooltip "Nothing to save".
+   - **Save**: primary button on Tune and on Compare after a copy, never on Performance; disabled when clean with the tooltip "Nothing to save".
    - No bin: "No bin open" in `Ink3` and no chip.
 4. Flexible space.
-5. **Rate** (only while connected): "38" Data 13 SemiBold `NowText` + " samples/s" UI 12 `Ink2`. Connected but nothing yet: "No samples yet" `Ink2`. Under 10 samples/s: the warning icon and "slow link". Hidden when not connected.
+5. **Rate** (only while connected): "38" Data 13 SemiBold `NowText` + " samples/s" UI 12 `Ink2`. Connected but nothing yet: "No samples yet" `Ink2`. Under 10 samples/s: the warning icon and "slow link"; below 1280 px the words "slow link" go and the rate and its icon stay. Hidden when not connected.
 6. **Port** picker ("COM1"), **Rescan ports** icon button, **Definition** picker (`ms43x` in Cascadia). Below 1280 px these three merge into one picker button "COM1 · ms43x" that opens a popover with the same three controls (accessible name "Connection settings").
-7. **Connect** / **Disconnect**. Connect is the primary button on Live when not connected; a secondary button on Tune and Compare (Save is their primary). Connected: "Disconnect" as a quiet button.
+7. **Connect** / **Disconnect**. Connect is the primary button on Live and on Performance when not connected (a test needs the link); a secondary button on Tune and Compare (Save is their primary). Connected: "Disconnect" as a quiet button, and on Performance the chosen test's Arm becomes the primary.
 8. **Settings**: a 32 px quiet icon button with the gear icon at the right end, tooltip "Settings (Ctrl ,)", accessible name "Settings". It opens the Settings dialog (5.12).
 
 ### 5.2 Buttons
 
 | Kind | Rest | Hover | Pressed | Disabled | Use |
 |---|---|---|---|---|---|
-| Primary | `Ink1` fill, `Pane` label SemiBold | `Ink2` fill | `Ink1` fill | `Fill` fill, `Ink3` label | One per screen: Save (Tune, Compare after a copy), Connect (Live, not connected), the main action of an empty state. |
+| Primary | `Ink1` fill, `Pane` label SemiBold | `Ink2` fill | `Ink1` fill | `Fill` fill, `Ink3` label | One per screen: Save (Tune, Compare after a copy), Connect (Live and Performance, not connected), on Performance the test's Arm (connected), Save result (a run finished) or Save calibration (capturing), the main action of an empty state. |
 | Secondary | `Button` fill (`ButtonRaised` in a dialog), 1 px `ButtonEdge`, `Ink1` label | `Hover` | `Pressed` | no fill, `Hairline` edge, `Ink3` label | Second actions: Open XDF…, Copy B into A, Browse…, banner actions. |
-| Quiet | no fill or edge, `Ink2` label | `Hover` | `Pressed`, `Ink1` label | `Ink3` label | Pin, Change…, Edit in Tune, Disconnect, Performance tests, Show details. |
+| Quiet | no fill or edge, `Ink2` label | `Hover` | `Pressed`, `Ink1` label | `Ink3` label | Pin, Change…, Edit in Tune, Disconnect, Performance tests (opens the Performance tab), Show details, Run again, Back to the list, and a result row's Delete…, Open and Rename. |
 | Tool group | one `Button` surface with a `ButtonEdge` outline around several text buttons, 1 px `ButtonEdge` dividers | per button | per button | per button | Map toolbar: [Value][Set][Add][Scale %], [Interpolate][Smooth] with an X / Y / XY segmented control on maps (TunerPro's directions; remembered), [Undo][Redo]. With a B open, the compare controls leave the toolbar for a `Hairline` strip under it, "Compare with <B file>": [A][B][B − A], [Units][Raw][%] while B − A shows (one setting with Compare), Copy from B. |
 
 Disabled keeps its label at 4.5:1 or more (`Ink3`) and loses its boundary (Hairline), which is what says "not operable". Every disabled control has a tooltip with the reason: "Nothing to undo", "Select a range first: Interpolate fills between its corners."
@@ -278,11 +282,11 @@ Search fields (Tune rail, Live channel filter, Compare list) share one shortcut,
 
 ### 5.4 Segmented control
 
-Track `Fill`, radius 8, 2 px inset. Selected segment: `ButtonRaised` fill, 1 px `ButtonEdge`, `Ink1` SemiBold against `Ink2` for the others (the label weight and ink carry the state; the fill is 1.18 Day, 1.24 Night against the track). Others: `Ink2` on the track, hover overlay. Inside a Night dialog, whose surface is itself `Fill`, the track is `Frame` so it stays visible; the selected segment stays `ButtonRaised`. Used for: Night / Day (status bar, accessible name "Theme"), A / B / B − A (Compare), trend window chips (Live strips). Not used for the main tabs.
+Track `Fill`, radius 8, 2 px inset. Selected segment: `ButtonRaised` fill, 1 px `ButtonEdge`, `Ink1` SemiBold against `Ink2` for the others (the label weight and ink carry the state; the fill is 1.18 Day, 1.24 Night against the track). Others: `Ink2` on the track, hover overlay. Inside a Night dialog, whose surface is itself `Fill`, the track is `Frame` so it stays visible; the selected segment stays `ButtonRaised`. Used for: Night / Day (status bar, accessible name "Theme"), A / B / B − A (Compare), trend window chips (Live strips), and on Performance Run / Results, the gear, the direction A / B, the gearbox and the compare chart's trace. Not used for the main tabs.
 
 ### 5.5 Switch and checkbox
 
-Switch 36 × 20, track radius 10. In the Settings dialog the label sits left and the switch right, so every control in the dialog shares one right edge; elsewhere the label sits to the right of the switch. Off: `Pane` track, 1 px `Edge` (3.83 Day, 4.08 Night on Frame), 14 px knob in `Ink3` at the left. On: `Ink1` track, `Pane` knob at the right. Position and fill both change, so the state is never colour only. The label sits to the right and is part of the hit area. Checkbox: 16 px box with the same off and on tokens and a check icon. Switches: "Changed only", "Differs from B", "Pinned only", "Write CSV log".
+Switch 36 × 20, track radius 10. In the Settings dialog the label sits left and the switch right, so every control in the dialog shares one right edge; elsewhere the label sits to the right of the switch. Off: `Pane` track, 1 px `Edge` (3.83 Day, 4.08 Night on Frame), 14 px knob in `Ink3` at the left. On: `Ink1` track, `Pane` knob at the right. Position and fill both change, so the state is never colour only. The label sits to the right and is part of the hit area. Checkbox: 16 px box with the same off and on tokens and a check icon; the Performance results tick two rows with it to compare them. Switches: "Changed only", "Differs from B", "Pinned only", "Write CSV log", "Show cold runs".
 
 ### 5.6 List rows
 
@@ -303,7 +307,10 @@ Switch 36 × 20, track radius 10. In the Settings dialog the label sits left and
 Full width at the top of the pane, above the toolbar, radius 8, `Fill` background, 16 px icon, text UI 13 `Ink1`, one action at the right (secondary button).
 
 - Warning or error: `Warn` icon (5.55 Day / 5.37 Night on Fill) and a 3 px `Warn` stripe on the left edge. Not dismissible while its cause holds.
+- Caution: `Caution` icon (4.38 Day / 7.33 Night on Fill) and a 3 px `Caution` stripe on the left edge (`Border.banner.caution`), for a condition short of danger: oil below working temperature, coolant or oil running hot, a suspect run's flag. The text stays `Ink1`, as on every banner.
 - Info: `Ink2` info icon, no stripe, dismissible with a quiet "Hide" button.
+
+The warm-up banners (performance spec 5) show on Live under the connection banner and at the top of the Performance pane while connected: coolant below operating temperature and the ECU's overheat lamp as warnings, cold oil and running hot as cautions, oil temperature not reported as info. Each shows the reading and the target, updates in place as the reading changes, and clears by itself with its condition, so none has an action or "Hide".
 
 Inline messages under the grid (edit refusals, clamps) use the same icon and text without the banner box.
 
@@ -381,6 +388,14 @@ Mockups: `compare-{day,night}.html`.
 ### 5.16 Scroll bars
 
 No arrow buttons; no track. The thumb is an `Edge` pill (radius 5, 3:1 on every surface) that stays a thin line until the pointer comes near, then widens to 10 px (`ScrollBarSize`), `Ink3` on hover. The owner found Fluent's 16 px bar with arrows heavy, and it covered the map's last row: a map grid that scrolls sideways keeps 12 px empty under its last row for the bar (`MapGrid.ScrollBarRoom`); a grid that fits keeps none, so a curve's key line stays right under it.
+
+### 5.17 Run charts and knock bars (Performance)
+
+- **RunChart** (`Controls/RunChart.cs`): two runs against rpm (pulls) or seconds from the start (rpm over time, speed tests), on the Tune curve's frame: `Pane` fill, 1 px `Hairline` edge, radius 8, hairline grid on the y ticks, `Ink2` axes 1.5 px, 12 px tick labels in Bahnschrift `Ink3` (five steps across, four up, the first and last on the plot's edges), units in UI `Ink3`. **A is `Ink1` 2 px solid, B is `Ink2` 1.5 px dashed (4 on, 2 off)**, B drawn under A, with a legend line at the top left (a 16 px sample of each stroke and its label, UI 12 `Ink2`): the stroke, not the hue, tells the two apart (2.4). Traces are data, never orange or coral; a gap in the samples breaks the line instead of bridging it.
+- A run being recorded (the Run side's live chart) draws A in `Ink2` with its newest point as the `Now` dot on a `Pane` halo, as the Tune curve's live cursor; when samples stop the dot becomes an `Ink3` ring. The baseline chosen under "Compare against" is B, dashed behind it, so being ahead or behind shows at once.
+- **Knock bars** (`Controls/CylinderBars.cs`): knock retard per cylinder, six `Track` bars numbered 1 to 6 under them in Data 12 `Ink3`, a bar full at 4 degrees. Filled `Now` while a run is live, `Ink2` in a stored result. A cylinder at or past 1.5 degrees also gets the warning icon above its bar in `Caution`, the colour of the run's knock flag (one event, one colour, in the run and in a stored result), and a text line under the bars ("Knock retard: cylinder 4 at 1.6 °CRK."), never colour alone; a cylinder without a value draws no fill and reads n/a.
+- The live chart keeps its axes for the run: rpm over the pull's band (a calibrated roll-on's speeds in its gear, else 0 to 8000 rpm), seconds to the baseline's length or 5 s, then in whole 5 s steps; a stored chart fits its traces. A legend label that does not fit over the plot is trimmed in the middle; the full names are in the B − A panel.
+- Sizes: the live chart is 240 px tall (200 below 1280 px wide, 180 in a window under 760 px tall); the compare chart 320 px (240 below 1280).
 
 ## 6. Icons (R-04)
 
@@ -482,7 +497,7 @@ Header 48 px and status bar 28 px on every screen. No horizontal page scroll at 
 
 | Region | 1440 × 900 | 1024 × 680 (minimum) |
 |---|---|---|
-| Header | wordmark, tabs, file block with second line, rate, Port, Rescan, Definition, Connect | wordmark hidden, XDF line hidden (in tooltip and Details), connection pickers merged into one button |
+| Header | wordmark, tabs, file block with second line, rate, Port, Rescan, Definition, Connect | wordmark hidden, XDF line hidden (in tooltip and Details), connection pickers merged into one button, tab padding and the margins after the mark and the tabs 8 px, the words "slow link" hidden (rate and icon stay) |
 | Body height | 824 px | 604 px |
 | Tune rail | 256 px, `Frame` | 224 px |
 | Tune inspector | 312 px docked, `Frame` | Hidden; a quiet "Details" toggle in the title row opens it as a 312 px overlay from the right (popup surface) |
@@ -492,6 +507,9 @@ Header 48 px and status bar 28 px on every screen. No horizontal page scroll at 
 | Live channel list | two columns at 1200 px and wider: Pinned left, Not pinned right, each scrolling on its own (5.6) | one column below 1200 px, Pinned then Not pinned; about 11 rows visible |
 | Live session | CSV row (switch, path, Browse…) shown only when not logging; while logging the facts live in the status bar | same |
 | Compare | list of differing items 280 px, pane with A / B / B − A grid | list 224 px, pane as Tune at 1024 |
+| Performance rail | 256 px, `Frame`: Run / Results, then the tests under Pulls, Acceleration and Setup (two-line rows, 5.6); resizable and collapsible as the Tune rail (Ctrl B) | 224 px |
+| Performance pane, Run | padding 24: title row 32, warm-up banners, options row (gear, band, "Compare against", Arm), then the ready check, the running block (reading, elapsed, progress, knock bars, live values, live chart) or the result (figures, flags, conditions, tune, name, description, direction); the run's actions (Cancel; Save result, Discard, Run again) in a bar under the scrolling part, so the primary never scrolls away | padding 16; under 760 px tall the knock bars sit beside the reading and the live chart is 180 px |
+| Performance pane, Results | search (Ctrl K), "Show cold runs", two-line result rows with their tick, headline and flag tags, Compare; a comparison (trace segment, chart, B − A panel) or an opened result replaces the list, with "Back to the list" | same; the chart 240 px |
 
 Tune pane, top to bottom: title row (kind glyph, map id in Cascadia 13 SemiBold, the XDF description in UI 13 `Ink2`, Pin, Details below 1280), banners, toolbar (cell operations only), grid with its axis line ("MAFIGA load, mg/stk" UI 12 `Ink2` + `ldpm_maf_iga_2` Cascadia `Ink3`), key line. The key line holds, left to right: the selection ("4 rows × 3 columns: 3750 to 4500 rpm, 130.0 to 200.0 mg/stk", or for one cell "4000 rpm × 165.0 mg/stk: 33.4 °CRK, raw 152 (0x98)"), the changed legend with its triangle ("2 cells changed since the last save"), the live readout or idle note, and the latest edit message ("Undo: Set 4 cells of ip_iga_ron98_pl__n__maf to 27.8 °CRK"). Inspector sections, top to bottom: Edit limits ("-23.6 to 72.0 °CRK, step 0.375, 8 bit"), Surface ("Drag to turn, or use the arrow keys"; the plot takes keyboard focus), Details (address, size "20 × 16", units, scaling, rows and columns ids with units and point counts), Colour scale (2.2 caption).
 
@@ -564,6 +582,7 @@ The motif is **Bahnschrift numerals**: the DIN 1451 lettering of German road sig
 | Tune | The map grid (highest-contrast pane, the only coloured area) | Save is the strongest control; rail and inspector sit on Frame |
 | Live | The engine-speed reading (rpm dial, hero tile, or the rpm strip with its trace) | Load and advance second tier, channel list third |
 | Compare | The B − A grid of the selected item (or the list of differing items when none is selected) | Copy B into A is secondary; A and B views are a switch away |
+| Performance | The running reading and the live run chart; on Results, the comparison chart | Arm, then Save result, is the one primary; the rail and the banners frame it |
 
 ### 10.3 Motion spec
 

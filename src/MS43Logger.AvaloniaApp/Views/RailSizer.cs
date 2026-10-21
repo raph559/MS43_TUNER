@@ -10,7 +10,8 @@ namespace MS43Logger.AvaloniaApp.Views;
 /// <summary>
 /// The drawing side of an <see cref="ISidePanel"/>: sets the list's width (its own, the user's, or the collapsed strip),
 /// lets its edge be dragged (or moved with the arrow keys, or double-clicked back to the default), and opens it on its
-/// search field. The Tune rail and the Compare list share it, so both behave the same.
+/// search field. The Tune rail, the Compare list and the Performance rail share it, so all behave the same; the Performance
+/// rail has no search field of its own (its search is the results'), so <c>search</c> may be null.
 /// </summary>
 internal sealed class RailSizer
 {
@@ -18,13 +19,13 @@ internal sealed class RailSizer
 
     private readonly Border _host;
     private readonly Border _handle;
-    private readonly TextBox _search;
+    private readonly TextBox? _search;
     private ISidePanel? _panel;
     private double? _dragFrom;
     private double _dragWidth;
     private bool _dragMoved;
 
-    public RailSizer(Border host, Border handle, TextBox search)
+    public RailSizer(Border host, Border handle, TextBox? search)
     {
         _host = host;
         _handle = handle;
@@ -55,7 +56,10 @@ internal sealed class RailSizer
     public void OpenOnSearch()
     {
         _panel?.SetRailCollapsed(false);
-        Dispatcher.UIThread.Post(() => _search.Focus(NavigationMethod.Tab), DispatcherPriority.Loaded);
+        if (_search is { } search)
+        {
+            Dispatcher.UIThread.Post(() => search.Focus(NavigationMethod.Tab), DispatcherPriority.Loaded);
+        }
     }
 
     private void OnPanelChanged(object? sender, PropertyChangedEventArgs e)
