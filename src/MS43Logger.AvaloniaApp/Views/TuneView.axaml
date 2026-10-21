@@ -147,6 +147,9 @@
             <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
+        <Style Selector="WrapPanel#KeyLine TextBlock.dim">
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
 
         <!-- Inspector (system 8): 312 px Frame; below 1280 an overlay from the right, opened by Details. -->
         <Style Selector="Panel#InspectorSlot">
@@ -386,6 +389,10 @@
                                 <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding LiveCursor.Readout, Converter={x:Static ObjectConverters.IsNotNull}}">
                                     <Ellipse Width="8" Height="8" StrokeThickness="1.5" Stroke="{DynamicResource Ink2Brush}" VerticalAlignment="Center" />
                                     <TextBlock Name="LiveReadout" Classes.live="{Binding LiveCursor.ReadoutIsLive}" Text="{Binding LiveCursor.Readout}" />
+                                    <!-- Whether the ECU is reading this map now (system 7.1 key line); Ink3 when it is not, or samples stopped. -->
+                                    <TextBlock Name="LiveUse" Text="{Binding LiveCursor.Use}" Classes.dim="{Binding LiveCursor.UseIsDim}"
+                                               ToolTip.Tip="{Binding LiveCursor.UseDetail}"
+                                               IsVisible="{Binding LiveCursor.Use, Converter={x:Static ObjectConverters.IsNotNull}}" />
                                 </StackPanel>
                                 <controls:NumberText Name="KeyUndo" Value="{Binding UndoTip}" IsVisible="{Binding CanUndo}" />
                             </WrapPanel>

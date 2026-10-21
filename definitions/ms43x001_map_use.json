@@ -1,0 +1,205 @@
+{
+  "format": 1,
+  "softwareId": "43X001",
+  "provenance": {
+      "car bin": "CAR_current_43X001_SP95_STAGE1.bin sha256 8cfe31241aa90717195077f1d931ec3bd28e0e76b435a89472dc1fbdfe6c0717 (read-only copy in testdata/local)",
+      "method": "read-only disassembly of the car bin with ../MS43LAB/tools/dis.py, xref.py and c167dis.py sweeps; frame layout from the 0B B0 builder 0C:467E (../MS43LAB/ghidra/out_ms43x/decompiled.c); key instructions re-read for this file",
+      "notes": "docs/firmware/map-use/ (ve.md, ignition.md, loadstate.md, catheat.md; README.md lists where this file departs from them)",
+      "addresses": "file offsets (CPU address & 0x7FFFF); RAM names as in ms43x001_live_inputs.json",
+      "selection": "every rule here is observed in the code; caveats say what the frame cannot show",
+      "hand-written": "not generated; edit by hand with evidence",
+      "date": "2026-10-21"
+  },
+  "selectors": [
+    {"id": "state", "ram": "F750 bits 0-4: FD2C.8 start, FD2C.9 idle | FD42.13, FD2C.10 part load | FD42.13, FD2C.11 overrun, FD2C.12 overrun cut", "channel": "LUTPL", "offset": "0x00", "bits": 8, "mask": "0xFF",
+     "evidence": "0C:467E builds F750 from FD2D with FD42.13 ORed into bits 1 and 2 (0x44692/0x44696 BOR R6.1/R6.2, FD42.13); FD2C.7-.12 are one-hot, each BSET paired with BFLDL FD9A,#7 (0x29B6C-0x2AE10); FD42.13 (full-load enrichment) is written only at 0x3D472/0x3D476/0x3D4C8"},
+    {"id": "status1", "ram": "F751: bit 1 FD9C.8 (AT in gear), bit 3 FD9A.5 | FD9E.3 | FD9E.4 (cat-heating phases 1-3)", "channel": "CHSTATE", "offset": "0x01", "bits": 8, "mask": "0xFF",
+     "evidence": "0x446B2-0x446BA BMOV R6.11,FD9A.5; BOR R6.11,FD9E.3; BOR R6.11,FD9E.4; F750 bit 9 = FD9C.8 (0C:467E)"},
+    {"id": "vanos", "ram": "820D bits 0-1 (VANOS mode, 2 = active)", "channel": "VANOSACTIVE", "offset": "0x02", "bits": 8, "mask": "0x03",
+     "evidence": "0C:467E: F752 = 820D & 0xFF03 | ...; the cam setpoint selector runs only in mode 2 (0B:2EEE)"},
+    {"id": "speed", "ram": "847F", "channel": "VS", "offset": "0x06", "bits": 8, "mask": "0xFF",
+     "evidence": "frame 0x06 = 847F (0C:467E)"},
+    {"id": "activeVe", "ram": "E31C", "channel": "ACTIVEVE", "offset": "0x10", "bits": 16, "mask": "0xFFFF",
+     "evidence": "0x4476A MOV R8,E31Ch; MOV F760h,R8. E31C has one writer, 0x34938 (curve 0x7B690 on valve overlap 8C08); E31D is its high byte"},
+    {"id": "octane", "ram": "E305", "channel": "RONADFAC", "offset": "0x40", "bits": 8, "mask": "0xFF",
+     "evidence": "0x4488A MOVB RL7,E305h into frame 0x40; the ignition code reads the byte E305 only (0x2C66A)"}
+  ],
+  "factors": [
+    {"id": "octane", "selector": "octane", "offset": 0, "scale": 255, "requires": [],
+     "evidence": "0x2C648-0x2C678: 81C8 = ron98 + round((ron91 - ron98) * E305 / 255); E305 = 0 is all RON98, 255 all RON91"},
+    {"id": "e85Fuel", "cal": "0x70A10", "offset": 128, "scale": 32, "requires": [{"cal": "0x70DF8", "equals": 0}],
+     "evidence": "flex fuel off (cal 0x70DF8 = 0): 8483 = cal 0x70A10 - 0x80; blend 0D:1850 = b + trunc((a - b) * f / 32), f signed. With flex fuel on, 8483 = curve 0x7D654(8487) - 0x80, not modelled"},
+    {"id": "e85Ignition", "cal": "0x70A11", "offset": 128, "scale": 32, "requires": [{"cal": "0x70DF8", "equals": 0}],
+     "evidence": "flex fuel off: 8484 = cal 0x70A11 - 0x80 (read MOVBS 8484h at 0x2C68E); with flex fuel on, curve 0x7D664(8487) - 0x80, not modelled"},
+    {"id": "e85Cam", "cal": "0x70A13", "offset": 128, "scale": 32, "requires": [{"cal": "0x70DF8", "equals": 0}],
+     "evidence": "flex fuel off: 8486 = cal 0x70A13 - 0x80; with flex fuel on, curve 0x7D684(8487) - 0x80, not modelled"}
+  ],
+  "rules": [
+    {"id": "ve", "title": "VE maps", "selection": "observed",
+     "inferred": "That with the MAF load source the VE maps steer the modelled manifold pressure and the transients, not steady fuelling (from the observed formulas, not a run).",
+     "blend": "overlapIndex", "indexSelector": "activeVe",
+     "evidence": "0x3B9DA-0x3BA48: i = E31D - 1, unsigned clamp to 7; i < 7 reads ve[i] x (255 - E31C&0xFF)*128 and ve[i+1] x (E31C&0xFF)*128 (0D:1900 scales by /32768), added saturating (0D:1184); i = 7 reads ve[7] alone. Called on all three load-source paths (0x3B550, 0x3B632, 0x3B70E); the only writer of load E33A",
+     "caveat": "With the MAF load source (cal 0x70DF3 = 1 on the car) the VE result sets the modelled manifold pressure and the transients, not steady fuelling. The weights add up to 255/256 in the firmware.",
+     "cases": [{"when": [], "then": "use"}],
+     "members": [
+       {"data": "0x7EE20", "name": "ip_map_ve_1__map__n", "label": "VE 1", "weight": []},
+       {"data": "0x7F020", "name": "ip_map_ve_2__map__n", "label": "VE 2", "weight": []},
+       {"data": "0x7F220", "name": "ip_map_ve_3__map__n", "label": "VE 3", "weight": []},
+       {"data": "0x7F420", "name": "ip_map_ve_4__map__n", "label": "VE 4", "weight": []},
+       {"data": "0x7F620", "name": "ip_map_ve_5__map__n", "label": "VE 5", "weight": []},
+       {"data": "0x7F820", "name": "ip_map_ve_6__map__n", "label": "VE 6", "weight": []},
+       {"data": "0x7FA20", "name": "ip_map_ve_7__map__n", "label": "VE 7", "weight": []},
+       {"data": "0x7FC20", "name": "ip_map_ve_8__map__n", "label": "VE 8", "weight": []}
+     ]},
+    {"id": "ignitionPartLoad", "title": "Ignition, part load", "selection": "observed",
+     "inferred": "That part load always reads these maps: the guard also skips them while FD2C.4 is set, every traced path into part load clears FD2C.4, but not every path was traced.",
+     "blend": "weights",
+     "evidence": "0x2C2EC branches on FD9A & 7 (1 start, 2 idle, else 0x2C608); guard 0x2C608-0x2C624 reads these maps when FD2C.10 (part load); 0x2C648-0x2C678: 81C8 = ron98 + round((ron91 - ron98) * E305 / 255) (0D:1516); 0x2C67C-0x2C696: 81D3 = blend(e85, 81C8, 8484) (0D:1850)",
+     "caveat": "In overrun the maps are read or not depending on FD2C.2/.4 and FD30.3, which are not logged. While full-load enrichment runs the frame cannot tell idle from part load.",
+     "cases": [
+       {"when": [{"selector": "state", "mask": "0x18", "notIn": [0]}], "then": "unknown", "why": "Overrun: the choice depends on bits the logger does not carry."},
+       {"when": [{"selector": "state", "mask": "0x1F", "in": [4]}], "then": "use"},
+       {"when": [{"selector": "state", "mask": "0x06", "in": [6]}], "then": "unknown", "why": "Full-load enrichment hides idle and part load in the logged state."},
+       {"when": [], "then": "notInUse"}
+     ],
+     "members": [
+       {"data": "0x77315", "name": "ip_iga_ron98_pl__n__maf", "label": "RON98", "weight": ["1-octane", "1-e85Ignition"]},
+       {"data": "0x771D5", "name": "ip_iga_ron91_pl__n__maf", "label": "RON91", "weight": ["octane", "1-e85Ignition"]},
+       {"data": "0x77494", "name": "ip_iga_e85_pl__n__maf", "label": "E85", "weight": ["e85Ignition"]}
+     ]},
+    {"id": "ignitionIdle", "title": "Ignition, idle", "selection": "observed", "blend": "weights",
+     "evidence": "0x2C2EC: FD9A & 7 = 2 (written with FD2C.9) jumps to 0x2C37C, which reads ron98_is and e85_is blended by 8484 (0D:1850); no RON91 map and no octane term",
+     "caveat": "While full-load enrichment runs the frame cannot tell idle from part load.",
+     "cases": [
+       {"when": [{"selector": "state", "mask": "0x1F", "in": [2]}], "then": "use"},
+       {"when": [{"selector": "state", "mask": "0x06", "in": [6]}], "then": "unknown", "why": "Full-load enrichment hides idle and part load in the logged state."},
+       {"when": [], "then": "notInUse"}
+     ],
+     "members": [
+       {"data": "0x775D4", "name": "ip_iga_ron98_is__n__maf", "label": "RON98", "weight": ["1-e85Ignition"]},
+       {"data": "0x77470", "name": "ip_iga_e85_is__n__maf", "label": "E85", "weight": ["e85Ignition"]}
+     ]},
+    {"id": "ignitionMbt", "title": "Ignition, optimum (torque model)", "selection": "observed",
+     "inferred": "That 8025 is the torque model's optimum angle rather than the fired spark (from how it is used with 81C1).",
+     "blend": "weights",
+     "evidence": "0x10258-0x102A2: 8022 = optm_ron98; 8025 = blend(optm_e85, 8022, 8484), on every run of the routine at 09:0000",
+     "caveat": "A torque-model reference that limits torque interventions, not the fired spark.",
+     "cases": [{"when": [], "then": "use"}],
+     "members": [
+       {"data": "0x770A5", "name": "ip_iga_optm_ron98__n__maf", "label": "RON98", "weight": ["1-e85Ignition"]},
+       {"data": "0x76FE5", "name": "ip_iga_optm_e85__n__maf", "label": "E85", "weight": ["e85Ignition"]}
+     ]},
+    {"id": "afrTarget", "title": "Full-load AFR target", "selection": "observed", "blend": "weights",
+     "evidence": "0B:D3AA-D42A reads both maps (0x3D40A, 0x3D41A) blended by 8483; the result reaches fuelling (91A0, 0C:AFA2) only while FD42.13 is set, else 91A0 = 0; frame state bits 1-2 = 11 exactly when FD42.13 is set",
+     "caveat": "Launch control is enabled on the car (cal 0x7132C = 1): at standstill with the pedal at or above cal 0x7132E the target is at least 130 (FDF8.0, not logged). The applied target is logged as AFTARGET (frame 0x42).",
+     "cases": [
+       {"when": [{"selector": "state", "mask": "0x06", "in": [6]}], "then": "use"},
+       {"when": [], "then": "notInUse"}
+     ],
+     "members": [
+       {"data": "0x7D69C", "name": "ip_af_target_ron98__maf__n", "label": "RON98", "weight": ["1-e85Fuel"]},
+       {"data": "0x7D75C", "name": "ip_af_target_e85__maf__n", "label": "E85", "weight": ["e85Fuel"]}
+     ]},
+    {"id": "vanosIdleIntake", "title": "VANOS intake, idle", "selection": "observed", "blend": "weights",
+     "evidence": "0B:39A4 JB FD2C.9 selects the idle maps; intake = blend(0x7636C, 0x76184, 8486), reads at 0B:39D4/39E4; the selector runs only in VANOS mode 2 (0B:2EEE)",
+     "caveat": "Adders for idle and the cat-heating hold follow the map (0B:3A24, 0B:3C2A).",
+     "cases": [
+       {"when": [{"selector": "vanos", "mask": "0x03", "notIn": [2]}], "then": "notInUse"},
+       {"when": [{"selector": "state", "mask": "0x06", "in": [2]}], "then": "use"},
+       {"when": [{"selector": "state", "mask": "0x06", "in": [6]}], "then": "unknown", "why": "Full-load enrichment hides idle and part load in the logged state."},
+       {"when": [], "then": "notInUse"}
+     ],
+     "members": [
+       {"data": "0x7636C", "name": "ip_cam_sp_ron98_in_is__n__maf_ivvt", "label": "RON98", "weight": ["1-e85Cam"]},
+       {"data": "0x76184", "name": "ip_cam_sp_e85_in_is__n__maf_ivvt", "label": "E85", "weight": ["e85Cam"]}
+     ]},
+    {"id": "vanosIdleExhaust", "title": "VANOS exhaust, idle", "selection": "observed", "blend": "weights",
+     "evidence": "0B:39A4 JB FD2C.9 selects the idle maps; exhaust = blend(0x76278, 0x76090, 8486), reads at 0B:3A00/3A10; the selector runs only in VANOS mode 2 (0B:2EEE)",
+     "caveat": "Adders for idle and the cat-heating hold follow the map (0B:3A24, 0B:3C2A).",
+     "cases": [
+       {"when": [{"selector": "vanos", "mask": "0x03", "notIn": [2]}], "then": "notInUse"},
+       {"when": [{"selector": "state", "mask": "0x06", "in": [2]}], "then": "use"},
+       {"when": [{"selector": "state", "mask": "0x06", "in": [6]}], "then": "unknown", "why": "Full-load enrichment hides idle and part load in the logged state."},
+       {"when": [], "then": "notInUse"}
+     ],
+     "members": [
+       {"data": "0x76278", "name": "ip_cam_sp_ron98_ex_is__n__maf_ivvt", "label": "RON98", "weight": ["1-e85Cam"]},
+       {"data": "0x76090", "name": "ip_cam_sp_e85_ex_is__n__maf_ivvt", "label": "E85", "weight": ["e85Cam"]}
+     ]},
+    {"id": "vanosLoad", "title": "VANOS, part and full load", "selection": "observed", "blend": "weights",
+     "evidence": "0B:39A4: not idle -> JNB FD38.14 picks the part-load maps (0B:3ACC-0B:3C26) or the full-load curves (0B:3AD8-3B20), each blended with its E85 twin by 8486; only in VANOS mode 2 (0B:2EEE)",
+     "caveat": "Part vs full load is FD38.14 (E33B above curve 0x75D7F, held while the pedal is released), which the frame does not carry, so these maps can only be ruled out. With FD9C.3 clear the part-load result is pulled toward 160/120.",
+     "cases": [
+       {"when": [{"selector": "vanos", "mask": "0x03", "notIn": [2]}], "then": "notInUse"},
+       {"when": [{"selector": "state", "mask": "0x06", "in": [2]}], "then": "notInUse"},
+       {"when": [], "then": "possible"}
+     ],
+     "members": [
+       {"data": "0x76390", "name": "ip_cam_sp_ron98_in_pl__n__maf_ivvt", "label": "RON98", "weight": ["1-e85Cam"]},
+       {"data": "0x7629C", "name": "ip_cam_sp_ron98_ex_pl__n__maf_ivvt", "label": "RON98", "weight": ["1-e85Cam"]},
+       {"data": "0x7635C", "name": "ip_cam_sp_ron98_in_fl__n", "label": "RON98", "weight": ["1-e85Cam"]},
+       {"data": "0x76268", "name": "ip_cam_sp_ron98_ex_fl__n", "label": "RON98", "weight": ["1-e85Cam"]},
+       {"data": "0x761A8", "name": "ip_cam_sp_e85_in_pl__n__maf_ivvt", "label": "E85", "weight": ["e85Cam"]},
+       {"data": "0x760B4", "name": "ip_cam_sp_e85_ex_pl__n__maf_ivvt", "label": "E85", "weight": ["e85Cam"]},
+       {"data": "0x76174", "name": "ip_cam_sp_e85_in_fl__n", "label": "E85", "weight": ["e85Cam"]},
+       {"data": "0x76080", "name": "ip_cam_sp_e85_ex_fl__n", "label": "E85", "weight": ["e85Cam"]}
+     ]},
+    {"id": "catHeat", "title": "Catalyst heating ignition, phase 1", "selection": "observed",
+     "inferred": "What each cat-heating bit means (phase 1 hold and fade, phase 2 standstill, phase 3 idle); the not-in-use cases are read in the code.",
+     "blend": "weights",
+     "evidence": "read only while FD9A.5 is set and the engine is not idling (FD9C.3 picks which of the two); not applied in full load; with FD9A.5, FD9E.3 and FD9E.4 clear every clear path has reset 849C/849D/E382 to neutral",
+     "caveat": "With the cat-heating bit set the frame cannot tell the three phases apart, and the fade factors (km counter, coolant, time after start) are not logged.",
+     "cases": [
+       {"when": [{"selector": "status1", "mask": "0x08", "in": [0]}], "then": "notInUse"},
+       {"when": [{"selector": "state", "mask": "0x06", "in": [2, 6]}], "then": "notInUse"},
+       {"when": [], "then": "possible"}
+     ],
+     "members": [
+       {"data": "0x76D41", "name": "ip_iga_ch__n__maf", "label": "Cat heating", "weight": []},
+       {"data": "0x76DC1", "name": "ip_iga_ch_cat_var__n__maf", "label": "Cat heating", "weight": []}
+     ]},
+    {"id": "catHeatIdle", "title": "Catalyst heating ignition, idle", "selection": "observed",
+     "inferred": "What each cat-heating bit means (phase 1 hold and fade, phase 2 standstill, phase 3 idle); the not-in-use cases are read in the code.",
+     "blend": "weights",
+     "evidence": "read while FD9A.5 is set at idle, or while FD9E.4 (phase 3: idle, or part load at zero speed) is set",
+     "caveat": "With the cat-heating bit set the frame cannot tell the three phases apart, and the fade factors are not logged.",
+     "cases": [
+       {"when": [{"selector": "status1", "mask": "0x08", "in": [0]}], "then": "notInUse"},
+       {"when": [{"selector": "state", "mask": "0x06", "in": [0, 4]}, {"selector": "speed", "mask": "0xFF", "notIn": [0]}], "then": "notInUse"},
+       {"when": [], "then": "possible"}
+     ],
+     "members": [
+       {"data": "0x76E01", "name": "ip_iga_ch_is__n", "label": "Cat heating", "weight": []}
+     ]},
+    {"id": "catHeatOther", "title": "Catalyst heating, phase 2 and fuel", "selection": "observed",
+     "inferred": "What each cat-heating bit means (phase 1 hold and fade, phase 2 standstill, phase 3 idle); the not-in-use cases are read in the code.",
+     "blend": "weights",
+     "evidence": "ip_iga_ch_2 is read only while FD9E.3 is set (0D:D8D4); ip_ti_ch only while FD52.14 is set, which implies FD9A.5",
+     "caveat": "With the cat-heating bit set the frame cannot tell the three phases apart, and the fade factors are not logged.",
+     "cases": [
+       {"when": [{"selector": "status1", "mask": "0x08", "in": [0]}], "then": "notInUse"},
+       {"when": [], "then": "possible"}
+     ],
+     "members": [
+       {"data": "0x76D81", "name": "ip_iga_ch_2__n__pvs_av", "label": "Cat heating", "weight": []},
+       {"data": "0x78773", "name": "ip_ti_ch__n__maf", "label": "Cat heating", "weight": []}
+     ]},
+    {"id": "catHeatVanos", "title": "Catalyst heating VANOS factor", "selection": "observed",
+     "inferred": "What each cat-heating bit means (phase 1 hold and fade, phase 2 standstill, phase 3 idle); the not-in-use cases are read in the code.",
+     "blend": "weights",
+     "evidence": "read at 0x33C3E only while FD52.13 (implies FD9A.5) and FD9C.8 (AT in gear) are set; with FD9C.8 clear nothing is added",
+     "caveat": "With both bits set the frame cannot tell the hold from the fade or from phases 2 and 3.",
+     "cases": [
+       {"when": [{"selector": "status1", "mask": "0x08", "in": [0]}], "then": "notInUse"},
+       {"when": [{"selector": "status1", "mask": "0x02", "in": [0]}], "then": "notInUse"},
+       {"when": [], "then": "possible"}
+     ],
+     "members": [
+       {"data": "0x768B4", "name": "ip_fac_ivvt_ch__n__maf_ivvt", "label": "Cat heating", "weight": []}
+     ]}
+  ],
+  "leftOut": [
+    {"data": ["0x76CDD", "0x76D0D"], "why": "Read only while FD18.15 is set, which the logger does not carry (knock adaptation)."},
+    {"data": ["0x78055", "0x78079", "0x780C9", "0x780ED"], "why": "Blended by coolant at start (8450), which the logger does not carry."}
+  ]
+}

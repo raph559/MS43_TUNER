@@ -21,13 +21,13 @@ public class LiveCursorDrawingTests
     {
         private readonly WriteableBitmap _bitmap;
 
-        public Frame(TopLevel window)
-        {
-            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
-            _bitmap = window.CaptureRenderedFrame()!;
-        }
+        public Frame(TopLevel window) => _bitmap = Screens.Capture(window)!;
 
         public bool AnyNeedle(Rect area) => Any(area, Needle);
+
+        /// <summary>Pixels within 12 of <paramref name="colour"/> on each channel, such as the theme's Ink3.</summary>
+        public bool AnyNear(Rect area, Avalonia.Media.Color colour) =>
+            Any(area, (r, g, b) => Math.Abs(r - colour.R) <= 12 && Math.Abs(g - colour.G) <= 12 && Math.Abs(b - colour.B) <= 12);
 
         public bool AnyOrangeNear(Point point, double radius = 3) => Any(new Rect(point.X - radius, point.Y - radius, 2 * radius, 2 * radius), Orangeish);
 
@@ -116,6 +116,95 @@ public class LiveCursorDrawingTests
         shell.IsNight = false;
         Screens.Save(window, "live-cursor-map-day");
         shell.IsNight = true;
+    }
+
+    [AvaloniaFact]
+    public async Task UnusedMapGreysTheCursor()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, _) = await LiveFeed.OpenAsync();
+        var grid = Find.Named<MapGrid>(window, "MapGrid");
+        LiveFeed.Push(shell, new (int, byte)[] { (0x00, 0x02) }, ("N", 2480), ("MAFIGA", 1415));
+        shell.Tune.LiveCursor.Tick();
+        var fix = shell.Tune.Editor!.Live!.Fix;
+        var at = InWindow(grid, window, grid.CursorPoint(fix.Row!.Value.Position, fix.Col!.Value.Position));
+
+        using (var frame = new Frame(window))
+        {
+            Assert.True(shell.Tune.Editor.Live.IsUnused);
+            Assert.False(frame.AnyNeedle(BoundsInWindow(grid, window)), "orange on a map the ECU is not using");
+            Assert.True(frame.AnyNear(new Rect(at.X - 1, at.Y - 1, 3, 3), ThemeBrushes.Color(grid, "Ink3Brush")), "no Ink3 dot at the fix");
+            Screens.Save(window, "live-cursor-not-in-use-night");
+        }
+
+        var app = Avalonia.Application.Current!;
+        app.RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Light;
+        try
+        {
+            using var day = new Frame(window);
+            var dayInk3 = ThemeBrushes.Color(grid, "Ink3Brush");
+            Assert.Equal(Avalonia.Media.Color.Parse("#5B6576"), dayInk3);
+            Assert.True(day.AnyNear(new Rect(at.X - 1, at.Y - 1, 3, 3), dayInk3), "no Day Ink3 dot at the fix");
+            Screens.Save(window, "live-cursor-not-in-use-day");
+        }
+        finally
+        {
+            app.RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Dark;
+        }
+
+        LiveFeed.Push(shell, ("N", 2480), ("MAFIGA", 1415));
+        shell.Tune.LiveCursor.Tick();
+        using var live = new Frame(window);
+        Assert.True(live.AnyNeedle(new Rect(at, new Size(1, 1))), "no orange dot once the map is in use");
+        Screens.Save(window, "live-cursor-in-use-night");
+    }
+
+    [AvaloniaFact]
+    public async Task UnusedMapOffTheGridIsAFilledGreyDotNotTheStaleRing()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, _) = await LiveFeed.OpenAsync();
+        var grid = Find.Named<MapGrid>(window, "MapGrid");
+        LiveFeed.Push(shell, new (int, byte)[] { (0x00, 0x02) }, ("N", 7200), ("MAFIGA", 20000));
+        shell.Tune.LiveCursor.Tick();
+        Assert.True(shell.Tune.Editor!.Live!.IsUnused);
+        var last = grid.CellBounds(19, 15);
+        var edge = InWindow(grid, window, new Point(last.Right, last.Bottom));
+
+        using var frame = new Frame(window);
+        // The mark is centred on the grid's corner and clipped there; one pixel inside is in a filled dot but in the hole of the stale ring.
+        Assert.True(frame.AnyNear(new Rect(edge.X - 1.5, edge.Y - 1.5, 1, 1), ThemeBrushes.Color(grid, "Ink3Brush")), "the centre of the mark is not filled: it reads as the stale ring");
+    }
+
+    [AvaloniaFact]
+    public async Task UnusedCursorTurnsIntoTheStaleRing()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, time) = await LiveFeed.OpenAsync();
+        var grid = Find.Named<MapGrid>(window, "MapGrid");
+        LiveFeed.Push(shell, new (int, byte)[] { (0x00, 0x02) }, ("N", 2480), ("MAFIGA", 1415));
+        shell.Tune.LiveCursor.Tick();
+        time.Advance(TimeSpan.FromSeconds(2));
+        shell.Tune.LiveCursor.Tick();
+        var live = shell.Tune.Editor!.Live!;
+        var at = InWindow(grid, window, grid.CursorPoint(live.Fix.Row!.Value.Position, live.Fix.Col!.Value.Position));
+
+        using var frame = new Frame(window);
+        Assert.True(live.IsStale && live.IsUnused);
+        Assert.False(frame.AnyNear(new Rect(at.X - 0.5, at.Y - 0.5, 1, 1), ThemeBrushes.Color(grid, "Ink3Brush")), "a filled dot: the stale ring was not drawn");
+        Assert.True(frame.AnyNear(new Rect(at.X - 4, at.Y - 4, 8, 8), ThemeBrushes.Color(grid, "Ink3Brush")), "no Ink3 ring");
     }
 
     [AvaloniaFact]

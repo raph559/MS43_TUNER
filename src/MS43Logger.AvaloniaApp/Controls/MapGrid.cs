@@ -393,10 +393,13 @@ public sealed class MapGrid : Control
         }
     }
 
-    /// <summary>The engine's position (system 2.4): an 8 px Now dot with a Pane halo and a trail thinning with age.</summary>
+    /// <summary>
+    /// The engine's position (system 2.4): an 8 px Now dot with a Pane halo and a trail thinning with age; all in Ink3 when the ECU
+    /// is not reading this map, so orange stays on what the engine uses.
+    /// </summary>
     private void DrawLive(DrawingContext context, LiveCursorState live, TableValues values, Color pane, Color ink3)
     {
-        var now = ThemeBrushes.Color(this, "NowBrush");
+        var now = live.IsUnused ? ink3 : ThemeBrushes.Color(this, "NowBrush");
         var halo = new SolidColorBrush(pane);
         var at = Clamped(live.Fix, values);
         if (live.IsStale)
@@ -416,9 +419,10 @@ public sealed class MapGrid : Control
             context.DrawLine(new Pen(new SolidColorBrush(now), width, lineCap: PenLineCap.Round), points[i - 1], points[i]);
         }
 
-        if (live.Fix.Inputs.Any(input => input.Clamped != 0))
+        if (!live.IsUnused && live.Fix.Inputs.Any(input => input.Clamped != 0))
         {
-            // Off the map: a Now ring clamped to the grid's edge.
+            // Off the map: a Now ring clamped to the grid's edge. A map not in use keeps its filled Ink3 dot there, so it never
+            // reads as the stale ring.
             context.DrawEllipse(null, new Pen(halo, 5), at, 3.25, 3.25);
             context.DrawEllipse(null, new Pen(new SolidColorBrush(now), 1.5), at, 3.25, 3.25);
             return;
@@ -431,7 +435,7 @@ public sealed class MapGrid : Control
     // 3 px Now bars in the header gutters at the cursor's position, over the sticky headers.
     private void DrawTicks(DrawingContext context, LiveCursorState live, TableValues values)
     {
-        var now = new SolidColorBrush(ThemeBrushes.Color(this, "NowBrush"));
+        var now = new SolidColorBrush(ThemeBrushes.Color(this, live.IsUnused ? "Ink3Brush" : "NowBrush"));
         var at = Clamped(live.Fix, values);
         var scroll = Scroll;
         if (values.Cols > 1)
