@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using Avalonia.Threading;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
@@ -135,6 +136,104 @@ public class MapGridTests
         Math.Abs(expected.R - actual.R) <= tolerance && Math.Abs(expected.G - actual.G) <= tolerance && Math.Abs(expected.B - actual.B) <= tolerance;
 
     private static Point InWindow(MapGrid grid, MainWindow window, Point point) => grid.TranslatePoint(point, window)!.Value;
+
+    // Reported: the selection ring of a cell in the first row or column was cut by the header bands painted over it.
+    [AvaloniaFact]
+    public async Task TheSelectionRingIsWholeOnTheFirstRowAndColumn()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, grid) = await Open();
+        shell.Tune.Editor!.Selection = new CellRange(0, 0, 0, 0);
+        Dispatcher.UIThread.RunJobs();
+        var cell = grid.CellBounds(0, 0);
+        var ink1 = ((Avalonia.Media.ISolidColorBrush)grid.FindResource(grid.ActualThemeVariant, "Ink1Brush")!).Color;
+
+        var above = PixelAt(window, InWindow(grid, window, new Point(cell.Center.X, cell.Top - 1.5)));
+        var left = PixelAt(window, InWindow(grid, window, new Point(cell.Left - 1.5, cell.Center.Y)));
+
+        Assert.True(Near(ink1, above, 24), $"above the cell: {above}, ring {ink1}");
+        Assert.True(Near(ink1, left, 24), $"left of the cell: {left}, ring {ink1}");
+    }
+
+    [AvaloniaFact]
+    public async Task TheSelectionGlidesToTheNewCell()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var animations = MotionSettings.AnimationsEnabled;
+        MotionSettings.AnimationsEnabled = true;
+        try
+        {
+            var (_, shell, grid) = await Open();
+            var editor = shell.Tune.Editor!;
+            editor.Selection = new CellRange(0, 0, 0, 0);
+            Settle(grid);
+            var from = grid.SelectionBox!.Value;
+
+            var since = System.Diagnostics.Stopwatch.StartNew();
+            editor.Selection = new CellRange(5, 5, 5, 5);
+            grid.InvalidateVisual();
+            Dispatcher.UIThread.RunJobs();
+            var target = grid.CellBounds(5, 5).Inflate(1);
+            if (since.Elapsed < MapGrid.SelectionGlide / 2)
+            {
+                Assert.NotEqual(target, grid.SelectionBox);
+                Assert.True(Distance(grid.SelectionBox!.Value, from) < Distance(target, from), "it starts from the old cell");
+            }
+
+            Settle(grid);
+            Assert.Equal(target, grid.SelectionBox);
+        }
+        finally
+        {
+            MotionSettings.AnimationsEnabled = animations;
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task WithAnimationsOffTheSelectionJumps()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var animations = MotionSettings.AnimationsEnabled;
+        MotionSettings.AnimationsEnabled = false;
+        try
+        {
+            var (_, shell, grid) = await Open();
+            shell.Tune.Editor!.Selection = new CellRange(5, 5, 5, 5);
+
+            Assert.Equal(grid.CellBounds(5, 5).Inflate(1), grid.SelectionBox);
+        }
+        finally
+        {
+            MotionSettings.AnimationsEnabled = animations;
+        }
+    }
+
+    private static double Distance(Rect a, Rect b) => Point.Distance(a.Center, b.Center);
+
+    private static void Settle(MapGrid grid)
+    {
+        for (var i = 0; i < 20; i++)
+        {
+            Thread.Sleep(20);
+            Dispatcher.UIThread.RunJobs();
+            Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        }
+
+        grid.InvalidateVisual();
+        Dispatcher.UIThread.RunJobs();
+    }
 
     [AvaloniaFact]
     public async Task HatchedRowIsOutOfTheColourRange()

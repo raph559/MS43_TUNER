@@ -570,6 +570,7 @@ The transitions live in `Theme/Motion.axaml`, which `App.ApplyMotion` loads only
 | Menus, picker lists, tooltips | Fade in and drop 4 px, 120 ms | Instant |
 | Banners | Fade in and slide down 6 px, 180 ms | Instant |
 | Switch knob | Slides 150 ms | Jumps |
+| Map selection | The selection box glides from the old cell or range to the new one, 120 ms, cubic ease-out (`MapGrid.SelectionGlide`); typing in a cell does not glide | Jumps |
 | Live cursor | Redrawn at most 30 times a second (`LiveCursorController.MaxRedrawsPerSecond`), drawn exactly at the sample, never tweened between samples; stale after 1 s (`StaleAfter`) | trail drawn without width falloff; dot unchanged |
 | Just-edited flash | 450 ms (`MapGrid.FlashTime`). Frame 0: the cell fill is the cell's final text colour (black or white per 2.3), so start and end differ by 4.58:1 or more. It eases out (cubic) to the new fill. The text colour is recomputed from the blended fill every frame, so the number stays at 4.58:1 or more throughout. Replaces today's white 50 % overlay, which is invisible on light Day cells | No flash; the changed triangle and the key-line message ("Set 4 cells to 27.8 °CRK") confirm the edit |
 
