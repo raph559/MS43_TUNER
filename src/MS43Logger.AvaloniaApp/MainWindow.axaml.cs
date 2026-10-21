@@ -38,6 +38,7 @@ public partial class MainWindow : Window
             return answer is SaveChoice choice ? choice : SaveChoice.Cancel;
         };
 
+        UpdateWindowButtons();
         Closing += OnClosing;
         AddHandler(KeyDownEvent, OnShortcut, RoutingStrategies.Tunnel);
         shell.Live.PropertyChanged += OnLiveChanged;
@@ -62,15 +63,64 @@ public partial class MainWindow : Window
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
+        if (change.Property == WindowStateProperty)
+        {
+            UpdateWindowButtons();
+        }
+
         if (change.Property == ClientSizeProperty)
         {
             // Layout steps of system 8: below 1280 px the header compacts, below 1200 px lists go to one column.
             Classes.Set("compact", ClientSize.Width < 1280);
+            Classes.Set("compactheader", ClientSize.Width < 1280 + WindowButtonsWidth);
             Classes.Set("tight", ClientSize.Width < 1200);
 
             // Below 760 px of height Live's pinned tiles give their room to the list (system 8).
             Classes.Set("short", ClientSize.Height < 760);
         }
+    }
+
+    // The header stands in for the system title bar: a press on its empty parts moves the window (Windows snaps it as
+    // usual), a double-click maximizes or restores. Presses on its buttons, tabs and pickers are handled by them first.
+    private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        if (e.ClickCount == 2)
+        {
+            ToggleMaximized();
+        }
+        else
+        {
+            BeginMoveDrag(e);
+        }
+
+        e.Handled = true;
+    }
+
+    /// <summary>Three 46 px window buttons plus the 8 px before them: the header's right padding.</summary>
+    private const double WindowButtonsWidth = 146;
+
+    private void Minimize_Click(object? sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+
+    private void Maximize_Click(object? sender, RoutedEventArgs e) => ToggleMaximized();
+
+    // Same path as Alt F4: the unsaved-edits prompt in OnClosing still asks first.
+    private void Close_Click(object? sender, RoutedEventArgs e) => Close();
+
+    private void ToggleMaximized() =>
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+    private void UpdateWindowButtons()
+    {
+        var maximized = WindowState == WindowState.Maximized;
+        Classes.Set("maximized", maximized);
+        var label = maximized ? "Restore down" : "Maximize";
+        ToolTip.SetTip(MaximizeButton, label);
+        Avalonia.Automation.AutomationProperties.SetName(MaximizeButton, label);
     }
 
     private void OnLiveChanged(object? sender, PropertyChangedEventArgs e)
@@ -148,8 +198,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        var tune = Shell.Tune;
-        var typing = FocusManager?.GetFocusedElement() is TextBox;
+        // A field keeps Ctrl Z for its own text, except the number fields that commit edits (class "commits"): they
+        // empty or keep the number once it is applied, so Ctrl Z there means the edit, not the typing.
+        var typing = FocusManager?.GetFocusedElement() is TextBox box && !box.Classes.Contains("commits");
+        var undos = Shell.IsLive ? Shell.Live.Undos : Shell.Tune.Undos;
         switch (e.Key)
         {
             case Key.S when e.KeyModifiers.HasFlag(KeyModifiers.Shift):
@@ -175,13 +227,14 @@ public partial class MainWindow : Window
                 this.GetVisualDescendants().OfType<Avalonia.Controls.TextBox>()
                     .FirstOrDefault(box => box.Name == field && box.IsEffectivelyVisible)?.Focus(NavigationMethod.Tab);
                 break;
-            case Key.Z when !typing:
-                e.Handled = true;
-                tune.Undo();
-                break;
+            case Key.Z when !typing && e.KeyModifiers.HasFlag(KeyModifiers.Shift):
             case Key.Y when !typing:
                 e.Handled = true;
-                tune.Redo();
+                undos.Redo();
+                break;
+            case Key.Z when !typing:
+                e.Handled = true;
+                undos.Undo();
                 break;
         }
     }

@@ -1017,6 +1017,9 @@ public class MainWindowViewModel : INotifyPropertyChanged
         CsvPath = NextCsvPath;
     }
 
+    /// <summary>Live's undo history: channel pins. Tune's edits have their own, so Ctrl Z here never changes the bin.</summary>
+    public UndoStack Undos { get; } = new();
+
     public void TogglePinned(DecodedValueViewModel channel)
     {
         if (channel is null)
@@ -1024,6 +1027,13 @@ public class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
+        var label = (channel.IsPinned ? "Unpin " : "Pin ") + channel.Title;
+        FlipPinned(channel);
+        Undos.Push(new UndoStep(label, () => FlipPinned(channel), () => FlipPinned(channel)));
+    }
+
+    private void FlipPinned(DecodedValueViewModel channel)
+    {
         channel.IsPinned = !channel.IsPinned;
         ApplyFilter();
     }

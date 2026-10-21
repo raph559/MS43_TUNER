@@ -45,6 +45,7 @@ public sealed class TuneViewModel : ViewModelBase
     private readonly HashSet<string> _expanded = new(StringComparer.Ordinal);
     private CalibrationDocument? _document;
     private EditHistory? _history;
+    private int _historyDepth;
     private XdfCatalog? _catalog;
     private XdfItem? _selectedItem;
     private TableEditorViewModel? _editor;
@@ -73,6 +74,14 @@ public sealed class TuneViewModel : ViewModelBase
 
     public TuneViewModel(AppSettings settings, TimeProvider? time = null)
     {
+        Undos.Changed += (_, _) =>
+        {
+            OnPropertyChanged(nameof(CanUndo));
+            OnPropertyChanged(nameof(CanRedo));
+            OnPropertyChanged(nameof(UndoTip));
+            OnPropertyChanged(nameof(RedoTip));
+        };
+
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         LiveCursor = new LiveCursorController(time);
     }
@@ -271,13 +280,16 @@ public sealed class TuneViewModel : ViewModelBase
     /// <summary>The number typed in the toolbar's value box.</summary>
     public string ToolValue { get => _toolValue; set => SetField(ref _toolValue, value ?? string.Empty); }
 
-    public bool CanUndo => History?.CanUndo ?? false;
+    /// <summary>Tune's and Compare's undo history: calibration edits and item pins, in the order they were made.</summary>
+    public UndoStack Undos { get; } = new();
 
-    public bool CanRedo => History?.CanRedo ?? false;
+    public bool CanUndo => Undos.CanUndo;
 
-    public string UndoTip => History?.NextUndoLabel is { } label ? "Undo: " + label : "Nothing to undo";
+    public bool CanRedo => Undos.CanRedo;
 
-    public string RedoTip => CanRedo ? "Redo (Ctrl Y)" : "Nothing to redo";
+    public string UndoTip => Undos.NextUndoLabel is { } label ? "Undo: " + label : "Nothing to undo";
+
+    public string RedoTip => Undos.NextRedoLabel is { } label ? "Redo: " + label : "Nothing to redo";
 
     /// <summary>Runs a toolbar operation on the selected cells; Set, Add and Scale % use <see cref="ToolValue"/>.</summary>
     public bool RunTool(EditKind kind)
@@ -298,9 +310,9 @@ public sealed class TuneViewModel : ViewModelBase
         return editor.Apply(new EditRequest(kind, value));
     }
 
-    public void Undo() => History?.Undo();
+    public void Undo() => Undos.Undo();
 
-    public void Redo() => History?.Redo();
+    public void Redo() => Undos.Redo();
 
     /// <summary>Saves to the open file, or to <paramref name="path"/> (Save As). Problems are shown in <see cref="ErrorMessage"/>.</summary>
     public bool Save(string? path = null)
@@ -541,7 +553,15 @@ public sealed class TuneViewModel : ViewModelBase
 
     public void TogglePin(XdfItem item)
     {
-        _settings.TogglePin(item.Title);
+        var title = item.Title;
+        var label = (_settings.IsPinned(title) ? "Unpin " : "Pin ") + title;
+        FlipPin(title);
+        Undos.Push(new UndoStep(label, () => FlipPin(title), () => FlipPin(title)));
+    }
+
+    private void FlipPin(string title)
+    {
+        _settings.TogglePin(title);
         OnPropertyChanged(nameof(PinText));
         RebuildRail();
     }
@@ -567,13 +587,21 @@ public sealed class TuneViewModel : ViewModelBase
 
         Document = document;
         document.Changed += OnDocumentChanged;
-        History = new EditHistory(document);
-        History.Changed += (_, _) =>
+        // A new file starts a new history; pins made before it are no longer undone from here.
+        Undos.Clear();
+        var history = new EditHistory(document);
+        History = history;
+        _historyDepth = 0;
+        history.Changed += (_, _) =>
         {
-            OnPropertyChanged(nameof(CanUndo));
-            OnPropertyChanged(nameof(CanRedo));
-            OnPropertyChanged(nameof(UndoTip));
-            OnPropertyChanged(nameof(RedoTip));
+            // Every edit goes through EditHistory.Apply (grid, value box, switches, Compare's copy); each new one becomes
+            // a step here. Steps replayed by Ctrl Z or Ctrl Y move the count too, but are already on the stack.
+            if (!Undos.IsReplaying && history.UndoCount > _historyDepth && history.NextUndoLabel is { } label)
+            {
+                Undos.Push(new UndoStep(label, () => history.Undo(), () => history.Redo()));
+            }
+
+            _historyDepth = history.UndoCount;
         };
         Catalog = new XdfCatalog(document.Xdf);
         PlateFile = Path.GetFileName(document.Path ?? "untitled.bin");

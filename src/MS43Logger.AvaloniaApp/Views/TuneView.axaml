@@ -318,7 +318,7 @@
                 <WrapPanel Name="ToolBar" DockPanel.Dock="Top" ItemSpacing="12" LineSpacing="8"
                            IsVisible="{Binding SelectedItem, Converter={x:Static ObjectConverters.IsNotNull}}"
                            IsEnabled="{Binding !IsReadOnlyItem}" ToolTip.Tip="{Binding ReadOnlyReason}" ToolTip.ShowOnDisabled="True">
-                    <TextBox Name="ToolValue" Width="120" Height="32" Classes="data13" Watermark="Value" Text="{Binding ToolValue}" KeyDown="ToolValue_KeyDown"
+                    <TextBox Name="ToolValue" Width="120" Height="32" Classes="data13 commits" Watermark="Value" Text="{Binding ToolValue}" KeyDown="ToolValue_KeyDown"
                              AutomationProperties.Name="Value" IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}">
                         <TextBox.InnerRightContent>
                             <TextBlock Classes="meta" Text="{Binding Editor.Units, FallbackValue=''}" VerticalAlignment="Center" Margin="6,0,10,0" />
@@ -340,7 +340,7 @@
                         </StackPanel>
                     </Border>
                     <!-- A value's exact entry (system 5.13): the Value field with its unit, then Set, secondary since Save is the primary. -->
-                    <TextBox Name="ValueInput" Width="120" Height="32" Classes="data13" Watermark="Value" Text="{Binding Value.Input, FallbackValue=''}"
+                    <TextBox Name="ValueInput" Width="120" Height="32" Classes="data13 commits" Watermark="Value" Text="{Binding Value.Input, FallbackValue=''}"
                              KeyDown="ValueInput_KeyDown" AutomationProperties.Name="Value" IsVisible="{Binding Value.IsValue, FallbackValue=False}">
                         <TextBox.InnerRightContent>
                             <TextBlock Classes="meta" Text="{Binding Value.Units, FallbackValue=''}" VerticalAlignment="Center" Margin="6,0,10,0" />
