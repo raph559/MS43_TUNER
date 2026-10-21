@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Linq;
 using Avalonia;
 using Avalonia.Threading;
@@ -933,6 +934,10 @@ public sealed class PerformanceRunViewModel : ViewModelBase
                 return;
             }
 
+            OnPropertyChanged(nameof(TyreWidth));
+            OnPropertyChanged(nameof(TyreAspect));
+            OnPropertyChanged(nameof(TyreRim));
+
             if (RunMath.TyreCircumference(_tyreSize) is not null)
             {
                 _owner.Settings.TyreSize = _tyreSize.Trim();
@@ -949,6 +954,39 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     }
 
     public string? TyreError { get => _tyreError; private set => SetField(ref _tyreError, value); }
+
+    /// <summary>Tyre widths a shop offers, 135 to 355 mm in 10 mm steps.</summary>
+    public IReadOnlyList<int> TyreWidths { get; } = Enumerable.Range(0, 23).Select(i => 135 + 10 * i).ToArray();
+
+    /// <summary>Profiles (height as a share of the width), 25 to 85 in steps of 5.</summary>
+    public IReadOnlyList<int> TyreAspects { get; } = Enumerable.Range(0, 13).Select(i => 25 + 5 * i).ToArray();
+
+    /// <summary>Rim diameters, 13 to 22 inches.</summary>
+    public IReadOnlyList<int> TyreRims { get; } = Enumerable.Range(13, 10).ToArray();
+
+    // The three pickers read and write TyreSize, so the saved text stays the one source ("205/55 R16").
+    public int? TyreWidth { get => TyreParts(_tyreSize)?.Width; set => PickTyre(value, TyreAspect, TyreRim); }
+
+    public int? TyreAspect { get => TyreParts(_tyreSize)?.Aspect; set => PickTyre(TyreWidth, value, TyreRim); }
+
+    public int? TyreRim { get => TyreParts(_tyreSize)?.Rim; set => PickTyre(TyreWidth, TyreAspect, value); }
+
+    private void PickTyre(int? width, int? aspect, int? rim)
+    {
+        if (width is { } w && aspect is { } a && rim is { } r)
+        {
+            TyreSize = $"{w}/{a} R{r}";
+            OnPropertyChanged(nameof(TyreWidth));
+            OnPropertyChanged(nameof(TyreAspect));
+            OnPropertyChanged(nameof(TyreRim));
+        }
+    }
+
+    // "205/55 R16", "205/55R16", "225/45 ZR17": width, profile and rim; null for anything else.
+    private static (int Width, int Aspect, int Rim)? TyreParts(string size) =>
+        System.Text.RegularExpressions.Regex.Match(size ?? "", @"^\s*(\d{3})\s*/\s*(\d{2})\s*Z?R\s*(\d{2})\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase) is { Success: true } m
+            ? (int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture), int.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture), int.Parse(m.Groups[3].Value, CultureInfo.InvariantCulture))
+            : null;
 
     public bool Automatic
     {

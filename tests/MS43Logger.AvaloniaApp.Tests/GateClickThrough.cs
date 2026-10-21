@@ -670,7 +670,9 @@ internal static class GateClickThrough
 
         Choose("car");
         Enter("MassBox", "1520", () => settings.TestMassKg == 1520, "the test mass with the driver, saved as typed");
-        Enter("TyreBox", "225/45 R17", () => settings.TyreSize == "225/45 R17", "the tyre size, saved once it reads");
+        c.Note(c.Named<Control>("TyreWidthPicker"), "picks the tyre width; TyreSizeIsPickedFromThreeLists sets all three and checks the saved size");
+        c.Note(c.Named<Control>("TyreAspectPicker"), "picks the tyre profile (see TyreSizeIsPickedFromThreeLists)");
+        c.Note(c.Named<Control>("TyreRimPicker"), "picks the rim diameter (see TyreSizeIsPickedFromThreeLists)");
         c.Press("GearboxAutomatic", "an automatic gearbox, saved", () => settings.Automatic);
         c.Press("GearboxManual", "a manual one, saved", () => !settings.Automatic);
         c.Audit(window, NotShell);

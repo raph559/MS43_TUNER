@@ -924,6 +924,46 @@ public sealed class PerformanceRunTests : IDisposable
         Assert.Equal("3rd pull 12:00", run.Name);
     }
 
+    // The owner: the tyre size is picked like on a tyre shop, width, profile and rim, never typed.
+    [AvaloniaFact]
+    public void TyreSizeIsPickedFromThreeLists()
+    {
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Select(shell, "Car");
+        var run = shell.Performance.Run;
+        Assert.Equal(205, run.TyreWidth);
+        Assert.Equal(55, run.TyreAspect);
+        Assert.Equal(16, run.TyreRim);
+        Assert.Equal(135, run.TyreWidths[0]);
+        Assert.Equal(355, run.TyreWidths[^1]);
+        Assert.Equal([25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85], run.TyreAspects);
+        Assert.Equal(13, run.TyreRims[0]);
+        Assert.Equal(22, run.TyreRims[^1]);
+
+        run.TyreWidth = 225;
+        run.TyreAspect = 45;
+        run.TyreRim = 17;
+
+        Assert.Equal("225/45 R17", run.TyreSize);
+        Assert.Equal("225/45 R17", AppSettings.Load(_folder).TyreSize);
+    }
+
+    // A size saved by hand in another form ("225/45ZR17") still selects its three parts.
+    [AvaloniaFact]
+    public void ASavedSizeInAnotherFormSelectsItsParts()
+    {
+        var settings = AppSettings.Load(_folder);
+        settings.TyreSize = "225/45ZR17";
+        settings.Save();
+        var (_, shell) = PerfFeed.Open(_folder);
+        PerfFeed.Select(shell, "Car");
+        var run = shell.Performance.Run;
+
+        Assert.Equal(225, run.TyreWidth);
+        Assert.Equal(45, run.TyreAspect);
+        Assert.Equal(17, run.TyreRim);
+    }
+
     [AvaloniaFact]
     public void CarValuesAreSavedToSettings()
     {

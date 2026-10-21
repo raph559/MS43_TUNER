@@ -32,6 +32,28 @@
         </Setter>
     </Style>
 
+    <!-- A segment pick slides: one raised pill under the segments moves to the new choice (SegmentSlide), and the
+         checked segment stops filling itself so the pill shows through. -->
+    <Style Selector="Border.seg">
+        <Setter Property="controls:SegmentSlide.IsEnabled" Value="True" />
+    </Style>
+    <Style Selector="Border.seg.sliding ToggleButton.seg">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Foreground" Duration="0:0:0.12" Easing="CubicEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Border.seg.sliding ToggleButton.seg:checked">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.seg Border.segpill">
+        <Setter Property="Background" Value="{DynamicResource ButtonRaisedBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ButtonEdgeBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
     <!-- The tab underline grows from its centre: it shows which screen was just picked. -->
     <Style Selector="ToggleButton.tab /template/ Border#Indicator">
         <Setter Property="Transitions">
