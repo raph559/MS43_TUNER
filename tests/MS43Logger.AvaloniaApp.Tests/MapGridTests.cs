@@ -245,7 +245,7 @@ public class MapGridTests
 
         var (window, shell, grid) = await Open();
 
-        // Row 19 (6990 rpm) holds raw 0, -23.6 °CRK, in every column: an outlier at the storage limit (system 2.2).
+        // Row 19 (6990 rpm) holds raw 0, -23.6 °CRK, in every column: an outlier at the storage limit.
         Assert.Contains((19, 0), shell.Tune.Editor!.ColourRange.Hatched);
         var cell = grid.CellBounds(19, 0);
         var colour = PixelAt(window, InWindow(grid, window, new Point(cell.Left + 3, cell.Center.Y)));
@@ -316,7 +316,7 @@ public class MapGridTests
         var (window, shell, grid) = await Open();
         shell.Tune.Editor!.Selection = new CellRange(9, 4, 12, 6);
 
-        // 2 px Ink1 outside the range, 1 px Pane keyline just inside it (system 2.4).
+        // 2 px Ink1 outside the range, 1 px Pane keyline just inside it.
         var first = grid.CellBounds(9, 5);
         Assert.True(Near(Color.Parse("#F3F5F7"), PixelAt(window, InWindow(grid, window, new Point(first.Center.X, first.Top - 1)))), "no Ink1 line above the range");
         Assert.True(Near(Color.Parse("#0A0B0D"), PixelAt(window, InWindow(grid, window, new Point(first.Center.X, first.Top + 0.5)))), "no Pane keyline inside the range");
@@ -384,6 +384,71 @@ public class MapGridTests
 
         Assert.Equal(string.Empty, shell.Tune.Editor.TypedText);
         Assert.Null(shell.Tune.Editor.TypingHint);
+    }
+
+    [AvaloniaFact] // "-5" Enter on the ignition map set +5
+    public async Task MinusStartsANegativeNumberOnAMapThatGoesBelowZero()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, grid) = await Open();
+        var editor = shell.Tune.Editor!;
+        editor.Selection = new CellRange(2, 2, 2, 2);
+        grid.Focus();
+        Assert.True(editor.TakesNegatives);
+
+        window.KeyTextInput("-5");
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.Equal("-5", editor.TypedText);
+        window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+
+        Assert.InRange(editor.Values.Physical[2, 2], -5.4, -4.6);
+    }
+
+    [AvaloniaFact] // "-" alone then Enter still steps down one
+    public async Task MinusThenEnterStepsDown()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, grid) = await Open();
+        var editor = shell.Tune.Editor!;
+        editor.Selection = new CellRange(2, 2, 2, 2);
+        grid.Focus();
+        var before = editor.Values.Raw[2, 2];
+
+        window.KeyTextInput("-");
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+
+        Assert.Equal(before - 1, editor.Values.Raw[2, 2]);
+    }
+
+    [AvaloniaFact] // in raw view a typed number is a raw count, not a value in the map's unit
+    public async Task InRawViewTheTypedNumberIsRaw()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, grid) = await Open();
+        var editor = shell.Tune.Editor!;
+        editor.ShowRaw = true;
+        editor.Selection = new CellRange(2, 2, 2, 2);
+        grid.Focus();
+
+        window.KeyTextInput("100");
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.Equal("Enter sets 1 cell to raw 100. Esc cancels.", editor.TypingHint);
+        window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+
+        Assert.Equal(100, editor.Values.Raw[2, 2]);
     }
 
     [AvaloniaFact]
@@ -551,7 +616,7 @@ public class MapGridTests
         Assert.False(document.IsModified);
     }
 
-    // At 1024 x 680 the 20 rows scroll: the arrow keys must not move the cell being edited out of sight (final review).
+    // At 1024 x 680 the 20 rows scroll: the arrow keys must not move the cell being edited out of sight.
     [AvaloniaFact]
     public async Task ArrowKeysKeepTheActiveCellInView()
     {
