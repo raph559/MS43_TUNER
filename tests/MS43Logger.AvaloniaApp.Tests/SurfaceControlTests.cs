@@ -212,4 +212,71 @@ public class SurfaceControlTests
         window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
         Assert.False(dialogs.IsOpen);
     }
+
+    // The volume (floor and full height) stays centred at every turn and tilt, and fits inside the plot.
+    [AvaloniaFact]
+    public void TheSurfaceIsCentredAndFitsAtEveryTurn()
+    {
+        var size = new Size(280, 176);
+        foreach (var yaw in new[] { -2.5, -1.2, -0.72, 0, 0.6, 1.9 })
+        {
+            foreach (var pitch in new[] { 0.15, 0.6, 1.0, 1.35 })
+            {
+                var corners = (from u in new[] { 0.0, 1 } from w in new[] { 0.0, 1 } from h in new[] { 0.0, 1 }
+                               select SurfaceMath.Project(u, w, h, yaw, pitch, size).Point).ToList();
+                var left = corners.Min(p => p.X);
+                var right = corners.Max(p => p.X);
+                var top = corners.Min(p => p.Y);
+                var bottom = corners.Max(p => p.Y);
+
+                Assert.Equal(size.Width / 2, (left + right) / 2, 3);
+                Assert.Equal(size.Height / 2, (top + bottom) / 2, 3);
+                Assert.True(left >= 8 && top >= 8 && right <= size.Width - 8 && bottom <= size.Height - 8,
+                    $"yaw {yaw}, pitch {pitch}: {left:0}..{right:0} x {top:0}..{bottom:0}");
+            }
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task TheAxesAndTheHeightHaveScales()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, surface) = await Open();
+        Find.Named<Button>(window, "SurfaceEnlargeButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        var large = Find.Named<Surface3D>(window, "LargeSurface");
+        Screens.Capture(window)?.Dispose();
+
+        // Columns (MAFIGA, mg/stk), rows (rpm) and height (°CRK over the colour range 3.0 to 39.0), first and last.
+        Assert.Contains("33.0", large.ScaleLabels);
+        Assert.Contains("600.0", large.ScaleLabels);
+        Assert.Contains("800", large.ScaleLabels);
+        Assert.Contains("6990", large.ScaleLabels);
+        Assert.Contains("3.0", large.ScaleLabels);
+        Assert.Contains("39.0 °CRK", large.ScaleLabels);
+        Assert.Contains("rpm", large.ScaleLabels);
+        Assert.Contains("mg/stk", large.ScaleLabels);
+        Assert.True(large.ScaleLabels.Count > surface.ScaleLabels.Count, "the large plot has room for more of the scale");
+        Screens.Save(window, "surface-scales");
+    }
+
+    [AvaloniaFact]
+    public void ScaleLabelsAreEvenlySpacedAndEndOnTheLast()
+    {
+        Assert.Equal(new[] { 0, 2, 4, 6, 8, 10, 12, 14, 16, 19 }, Surface3D.Ticks(20, 400));
+        Assert.Equal(new[] { 0, 19 }, Surface3D.Ticks(20, 30));
+        Assert.Equal(new[] { 0, 1, 2, 3 }, Surface3D.Ticks(4, 400));
+        Assert.Equal(new[] { 0 }, Surface3D.Ticks(1, 400));
+
+        // Every gap but the last is the same step.
+        var ticks = Surface3D.Ticks(16, 300);
+        var gaps = ticks.Zip(ticks.Skip(1), (a, b) => b - a).ToList();
+        Assert.Single(gaps.Take(gaps.Count - 1).Distinct());
+        Assert.Equal(15, ticks[^1]);
+    }
 }
