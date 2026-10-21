@@ -132,16 +132,24 @@ public sealed class LiveStateTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void ThreeTimeoutsShowTheLoggingStoppedBanner()
+    public void ThreeTimeoutsAfterSamplesReconnect_WithTheValuesFrozen()
     {
-        var (live, time) = Logging();
+        // As Logging(), with a session factory that fails, so no port is opened while it reconnects.
+        var time = new ManualTime();
+        var live = new MainWindowViewModel(time, () => ["COM1"])
+        {
+            SelectedVariant = "ms43x", SelectedPort = "COM1", EnableCsvLogging = true, CsvPath = Log,
+            SessionFactory = (_, _) => throw new TimeoutException("No reply."), ReconnectInterval = TimeSpan.FromHours(1),
+        };
+        live.BeginSession();
         Sample(live, ("N", 2480));
         live.SampleCount = 9576;
         time.Advance(TimeSpan.FromSeconds(8));
 
         live.ReportLoggingStopped(new TimeoutException("No reply."));
 
-        Assert.Equal("Logging stopped: the ECU stopped answering on COM1 (3 timeouts in a row). ms43-20261019-2225.csv is closed with 9576 rows.", live.Banner);
+        Assert.Equal("Reconnecting: the ECU stopped answering on COM1. Trying again every second; ms43-20261019-2225.csv stays open with 9576 rows.", live.Banner);
+        Assert.True(live.IsReconnecting);
         Assert.Equal("The values below are from the last sample, 8 s ago.", live.BannerDetail);
         Assert.False(live.IsConnected);
         Assert.True(live.IsStale);
@@ -150,6 +158,7 @@ public sealed class LiveStateTests : IDisposable
         time.Advance(TimeSpan.FromSeconds(1));
         live.RefreshStaleLine();
         Assert.Equal("The values below are from the last sample, 9 s ago.", live.BannerDetail);
+        live.Disconnect();
     }
 
     [AvaloniaFact]
@@ -218,7 +227,7 @@ public sealed class LiveStateTests : IDisposable
 
         Save("idle");
 
-        // Logging, with the mockups' sample values (system 11.1) moving a little.
+        // Logging, with the mockups' sample values moving a little.
         live.EnableCsvLogging = true;
         live.CsvPath = Log;
         live.BeginSession();
@@ -245,7 +254,7 @@ public sealed class LiveStateTests : IDisposable
         Dispatcher.UIThread.RunJobs();
         Assert.True(Find.Named<DockPanel>(window, "CsvRow").IsEffectivelyEnabled);
 
-        // Connecting: the CSV switch, path and Browse cannot change under the session being opened (system 7.2).
+        // Connecting: the CSV switch, path and Browse cannot change under the session being opened.
         shell.Live.IsConnecting = true;
         Dispatcher.UIThread.RunJobs();
 
