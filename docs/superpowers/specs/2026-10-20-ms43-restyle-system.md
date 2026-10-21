@@ -236,7 +236,7 @@ No border around tiles or cards: Live tiles are pane areas divided by hairlines,
 
 ## 5. Components
 
-All controls are 32 px tall (Live list rows and pins 32 px hit areas for use in the car). Labels are UI 13 unless stated. States: rest, hover (`Hover` overlay), pressed (`Pressed` overlay), focus (1.3), disabled. No transitions on any of them (MOTION 1).
+All controls are 32 px tall (Live list rows and pins 32 px hit areas for use in the car). Labels are UI 13 unless stated. States: rest, hover (`Hover` overlay), pressed (`Pressed` overlay), focus (1.3), disabled. Their state changes fade as 10.3 says (MOTION 2).
 
 ### 5.1 Header (48 px, `Frame`, hairline below)
 
@@ -539,13 +539,13 @@ Number, space, unit: "2480 rpm", "112.4 mg/stk", "27.8 °CRK", "31.5 kPa", "88.5
 
 ### 10.1 Design Read
 
-Reading this as: a desktop tool for one enthusiast tuning and logging their own E46 325i, in a modern clean language, Day A / Night B, dial **ENERGY 1 / RHYTHM 1 / MOTION 1**.
+Reading this as: a desktop tool for one enthusiast tuning and logging their own E46 325i, in a modern clean language, Day A / Night B, dial **ENERGY 1 / RHYTHM 1 / MOTION 2** (MOTION was 1 until the owner asked on 2026-10-21 to "animate nicely the app, the buttons, the pages").
 
 | Dial | Value | What it means here |
 |---|---|---|
 | ENERGY | 1 | The data is the loudest thing on screen. Chrome is flat tone and hairlines; one accent; no decoration, gradients, glows or illustrations. |
 | RHYTHM | 1 | Every screen uses the same shell, the same spacing steps and the same component shapes. Uniformity is chosen: the user moves between Live, Tune and Compare without relearning. |
-| MOTION | 1 | Three kinds of motion only: hover states (instant), the live cursor (it is data), and the 450 ms flash on cells just edited. Nothing else moves; no transitions, no pulses. |
+| MOTION | 2 | Transitions that answer an action: hover and press fades, the tab underline, screens, dialogs, popups, banners and switches (10.3, `Theme/Motion.axaml`). Live values are never animated: the gauges, numbers and map cursor are data. No pulses, no idle motion, no scroll effects. |
 
 ### 10.2 Identity motif and focal points
 
@@ -559,9 +559,17 @@ The motif is **Bahnschrift numerals**: the DIN 1451 lettering of German road sig
 
 ### 10.3 Motion spec
 
+The transitions live in `Theme/Motion.axaml`, which `App.ApplyMotion` loads only while Windows' "Animation effects" setting is on.
+
 | Motion | Spec | Reduced motion (Windows "Animation effects" off) |
 |---|---|---|
-| Hover, pressed | Overlay appears and disappears instantly; no `Transitions` on controls | same |
+| Hover, pressed | Overlay and state fills fade in 120 ms, cubic ease-out (buttons, tabs, segments, list rows, window buttons) | Instant |
+| Tab underline | Grows from its centre, 200 ms (`scaleX` 0 to 1) | Shown at once |
+| Screen change | The screen coming to the front fades in and rises 6 px, 200 ms | Instant |
+| Dialog | Scrim fades in, card grows from 97 %, 180 ms | Instant |
+| Menus, picker lists, tooltips | Fade in and drop 4 px, 120 ms | Instant |
+| Banners | Fade in and slide down 6 px, 180 ms | Instant |
+| Switch knob | Slides 150 ms | Jumps |
 | Live cursor | Redrawn at most 30 times a second (`LiveCursorController.MaxRedrawsPerSecond`), drawn exactly at the sample, never tweened between samples; stale after 1 s (`StaleAfter`) | trail drawn without width falloff; dot unchanged |
 | Just-edited flash | 450 ms (`MapGrid.FlashTime`). Frame 0: the cell fill is the cell's final text colour (black or white per 2.3), so start and end differ by 4.58:1 or more. It eases out (cubic) to the new fill. The text colour is recomputed from the blended fill every frame, so the number stays at 4.58:1 or more throughout. Replaces today's white 50 % overlay, which is invisible on light Day cells | No flash; the changed triangle and the key-line message ("Set 4 cells to 27.8 °CRK") confirm the edit |
 

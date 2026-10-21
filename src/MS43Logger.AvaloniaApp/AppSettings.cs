@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using MS43Logger.Core.Tuning;
 
 namespace MS43Logger.AvaloniaApp;
 
@@ -39,7 +40,7 @@ public sealed class AppSettings
     private static readonly JsonSerializerOptions Json = new()
     {
         WriteIndented = true,
-        Converters = { new LenientEnum<ThemeMode>(), new LenientEnum<ReadoutsMode>(), new LenientEnum<TrailMode>() },
+        Converters = { new LenientEnum<ThemeMode>(), new LenientEnum<ReadoutsMode>(), new LenientEnum<TrailMode>(), new LenientEnum<ItemSort>() },
     };
 
     public static string DefaultFolder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MS43Tuner");
@@ -90,6 +91,16 @@ public sealed class AppSettings
     public bool KeepBackup { get; set; } = true;
 
     public bool AppendEditLog { get; set; } = true;
+
+    /// <summary>The Tune rail's width as dragged; null for the default.</summary>
+    public double? RailWidth { get; set; }
+
+    public bool RailCollapsed { get; set; }
+
+    /// <summary>How the Tune rail orders categories and items.</summary>
+    public ItemSort RailSort { get; set; } = ItemSort.Name;
+
+    public bool RailSortDescending { get; set; }
 
     /// <summary>Why the last <see cref="Save"/> failed, or null after a successful one.</summary>
     [JsonIgnore]

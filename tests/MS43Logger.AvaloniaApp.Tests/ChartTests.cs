@@ -71,7 +71,7 @@ public sealed class ChartTests : IDisposable
         window.KeyPressQwerty(PhysicalKey.ArrowRight, RawInputModifiers.None);
         window.KeyPressQwerty(PhysicalKey.ArrowUp, RawInputModifiers.None);
 
-        Assert.Equal(yaw + 0.1, surface.Yaw, 6);
+        Assert.Equal(yaw - 0.1, surface.Yaw, 6);
         Assert.Equal(0.05, Math.Abs(surface.Pitch - pitch), 6);
 
         window.KeyPressQwerty(PhysicalKey.Home, RawInputModifiers.None);

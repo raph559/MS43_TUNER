@@ -233,6 +233,7 @@ public class MapGridTests
 
         var folder = Path.Combine(Path.GetTempPath(), "ms43-grid-" + Guid.NewGuid().ToString("N"));
         var (window, shell, grid) = await Open(TuneScreen.CopyCar(folder));
+        var animations = MotionSettings.AnimationsEnabled;
         MotionSettings.AnimationsEnabled = false;
         try
         {
@@ -253,7 +254,8 @@ public class MapGridTests
         }
         finally
         {
-            MotionSettings.AnimationsEnabled = true;
+            // Each test starts a new app, which loads the motion layer when this is on: leave it as it was.
+            MotionSettings.AnimationsEnabled = animations;
             Directory.Delete(folder, recursive: true);
         }
     }
@@ -412,6 +414,7 @@ public class MapGridTests
 
         var folder = Path.Combine(Path.GetTempPath(), "ms43-grid-" + Guid.NewGuid().ToString("N"));
         var (_, shell, grid) = await Open(TuneScreen.CopyCar(folder));
+        var animations = MotionSettings.AnimationsEnabled;
         try
         {
             MotionSettings.AnimationsEnabled = false;
@@ -424,7 +427,8 @@ public class MapGridTests
         }
         finally
         {
-            MotionSettings.AnimationsEnabled = true;
+            // Each test starts a new app, which loads the motion layer when this is on: leave it as it was.
+            MotionSettings.AnimationsEnabled = animations;
             Directory.Delete(folder, recursive: true);
         }
     }

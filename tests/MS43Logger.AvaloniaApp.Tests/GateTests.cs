@@ -350,7 +350,15 @@ public sealed class GateTests
         var ids = window.GetVisualDescendants().OfType<TextBlock>()
             .Where(block => block.Classes.Contains("id") && block.Text?.StartsWith("c_acr_diag_iv_t_per_m", StringComparison.Ordinal) == true).ToList();
         Assert.NotEmpty(ids);
-        Assert.All(ids, block => Assert.Equal(block.Text, ToolTip.GetTip(block)));
+
+        // A rail row's hover card carries the full name (with the description and facts under it).
+        Assert.All(ids, block =>
+        {
+            var row = block.FindAncestorOfType<Border>()!;
+            Assert.Contains("row", row.Classes);
+            Assert.NotNull(ToolTip.GetTip(row));
+            Assert.Equal(block.Text, Assert.IsType<RailItem>(row.DataContext).Title);
+        });
 
         tune.SelectedTab = ShellViewModel.CompareTab;
         Assert.True(tune.Compare.OpenB(release));
