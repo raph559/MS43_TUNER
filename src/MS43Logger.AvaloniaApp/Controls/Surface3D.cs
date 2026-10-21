@@ -43,18 +43,46 @@ public static class SurfaceMath
 
     // Sized for the widest the volume ever gets: its floor diagonal (√2) across, and (√2·cos + ½·sin) × 0.78 of the tilt
     // at most 1.17 down, so turning or tilting never changes its size or pushes it out of the plot.
-    private static double Scale(Size size) => Math.Max(1, Math.Min((size.Width - 2 * MarginX(size)) / Math.Sqrt(2), (size.Height - 2 * MarginY(size)) / 1.17));
+    public static double Scale(Size size) => Math.Max(1, Math.Min((size.Width - 2 * MarginX(size)) / Math.Sqrt(2), (size.Height - 2 * MarginY(size)) / 1.17));
 }
 
 /// <summary>
 /// The map as a shaded surface in a Pane box (system 8): heights and colours over the working range, cells at the storage
 /// limit left out (system 2.2). It is handled like an object in the hand: a drag moves its near side with the pointer (the
-/// arrow keys do the same), the wheel or + and - zoom towards the pointer, Shift-drag or a right-button drag moves it, and
-/// Home puts it back.
+/// arrow keys do the same), the wheel or Ctrl + and Ctrl - zoom towards the pointer, Shift-drag or a right-button drag moves
+/// it, and Home puts it back. It also tunes: a click on a point selects that cell (Shift-click a range, the grid follows),
+/// + and - step the selection as the grid does, and Ctrl-drag raises or lowers it in one undo step on release.
 /// </summary>
 public sealed class Surface3D : Control
 {
     public static readonly StyledProperty<TableEditorViewModel?> EditorProperty = AvaloniaProperty.Register<Surface3D, TableEditorViewModel?>(nameof(Editor));
+
+    /// <summary>What the surface is showing a hand on: the selected points (where, and their values), or a Ctrl-drag's preview.</summary>
+    public static readonly DirectProperty<Surface3D, string?> InfoTextProperty =
+        AvaloniaProperty.RegisterDirect<Surface3D, string?>(nameof(InfoText), surface => surface.InfoText);
+
+    private string? _infoText;
+
+    public string? InfoText { get => _infoText; private set => SetAndRaise(InfoTextProperty, ref _infoText, value); }
+
+    // The selection, or, during a Ctrl-drag, how much it would change and where it would end.
+    private void UpdateInfo()
+    {
+        if (Editor is not { } editor)
+        {
+            InfoText = null;
+            return;
+        }
+
+        if (_dragEdits && _pendingSteps != 0)
+        {
+            InfoText = editor.PreviewStep(_pendingSteps);
+            return;
+        }
+
+        var where = editor.SelectionText;
+        InfoText = where.Length == 0 ? null : editor.SelectionValuesText is { } values ? $"{where}, {values}" : where;
+    }
 
     public const double MinZoom = 0.5;
     public const double MaxZoom = 4;
@@ -66,12 +94,21 @@ public sealed class Surface3D : Control
     private const double TurnPerPixel = 0.01;
     private const double ZoomStep = 1.2;
 
+    /// <summary>How far a Ctrl-drag moves for one step of the selected cells.</summary>
+    public const double PixelsPerStep = 6;
+
+    private const double PickRadius = 10;
+    private const double ClickSlop = 3;
+
     private double _yaw = StartYaw;
     private double _pitch = StartPitch;
     private double _zoom = 1;
     private Vector _pan;
     private Point? _dragFrom;
     private bool _dragMoves;
+    private bool _dragEdits;
+    private bool _dragTravelled;
+    private int _pendingSteps;
     private (double Yaw, double Pitch, Vector Pan) _dragStart;
 
     public Surface3D()
@@ -105,8 +142,7 @@ public sealed class Surface3D : Control
     public void CopyView(Surface3D other, Size size)
     {
         ArgumentNullException.ThrowIfNull(other);
-        static double Scale(Size s) => Math.Min(s.Width * 0.86, s.Height * 1.18);
-        var ratio = Scale(other.Bounds.Size) is > 0 and var from ? Scale(size) / from : 1;
+        var ratio = SurfaceMath.Scale(other.Bounds.Size) is > 1 and var from ? SurfaceMath.Scale(size) / from : 1;
         (_yaw, _pitch, _zoom, _pan) = (other._yaw, other._pitch, other._zoom, other._pan * ratio);
         InvalidateVisual();
     }
@@ -131,6 +167,91 @@ public sealed class Surface3D : Control
         InvalidateVisual();
     }
 
+    public void TurnBy(double yaw)
+    {
+        _yaw += yaw;
+        InvalidateVisual();
+    }
+
+    /// <summary>The steps a Ctrl-drag would apply if released now (up is positive); 0 when none is under way.</summary>
+    public int PendingSteps => _pendingSteps;
+
+    /// <summary>The floor corner (u, w) the height scale stands on: the one furthest left on screen, outside the surface.</summary>
+    public (double U, double W) HeightAxisCorner
+    {
+        get
+        {
+            (double U, double W)[] corners = [(0, 0), (1, 0), (0, 1), (1, 1)];
+            return corners.MinBy(corner => Project(corner.U, corner.W, 0).Point.X);
+        }
+    }
+
+    /// <summary>Where a cell's point is drawn, or null for a cell the surface leaves out (storage limit, unreadable).</summary>
+    public Point? PointOf(int row, int col)
+    {
+        if (Editor is not { Values: { Rows: > 1, Cols: > 1 } values } editor || !IsDrawn(editor, values, row, col))
+        {
+            return null;
+        }
+
+        return Project((double)col / (values.Cols - 1), (double)row / (values.Rows - 1), HeightOf(editor, values, row, col)).Point;
+    }
+
+    private (Point Point, double Depth) Project(double u, double w, double h) => SurfaceMath.Project(u, w, h, _yaw, _pitch, Bounds.Size, _zoom, _pan);
+
+    private static bool IsDrawn(TableEditorViewModel editor, TableValues values, int row, int col) =>
+        row >= 0 && col >= 0 && row < values.Rows && col < values.Cols && double.IsFinite(values.Physical[row, col]) && !editor.ColourRange.Hatched.Contains((row, col));
+
+    private static double HeightOf(TableEditorViewModel editor, TableValues values, int row, int col)
+    {
+        var range = editor.ColourRange;
+        return range.IsConstant ? 0.5 : Math.Clamp((values.Physical[row, col] - range.Min) / (range.Max - range.Min), 0, 1);
+    }
+
+    // The cell whose point is nearest the pointer, within reach; of two at the same spot, the one in front.
+    private (int Row, int Col)? Pick(Point at)
+    {
+        if (Editor is not { Values: { Rows: > 1, Cols: > 1 } values } editor)
+        {
+            return null;
+        }
+
+        (int Row, int Col)? best = null;
+        var bestScore = double.MaxValue;
+        for (var r = 0; r < values.Rows; r++)
+        {
+            for (var c = 0; c < values.Cols; c++)
+            {
+                if (!IsDrawn(editor, values, r, c))
+                {
+                    continue;
+                }
+
+                var (point, depth) = Project((double)c / (values.Cols - 1), (double)r / (values.Rows - 1), HeightOf(editor, values, r, c));
+                var distance = Point.Distance(point, at);
+                var score = distance - depth * 4;
+                if (distance <= PickRadius && score < bestScore)
+                {
+                    (best, bestScore) = ((r, c), score);
+                }
+            }
+        }
+
+        return best;
+    }
+
+    // + and - step the selected cells as the grid's keys do (up raises the shown value); refused on a read-only map.
+    private bool Step(int steps)
+    {
+        if (Editor is not { Selection: not null, IsReadOnly: false } editor || steps == 0)
+        {
+            return false;
+        }
+
+        editor.Apply(new EditRequest(EditKind.Step, steps));
+        return true;
+    }
+
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
@@ -146,6 +267,7 @@ public sealed class Surface3D : Control
                 editor.PropertyChanged += OnEditorChanged;
             }
 
+            UpdateInfo();
             InvalidateVisual();
         }
     }
@@ -153,6 +275,26 @@ public sealed class Surface3D : Control
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
+        // Esc drops a Ctrl-drag under way: nothing is written.
+        if (e.Key == Key.Escape && _dragEdits)
+        {
+            _pendingSteps = 0;
+            _dragEdits = false;
+            UpdateInfo();
+            e.Handled = true;
+            InvalidateVisual();
+            return;
+        }
+
+        // + and - step the selection; with Ctrl they zoom (as in a browser). Without a selection they zoom too.
+        var zoomKey = e.KeyModifiers.HasFlag(KeyModifiers.Control) || Editor?.Selection is null;
+        if (e.Key is Key.OemPlus or Key.Add or Key.OemMinus or Key.Subtract && !zoomKey)
+        {
+            Step(e.Key is Key.OemPlus or Key.Add ? 1 : -1);
+            e.Handled = true;
+            return;
+        }
+
         // Left and Right turn the near side that way, as a drag would; Up and Down tip it.
         switch (e.Key)
         {
@@ -202,7 +344,10 @@ public sealed class Surface3D : Control
         Focus(NavigationMethod.Pointer);
         var point = e.GetCurrentPoint(this);
         _dragFrom = point.Position;
-        _dragMoves = point.Properties.IsRightButtonPressed || point.Properties.IsMiddleButtonPressed || e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+        _dragTravelled = false;
+        _dragEdits = point.Properties.IsLeftButtonPressed && e.KeyModifiers.HasFlag(KeyModifiers.Control) && Editor is { Selection: not null, IsReadOnly: false };
+        _dragMoves = !_dragEdits && (point.Properties.IsRightButtonPressed || point.Properties.IsMiddleButtonPressed || e.KeyModifiers.HasFlag(KeyModifiers.Shift));
+        _pendingSteps = 0;
         _dragStart = (_yaw, _pitch, _pan);
         e.Pointer.Capture(this);
         e.Handled = true;
@@ -215,7 +360,22 @@ public sealed class Surface3D : Control
         if (_dragFrom is Point from)
         {
             var moved = e.GetPosition(this) - from;
-            if (_dragMoves)
+            _dragTravelled |= Math.Abs(moved.X) > ClickSlop || Math.Abs(moved.Y) > ClickSlop;
+            if (_dragEdits)
+            {
+                // Up raises: one step for every PixelsPerStep, applied on release.
+                var steps = (int)Math.Round(-moved.Y / PixelsPerStep);
+                if (steps != _pendingSteps)
+                {
+                    _pendingSteps = steps;
+                    UpdateInfo();
+                }
+            }
+            else if (!_dragTravelled)
+            {
+                return;
+            }
+            else if (_dragMoves)
             {
                 _pan = _dragStart.Pan + moved;
             }
@@ -229,11 +389,31 @@ public sealed class Surface3D : Control
         }
     }
 
+    // A press that did not travel is a click: it picks the point under it (Shift: a range from the active cell). A Ctrl-drag
+    // writes its steps now, as one edit.
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
+        var at = e.GetPosition(this);
+        var clicked = _dragFrom is not null && !_dragTravelled && !_dragEdits && e.InitialPressMouseButton == MouseButton.Left;
+        if (_dragEdits)
+        {
+            Step(_pendingSteps);
+        }
+
         _dragFrom = null;
+        _dragEdits = false;
+        _pendingSteps = 0;
         e.Pointer.Capture(null);
+        UpdateInfo();
+        if (clicked && Editor is { } editor && Pick(at) is (int row, int col))
+        {
+            editor.Selection = e.KeyModifiers.HasFlag(KeyModifiers.Shift) && editor.Selection is not null
+                ? new CellRange(editor.ActiveCell.Row, editor.ActiveCell.Col, row, col)
+                : new CellRange(row, col, row, col);
+        }
+
+        InvalidateVisual();
     }
 
     public override void Render(DrawingContext context)
@@ -306,6 +486,8 @@ public sealed class Surface3D : Control
         var ink3 = ThemeBrushes.Get(this, "Ink3Brush");
         DrawScales(context, editor, values, range, font, ink3, P);
 
+        DrawSelection(context, editor, values, pane, font);
+
         if (editor.Live is { } live)
         {
             // The engine's position: a Now dot with a Pane halo on the surface; an Ink3 ring once samples stop.
@@ -323,6 +505,54 @@ public sealed class Surface3D : Control
                 context.DrawEllipse(halo, null, at, 6, 6);
                 context.DrawEllipse(ThemeBrushes.Get(this, live.IsUnused ? "Ink3Brush" : "NowBrush"), null, at, 4, 4);
             }
+        }
+    }
+
+    // The selected cells' points: an Ink1 ring with a Pane halo, as the grid frames them. During a Ctrl-drag a line rises (or
+    // falls) from the first one with the step count, so the edit can be seen before it is written.
+    private void DrawSelection(DrawingContext context, TableEditorViewModel editor, TableValues values, Color pane, Typeface font)
+    {
+        if (editor.Selection is not CellRange selection)
+        {
+            return;
+        }
+
+        var ink1 = ThemeBrushes.Get(this, "Ink1Brush");
+        var halo = new Pen(new SolidColorBrush(pane), 4);
+        var ring = new Pen(ink1, 1.5);
+        Point? first = null;
+        for (var r = selection.Row0; r <= selection.Row1; r++)
+        {
+            for (var c = selection.Col0; c <= selection.Col1; c++)
+            {
+                if (PointOf(r, c) is Point at)
+                {
+                    first ??= at;
+                    context.DrawEllipse(null, halo, at, 3.5, 3.5);
+                    context.DrawEllipse(null, ring, at, 3.5, 3.5);
+                }
+            }
+        }
+
+        // The active point carries its value, so a click on the surface says what is there.
+        if (PointOf(editor.ActiveCell.Row, editor.ActiveCell.Col) is Point active && !(_dragEdits && _pendingSteps != 0))
+        {
+            var value = new FormattedText(WithUnits(editor.CellTextOf(values.Physical[editor.ActiveCell.Row, editor.ActiveCell.Col]), editor.Units),
+                CultureInfo.InvariantCulture, FlowDirection.LeftToRight, font, 12, ink1);
+            value.SetFontFeatures(MS43Logger.AvaloniaApp.Theme.Typography.Tabular);
+            var box = new Rect(active.X + 8, active.Y - value.Height - 6, value.Width + 8, value.Height + 4);
+            context.DrawRectangle(new SolidColorBrush(pane), new Pen(ThemeBrushes.Get(this, "HairlineBrush"), 1), box, 4, 4);
+            context.DrawText(value, box.TopLeft + new Vector(4, 2));
+        }
+
+        if (_dragEdits && _pendingSteps != 0 && first is Point from)
+        {
+            var to = from + new Vector(0, -_pendingSteps * PixelsPerStep);
+            context.DrawLine(new Pen(ink1, 1.5), from, to);
+            var text = new FormattedText(InfoText ?? $"{_pendingSteps} steps",
+                CultureInfo.InvariantCulture, FlowDirection.LeftToRight, font, 12, ink1);
+            context.DrawRectangle(new SolidColorBrush(pane), null, new Rect(to.X + 6, to.Y - text.Height / 2 - 2, text.Width + 8, text.Height + 4), 4, 4);
+            context.DrawText(text, new Point(to.X + 10, to.Y - text.Height / 2));
         }
     }
 
@@ -348,16 +578,15 @@ public sealed class Surface3D : Control
         Label(context, values.X.Units.Length > 0 ? values.X.Units : "columns", font, 12, brush, P(0.5, Out(near, compact ? 0.24 : 0.2), 0).Point);
         Label(context, values.Y.Units.Length > 0 ? values.Y.Units : "rows", font, 12, brush, P(Out(side, compact ? 0.28 : 0.24), 0.5, 0).Point);
 
-        // The height scale on the corner furthest back, with its labels on the outside of that corner.
-        (double U, double W)[] corners = [(0, 0), (1, 0), (0, 1), (1, 1)];
-        var back = corners.MinBy(corner => P(corner.U, corner.W, 0).Depth);
+        // The height scale on the floor corner furthest left: on the volume's outer edge, never inside or behind the surface.
+        var back = HeightAxisCorner;
         var foot = P(back.U, back.W, 0).Point;
         var head = P(back.U, back.W, 1).Point;
         context.DrawLine(new Pen(brush, 1), foot, head);
         var units = values.Table.Z.Units is { Length: > 0 } z && z != "-" ? " " + z : string.Empty;
 
-        // Beside the corner, on its outer side; in the small plot always on the left, clear of the zoom buttons on the right.
-        var outwards = compact || foot.X < Bounds.Width / 2 ? -1 : 1;
+        // Its labels go to the left, outside the volume (and clear of the small plot's zoom buttons on the right).
+        const int outwards = -1;
         var decimals = values.Table.Z.DecimalPlaces ?? 1;
         string Number(double value) => value.ToString("F" + Math.Clamp(decimals, 0, 6), CultureInfo.InvariantCulture);
         var heights = range.IsConstant ? new[] { (0.5, range.Min) }
@@ -414,6 +643,8 @@ public sealed class Surface3D : Control
         return ticks;
     }
 
+    private static string WithUnits(string text, string units) => units.Length > 0 && units != "-" ? $"{text} {units}" : text;
+
     private static byte Shade(byte value, double factor) => (byte)Math.Clamp(Math.Round(value * factor), 0, 255);
 
     // A label centred on its point, or beside it: align -1 ends the text at the point, +1 starts it there. One that would
@@ -445,5 +676,9 @@ public sealed class Surface3D : Control
         return true;
     }
 
-    private void OnEditorChanged(object? sender, PropertyChangedEventArgs e) => InvalidateVisual();
+    private void OnEditorChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        UpdateInfo();
+        InvalidateVisual();
+    }
 }

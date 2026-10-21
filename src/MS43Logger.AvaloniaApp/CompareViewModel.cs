@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using MS43Logger.Core.Tuning;
 
 namespace MS43Logger.AvaloniaApp;
@@ -17,12 +18,17 @@ public sealed record CompareRow(ItemDifference Difference, bool IsCurrent) : Com
 {
     public string Title => Difference.Item.Title;
 
+    public string Description => Difference.Item.Description;
+
+    public bool HasDescription => !string.IsNullOrWhiteSpace(Difference.Item.Description);
+
+    /// <summary>The hover card's facts line, as on the Tune rail: "Map, 20 × 16, °CRK, at 0x77315".</summary>
+    public string Detail => ItemFacts.Line(Difference.Item, Difference.Kind);
+
     /// <summary>"12 of 320" for tables, "4512 → 3520" for values, switches and flags.</summary>
     public string Summary => Difference.Item is XdfTable
         ? $"{Difference.ChangedCells} of {Difference.Cells}"
         : $"{Difference.ValueA} → {Difference.ValueB}";
-
-    public string Detail => $"{Difference.Category}, {Difference.Kind.ToString().ToLowerInvariant()}";
 
     public string Units => CompareViewModel.UnitsOf(Difference.Item);
 }
@@ -38,7 +44,7 @@ public sealed record KindChip(string Key, string Name, int Count, bool IsOn)
 }
 
 /// <summary>The Compare screen: the open bin (A) against a second bin (B) through A's XDF.</summary>
-public sealed class CompareViewModel : ViewModelBase
+public sealed class CompareViewModel : ViewModelBase, ISidePanel
 {
     private static readonly (string Key, string Name, ItemKind[] Kinds)[] KindFilters =
     [
@@ -81,7 +87,15 @@ public sealed class CompareViewModel : ViewModelBase
             OnPropertyChanged(nameof(NoBText));
             OnPropertyChanged(nameof(HasA));
             OnPropertyChanged(nameof(NeedsB));
-            Invalidate();
+
+            // The remembered B opens with A, not when the Compare tab is first shown, so Tune's compare strip and
+            // "Differs from B" are there from the start. Opening it compares already; otherwise compare again.
+            var before = _b;
+            ReopenLast();
+            if (ReferenceEquals(before, _b))
+            {
+                Invalidate();
+            }
         };
         Watch(tune.Document);
         tune.PropertyChanged += (_, e) =>
@@ -89,6 +103,17 @@ public sealed class CompareViewModel : ViewModelBase
             if (e.PropertyName == nameof(TuneViewModel.DiffersOnly) && tune.DiffersOnly && _stale)
             {
                 Refresh();
+            }
+
+            // One B − A setting for both screens: a change made in Tune redraws Compare's grid too.
+            if (e.PropertyName == nameof(TuneViewModel.DeltaMode))
+            {
+                foreach (var name in new[] { nameof(DeltaMode), nameof(IsDeltaUnits), nameof(IsDeltaRaw), nameof(IsDeltaPercent), nameof(LargestText) })
+                {
+                    OnPropertyChanged(name);
+                }
+
+                BuildGrid();
             }
         };
     }
@@ -222,6 +247,50 @@ public sealed class CompareViewModel : ViewModelBase
 
     public bool IsDeltaView { get => View == "delta"; set { if (value) { View = "delta"; } else { OnPropertyChanged(); } } }
 
+    public AppSettings Settings => _tune.Settings;
+
+    /// <summary>How B − A reads, as in TunerPro's compare: in the map's units, in stored counts, or as a percentage of A. Remembered.</summary>
+    public DeltaMode DeltaMode
+    {
+        get => _tune.DeltaMode;
+        set => _tune.DeltaMode = value;
+    }
+
+    public bool IsDeltaUnits { get => DeltaMode == DeltaMode.Units; set { if (value) { DeltaMode = DeltaMode.Units; } else { OnPropertyChanged(); } } }
+
+    public bool IsDeltaRaw { get => DeltaMode == DeltaMode.Raw; set { if (value) { DeltaMode = DeltaMode.Raw; } else { OnPropertyChanged(); } } }
+
+    public bool IsDeltaPercent { get => DeltaMode == DeltaMode.Percent; set { if (value) { DeltaMode = DeltaMode.Percent; } else { OnPropertyChanged(); } } }
+
+    /// <summary>The Compare list's width as dragged, or null for the layout's own (280 px, 224 below 1280).</summary>
+    public double? RailWidth => _tune.Settings.CompareRailWidth;
+
+    /// <summary>True while the Compare list is folded to its strip (Ctrl B). Remembered between runs.</summary>
+    public bool RailCollapsed => _tune.Settings.CompareRailCollapsed;
+
+    public void SetRailWidth(double? width, bool save)
+    {
+        _tune.Settings.CompareRailWidth = width is double wanted ? Math.Clamp(Math.Round(wanted), SidePanel.MinWidth, SidePanel.MaxWidth) : null;
+        if (save)
+        {
+            _tune.Settings.Save();
+        }
+
+        OnPropertyChanged(nameof(RailWidth));
+    }
+
+    public void SetRailCollapsed(bool collapsed)
+    {
+        if (_tune.Settings.CompareRailCollapsed == collapsed)
+        {
+            return;
+        }
+
+        _tune.Settings.CompareRailCollapsed = collapsed;
+        _tune.Settings.Save();
+        OnPropertyChanged(nameof(RailCollapsed));
+    }
+
     public bool IsAView { get => View == "a"; set { if (value) { View = "a"; } else { OnPropertyChanged(); } } }
 
     public bool IsBView { get => View == "b"; set { if (value) { View = "b"; } else { OnPropertyChanged(); } } }
@@ -239,9 +308,31 @@ public sealed class CompareViewModel : ViewModelBase
         ? $"{item.ChangedCells} of {item.Cells} {(item.Cells == 1 ? "cell differs" : "cells differ")}"
         : null;
 
-    public string? LargestText => Selected is { Item: XdfTable table, LargestChange: double largest }
-        ? $"largest change {BinComparer.FormatDelta(largest, 0, table.Z, raw: false)} {Units}".TrimEnd()
-        : null;
+    /// <summary>"largest change +61.1 °CRK", in counts ("+163") or as a percentage of A ("+190.4 %") by <see cref="DeltaMode"/>.</summary>
+    public string? LargestText
+    {
+        get
+        {
+            if (Selected is not { Item: XdfTable table, LargestChange: double largest })
+            {
+                return null;
+            }
+
+            if (DeltaMode == DeltaMode.Units || _table is not { } compared)
+            {
+                return $"largest change {BinComparer.FormatDelta(largest, 0, table.Z, raw: false)} {Units}".TrimEnd();
+            }
+
+            var values = BinComparer.Difference(compared, DeltaMode).Physical.Cast<double>().Where(double.IsFinite).ToList();
+            if (values.Count == 0)
+            {
+                return null;
+            }
+
+            var most = values.MaxBy(Math.Abs);
+            return $"largest change {BinComparer.FormatDelta(most, (long)most, table.Z, DeltaMode)}";
+        }
+    }
 
     /// <summary>
     /// The line under the grid (system 2.5, 5.15): "B − A: -21.0 to +61.1 °CRK, 293 of 320 cells differ" on B − A, and
@@ -294,6 +385,39 @@ public sealed class CompareViewModel : ViewModelBase
     }
 
     /// <summary>Opens B; a file that is not a 512 KiB bin is refused and the current B stays.</summary>
+    /// <summary>B's file in full, or null without a B.</summary>
+    public string? PathB { get; private set; }
+
+    /// <summary>Asks before a swap (the window shows the dialog); without it, nothing is swapped.</summary>
+    public Func<string, Task<bool>>? AskToSwap { get; set; }
+
+    /// <summary>
+    /// Swaps A and B: B's file opens on Tune as the bin edited (with the same XDF) and A's becomes B. Asks first, then asks
+    /// about A's unsaved edits as opening any other bin does; either answer of Cancel leaves both as they were.
+    /// </summary>
+    public async Task<bool> SwapAsync()
+    {
+        if (_tune.Document is not { Path: { } a } || PathB is not { } b || AskToSwap is null)
+        {
+            return false;
+        }
+
+        if (!await AskToSwap($"Swap A and B? {Path.GetFileName(b)} opens as A, the bin you edit, and {Path.GetFileName(a)} becomes B.")
+            || !await _tune.ConfirmDiscardAsync())
+        {
+            return false;
+        }
+
+        await _tune.OpenAsync(b, _tune.XdfPath);
+        if (_tune.Document?.Path != Path.GetFullPath(b))
+        {
+            // Tune says why B did not open, and A is still the bin there.
+            return false;
+        }
+
+        return OpenB(a);
+    }
+
     public bool OpenB(string path)
     {
         try
@@ -301,6 +425,7 @@ public sealed class CompareViewModel : ViewModelBase
             var image = BinImage.Load(path);
             _b = image;
             FileB = Path.GetFileName(path);
+            PathB = Path.GetFullPath(path);
             ErrorMessage = null;
             _tune.Settings.LastCompareBin = Path.GetFullPath(path);
             _tune.Settings.Save();
@@ -327,7 +452,7 @@ public sealed class CompareViewModel : ViewModelBase
             ? $"B is firmware {idB ?? "unknown"}, A is {document.Firmware.SoftwareId ?? "unknown"}. Items are compared at the same addresses, where B may hold something else."
             : null;
         Result = document is not null && _b is not null ? BinComparer.Compare(document.Xdf, document.Image, _b) : null;
-        _tune.CompareWith(Result is null ? null : FileB, Result?.Items.Select(item => item.Item).ToHashSet());
+        _tune.CompareWith(Result is null ? null : FileB, Result?.Items.Select(item => item.Item).ToHashSet(), Result is null ? null : _b);
 
         var keep = Selected is { } current ? Result?.Items.FirstOrDefault(item => item.Item == current.Item) : null;
         if (_showsBytes && Result is { Unmapped.Count: > 0 })
@@ -481,7 +606,7 @@ public sealed class CompareViewModel : ViewModelBase
                 "a" => TableEditorViewModel.Snapshot(table.A, table.Changed, mark: CellMark.Differs),
                 "b" => TableEditorViewModel.Snapshot(table.B, table.Changed, mark: CellMark.Differs),
                 // Colour already shows every change on B − A; the changed-cell dots would only add noise.
-                _ => TableEditorViewModel.Snapshot(table.Delta, new HashSet<(int Row, int Col)>(), isDelta: true),
+                _ => TableEditorViewModel.Snapshot(BinComparer.Difference(table, DeltaMode), new HashSet<(int Row, int Col)>(), isDelta: true, deltaMode: DeltaMode),
             };
             var z = table.A.Table.Z;
             var units = Units.Length > 0 ? " " + Units : string.Empty;
@@ -492,7 +617,12 @@ public sealed class CompareViewModel : ViewModelBase
                 var (low, high) = (finite.Min(), finite.Max());
                 var largest = finite.Max(Math.Abs);
                 _scaleSpan = largest > 0 ? (low / largest, high / largest) : (0, 0);
-                ScaleCaption = $"B − A: {BinComparer.FormatDelta(low, 0, z, raw: false)} to {BinComparer.FormatDelta(high, 0, z, raw: false)}{units}, {CellsText}";
+                ScaleCaption = DeltaMode switch
+                {
+                    DeltaMode.Raw => $"B − A in counts: {BinComparer.FormatDelta(low, (long)low, z, DeltaMode.Raw)} to {BinComparer.FormatDelta(high, (long)high, z, DeltaMode.Raw)}, {CellsText}",
+                    DeltaMode.Percent => $"B − A as % of A: {BinComparer.FormatDelta(low, 0, z, DeltaMode.Percent)} to {BinComparer.FormatDelta(high, 0, z, DeltaMode.Percent)}, {CellsText}",
+                    _ => $"B − A: {BinComparer.FormatDelta(low, 0, z, raw: false)} to {BinComparer.FormatDelta(high, 0, z, raw: false)}{units}, {CellsText}",
+                };
             }
             else if (finite.Count > 0)
             {

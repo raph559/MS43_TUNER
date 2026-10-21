@@ -44,6 +44,9 @@ public sealed class DialogHost : Panel
 
     public bool IsOpen => _result is not null;
 
+    /// <summary>The dialog shown, or null.</summary>
+    public Control? Content => _card.Child as Control;
+
     /// <summary>
     /// Opens <paramref name="content"/> as the dialog; the task ends with what <see cref="Close"/> was given. A dialog
     /// that is already open is closed first and its task ends with null, as if cancelled (the save prompt can be asked

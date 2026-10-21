@@ -26,7 +26,10 @@ Three surface tones in all (R-29): frame, pane, fill.
 | `Fill` | Segmented tracks, selected rows and headers, banners, hatch lines, popups (Night) | `#E9ECF1` | `#1F2328` | The third and last tone; marks "selected" or "grouped" without a new hue. |
 | `Track` | Dial and bar tracks, off gear slots | `#F2F4F7` (= Frame) | `#1F2328` (= Fill) | Alias, not a new tone: the value it uses in each theme keeps the orange mark at 3:1 or more on top of it (3.18 Day, 6.06 Night). |
 | `Hairline` | Decorative separation between frame regions and panes, list dividers | `#E1E5EA` | `#23272D` | Below 3:1 on purpose: it separates areas, it never identifies a control. |
-| `Edge` | Boundary of every control you type into, toggle or pick from; secondary buttons; idle status dot; the value slider's track beyond the value (5.14) | `#727C8C` | `#6E7681` | 3:1 or more against all three surfaces (WCAG 1.4.11), so inputs and switches are findable. |
+| `Edge` | Boundary of text fields, switch off tracks and checkboxes; idle status dot; the value slider's track beyond the value (5.14) | `#727C8C` | `#6E7681` | 3:1 or more against all three surfaces (WCAG 1.4.11), so the controls with no label inside are findable. |
+| `Button` | Secondary button, picker and tool group surface | `#FFFFFF` | `#1F2328` | The owner found a 1 px `Edge` on every button too bright at Night (2026-10-21): a button is a filled surface, named by its label (WCAG 1.4.11 asks no boundary of a control its text identifies). |
+| `ButtonEdge` | 1 px edge of buttons, pickers, tool groups and the selected segment | `#CDD3DB` | `#30363D` | Soft on purpose (1.37 to 1.54:1): it shapes the surface, it does not carry identification. |
+| `ButtonRaised` | Selected segment; buttons and pickers on a Night dialog card (itself `#1F2328`); picker hover | `#FFFFFF` | `#2D333B` | One step up from `Button`, so a raised control still shows on a `Fill` surface. |
 | `Ink1` | Primary text, values, focus ring, primary button fill, selection outline | `#121826` | `#F3F5F7` | Near-black and near-white with a slight cool cast that matches the map hues. |
 | `Ink2` | Secondary text, labels, icons, quiet button labels | `#3D4656` | `#AEB4BD` | Labels defer to values but stay far above 4.5:1. |
 | `Ink3` | Tertiary metadata, placeholders, `n/a`, disabled labels | `#5B6576` | `#858C97` | Lowest text level; still 4.5:1 or more on every surface. Never used for anything you act on. |
@@ -226,7 +229,8 @@ Data values: grid cells, breakpoints, Live readings and channel values, rate, el
 | Line | Token | Where |
 |---|---|---|
 | Hairline | `Hairline` | between header, rail, pane, inspector, status bar; list dividers; Day popups |
-| Control edge | `Edge` | inputs, pickers, switch off track, checkbox, the value slider's track beyond the value, secondary buttons, selected segment, idle status dot, Night popups |
+| Control edge | `Edge` | text fields, switch off track, checkbox, the value slider's track beyond the value, idle status dot, Night popups |
+| Button edge | `ButtonEdge` | secondary buttons, pickers, tool groups, selected segment |
 | State line | `Ink1` | selection rectangle, selected tab underline, selected rail row bar, focus ring |
 | Warning stripe | `Warn`, 3 px left | warning banners only (it marks real state) |
 
@@ -260,21 +264,21 @@ Left to right:
 | Kind | Rest | Hover | Pressed | Disabled | Use |
 |---|---|---|---|---|---|
 | Primary | `Ink1` fill, `Pane` label SemiBold | `Ink2` fill | `Ink1` fill | `Fill` fill, `Ink3` label | One per screen: Save (Tune, Compare after a copy), Connect (Live, not connected), the main action of an empty state. |
-| Secondary | `Pane` fill, 1 px `Edge`, `Ink1` label | `Hover` | `Pressed` | no fill, `Hairline` edge, `Ink3` label | Second actions: Open XDF…, Copy B into A, Browse…, banner actions. |
+| Secondary | `Button` fill (`ButtonRaised` in a dialog), 1 px `ButtonEdge`, `Ink1` label | `Hover` | `Pressed` | no fill, `Hairline` edge, `Ink3` label | Second actions: Open XDF…, Copy B into A, Browse…, banner actions. |
 | Quiet | no fill or edge, `Ink2` label | `Hover` | `Pressed`, `Ink1` label | `Ink3` label | Pin, Change…, Edit in Tune, Disconnect, Performance tests, Show details. |
-| Tool group | one `Edge` outline around several text buttons, 1 px `Hairline` dividers | per button | per button | per button | Map toolbar: [Value][Set][Add][Scale %], [Interpolate][Smooth], [Undo][Redo]. |
+| Tool group | one `Button` surface with a `ButtonEdge` outline around several text buttons, 1 px `ButtonEdge` dividers | per button | per button | per button | Map toolbar: [Value][Set][Add][Scale %], [Interpolate][Smooth] with an X / Y / XY segmented control on maps (TunerPro's directions; remembered), [Undo][Redo]. With a B open, the compare controls leave the toolbar for a `Hairline` strip under it, "Compare with <B file>": [A][B][B − A], [Units][Raw][%] while B − A shows (one setting with Compare), Copy from B. |
 
 Disabled keeps its label at 4.5:1 or more (`Ink3`) and loses its boundary (Hairline), which is what says "not operable". Every disabled control has a tooltip with the reason: "Nothing to undo", "Select a range first: Interpolate fills between its corners."
 
 ### 5.3 Inputs and pickers
 
-`Pane` fill, 1 px `Edge`, radius 8, 32 px, text `Ink1`, placeholder `Ink3`. Number fields (Value, any numeric entry) set typed digits in Bahnschrift 13 with the unit as a suffix in `Ink3`. Focus shows the ring, not a border colour change. Invalid input: the field keeps its edge; the message appears under or beside it with the warning icon and text ("'abc' is not a number."). Pickers add a chevron in `Ink2`. The Value field is never prefilled.
+Text fields: `Pane` fill, 1 px `Edge`, radius 8, 32 px, text `Ink1`, placeholder `Ink3`. Pickers take the button look: `Button` fill, 1 px `ButtonEdge`, `ButtonRaised` on hover; their label and chevron identify them. Number fields (Value, any numeric entry) set typed digits in Bahnschrift 13 with the unit as a suffix in `Ink3`. Focus shows the ring, not a border colour change. Invalid input: the field keeps its edge; the message appears under or beside it with the warning icon and text ("'abc' is not a number."). Pickers add a chevron in `Ink2`. The Value field is never prefilled.
 
 Search fields (Tune rail, Live channel filter, Compare list) share one shortcut, **Ctrl K**, shown as an 11 px kbd hint, and a Clear button (icon only) once text is typed.
 
 ### 5.4 Segmented control
 
-Track `Fill`, radius 8, 2 px inset. Selected segment: `Pane` fill, 1 px `Edge` (3.56 Day, 3.44 Night against the track), `Ink1` SemiBold. Others: `Ink2` on the track, hover overlay. Inside a Night dialog, whose surface is itself `Fill`, the track is `Frame` so it stays visible; the selected segment stays `Pane` with `Edge`. Used for: Night / Day (status bar, accessible name "Theme"), A / B / B − A (Compare), trend window chips (Live strips). Not used for the main tabs.
+Track `Fill`, radius 8, 2 px inset. Selected segment: `ButtonRaised` fill, 1 px `ButtonEdge`, `Ink1` SemiBold against `Ink2` for the others (the label weight and ink carry the state; the fill is 1.18 Day, 1.24 Night against the track). Others: `Ink2` on the track, hover overlay. Inside a Night dialog, whose surface is itself `Fill`, the track is `Frame` so it stays visible; the selected segment stays `ButtonRaised`. Used for: Night / Day (status bar, accessible name "Theme"), A / B / B − A (Compare), trend window chips (Live strips). Not used for the main tabs.
 
 ### 5.5 Switch and checkbox
 
@@ -373,6 +377,10 @@ Mockups: `compare-{day,night}.html`.
 - After Copy B into A the copied item drops out of the list and the selection moves to the first listed item, as today.
 
 ---
+
+### 5.16 Scroll bars
+
+No arrow buttons; no track. The thumb is an `Edge` pill (radius 5, 3:1 on every surface) that stays a thin line until the pointer comes near, then widens to 10 px (`ScrollBarSize`), `Ink3` on hover. The owner found Fluent's 16 px bar with arrows heavy, and it covered the map's last row: a map grid that scrolls sideways keeps 12 px empty under its last row for the bar (`MapGrid.ScrollBarRoom`); a grid that fits keeps none, so a curve's key line stays right under it.
 
 ## 6. Icons (R-04)
 

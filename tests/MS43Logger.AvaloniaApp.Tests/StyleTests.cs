@@ -39,14 +39,100 @@ public class StyleTests
         Assert.Equal(Color.Parse("#0A0B0D"), Solid(button.Foreground));
     }
 
-    [AvaloniaFact]
-    public void SecondaryButtonHasAnEdgeOnPane()
+    // The owner found the Edge outline on every button too bright at Night: a secondary button is a filled surface with
+    // a dim edge; its label names it.
+    [AvaloniaTheory]
+    [InlineData("Dark", "#1F2328", "#30363D")]
+    [InlineData("Light", "#FFFFFF", "#CDD3DB")]
+    public void SecondaryButtonIsAFilledSurfaceWithASoftEdge(string theme, string fill, string edge)
     {
-        var button = Show(new Button { Content = "Browse…" });
+        var button = Show(new Button { Content = "Browse…" }, theme == "Dark" ? ThemeVariant.Dark : ThemeVariant.Light);
 
-        Assert.Equal(Color.Parse("#6E7681"), Solid(button.BorderBrush));
+        Assert.Equal(Color.Parse(fill), Solid(button.Background));
+        Assert.Equal(Color.Parse(edge), Solid(button.BorderBrush));
         Assert.Equal(new Thickness(1), button.BorderThickness);
-        Assert.Equal(Color.Parse("#0A0B0D"), Solid(button.Background));
+    }
+
+    // A picker reads as a button (its label and chevron say what it is), so it takes the button look, not the field edge.
+    [AvaloniaFact]
+    public void PickerHasTheButtonLook()
+    {
+        var picker = Show(new ComboBox { ItemsSource = new[] { "COM1" }, SelectedIndex = 0 });
+
+        var surface = picker.GetVisualDescendants().OfType<Border>().Single(border => border.Name == "Background");
+        Assert.Equal(Color.Parse("#1F2328"), Solid(surface.Background));
+        Assert.Equal(Color.Parse("#30363D"), Solid(surface.BorderBrush));
+    }
+
+    [AvaloniaFact]
+    public void TextFieldKeepsTheEdge()
+    {
+        var field = Show(new TextBox { Width = 120 });
+
+        Assert.Equal(Color.Parse("#6E7681"), Solid(field.BorderBrush));
+    }
+
+    private static ScrollBar HorizontalBar()
+    {
+        var scroller = new ScrollViewer { HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, Content = new Border { Width = 2000, Height = 2000 } };
+        var window = new Window { Width = 400, Height = 300, RequestedThemeVariant = ThemeVariant.Dark, Content = scroller };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        return scroller.GetVisualDescendants().OfType<ScrollBar>().First(bar => bar.Orientation == Orientation.Horizontal);
+    }
+
+    // The owner found Fluent's bar heavy: 16 px, arrow buttons, a square grey thumb over the grid's last row.
+    [AvaloniaFact]
+    public void ScrollBarIsSlimWithoutArrows()
+    {
+        var bar = HorizontalBar();
+
+        Assert.Equal(10, bar.Bounds.Height);
+        foreach (var name in new[] { "PART_LineUpButton", "PART_LineDownButton" })
+        {
+            Assert.False(bar.GetVisualDescendants().OfType<RepeatButton>().Single(button => button.Name == name).IsVisible, name);
+        }
+    }
+
+    [AvaloniaFact]
+    public void ScrollBarThumbIsAPillThatSpansTheTrack()
+    {
+        var bar = HorizontalBar();
+
+        var thumb = bar.GetVisualDescendants().OfType<Thumb>().Single();
+        var track = bar.GetVisualDescendants().OfType<Track>().Single();
+        var drawn = thumb.GetVisualDescendants().OfType<Border>().First();
+        Assert.Equal(new CornerRadius(5), drawn.CornerRadius);
+        Assert.Equal(bar.Bounds.Width, track.Bounds.Width);
+    }
+
+    [AvaloniaFact]
+    public void SelectedSegmentIsRaisedWithASoftEdge()
+    {
+        var segment = Show(new ToggleButton { Classes = { "seg" }, Content = "Units", IsChecked = true });
+
+        Assert.Equal(Color.Parse("#2D333B"), Solid(segment.Background));
+        Assert.Equal(Color.Parse("#30363D"), Solid(segment.BorderBrush));
+        Assert.Equal(Color.Parse("#F3F5F7"), Solid(segment.Foreground));
+    }
+
+    [AvaloniaFact]
+    public void ToolGroupHasASoftEdge()
+    {
+        var group = Show(new Border { Classes = { "toolgroup" }, Child = new Button { Content = "Undo" } });
+
+        Assert.Equal(Color.Parse("#30363D"), Solid(group.BorderBrush));
+        Assert.Equal(Color.Parse("#1F2328"), Solid(group.Background));
+    }
+
+    // A Night dialog card is #1F2328, the button colour: its buttons are raised one step so they still stand out.
+    [AvaloniaFact]
+    public void ButtonsInADialogAreRaised()
+    {
+        var button = new Button { Content = "Cancel" };
+        Show(new Border { Classes = { "dialog" }, Child = button });
+
+        Assert.Equal(Color.Parse("#2D333B"), Solid(button.Background));
     }
 
     [AvaloniaFact]

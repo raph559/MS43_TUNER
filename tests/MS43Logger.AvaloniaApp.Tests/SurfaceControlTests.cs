@@ -126,17 +126,17 @@ public class SurfaceControlTests
         var (yaw, pitch) = (surface.Yaw, surface.Pitch);
         surface.Focus();
 
-        window.KeyPressQwerty(PhysicalKey.NumPadAdd, RawInputModifiers.None);
+        window.KeyPressQwerty(PhysicalKey.NumPadAdd, RawInputModifiers.Control);
         Assert.True(surface.Zoom > 1);
         for (var i = 0; i < 30; i++)
         {
-            window.KeyPressQwerty(PhysicalKey.NumPadAdd, RawInputModifiers.None);
+            window.KeyPressQwerty(PhysicalKey.NumPadAdd, RawInputModifiers.Control);
         }
 
         Assert.Equal(Surface3D.MaxZoom, surface.Zoom, 6);
         for (var i = 0; i < 40; i++)
         {
-            window.KeyPressQwerty(PhysicalKey.NumPadSubtract, RawInputModifiers.None);
+            window.KeyPressQwerty(PhysicalKey.NumPadSubtract, RawInputModifiers.Control);
         }
 
         Assert.Equal(Surface3D.MinZoom, surface.Zoom, 6);
@@ -194,7 +194,7 @@ public class SurfaceControlTests
         var (window, surface) = await Open();
         surface.Focus();
         window.KeyPressQwerty(PhysicalKey.ArrowRight, RawInputModifiers.None);
-        window.KeyPressQwerty(PhysicalKey.NumPadAdd, RawInputModifiers.None);
+        window.KeyPressQwerty(PhysicalKey.NumPadAdd, RawInputModifiers.Control);
 
         Find.Named<Button>(window, "SurfaceEnlargeButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Dispatcher.UIThread.RunJobs();

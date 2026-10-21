@@ -103,8 +103,8 @@
 
     <!-- Buttons (system 5.2): secondary by default; one primary per screen; quiet for second-rank actions. -->
     <Style Selector="Button">
-        <Setter Property="Background" Value="{DynamicResource PaneBrush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource EdgeBrush}" />
+        <Setter Property="Background" Value="{DynamicResource ButtonBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ButtonEdgeBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="8" />
         <Setter Property="Padding" Value="12,0" />
@@ -223,23 +223,47 @@
         <Setter Property="Background" Value="Transparent" />
     </Style>
 
-    <!-- Tool group: one Edge outline around several text buttons, with hairline dividers. -->
+    <!-- A side list's right edge (the Tune rail, the Compare list): drag it, use the arrow keys on it, or double-click it for
+         the default width. A 2 px line shows where it is under the pointer or the keyboard. -->
+    <Style Selector="Border.railhandle">
+        <Setter Property="Width" Value="8" />
+        <Setter Property="Margin" Value="0,0,-4,0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Cursor" Value="SizeWestEast" />
+        <Setter Property="Focusable" Value="True" />
+        <Setter Property="FocusAdorner" Value="{StaticResource FocusRing}" />
+    </Style>
+    <Style Selector="Border.railhandle:pointerover > Border, Border.railhandle:focus-visible > Border">
+        <Setter Property="Background" Value="{DynamicResource Ink3Brush}" />
+    </Style>
+
+    <!-- Tool group: one button surface around several text buttons, with soft dividers. -->
     <Style Selector="Border.toolgroup">
-        <Setter Property="BorderBrush" Value="{DynamicResource EdgeBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ButtonEdgeBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="8" />
-        <Setter Property="Background" Value="{DynamicResource PaneBrush}" />
+        <Setter Property="Background" Value="{DynamicResource ButtonBrush}" />
         <Setter Property="ClipToBounds" Value="True" />
     </Style>
     <Style Selector="Border.toolgroup Button">
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderBrush" Value="{DynamicResource HairlineBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ButtonEdgeBrush}" />
         <Setter Property="BorderThickness" Value="1,0,0,0" />
         <Setter Property="CornerRadius" Value="0" />
         <Setter Property="MinHeight" Value="30" />
     </Style>
     <Style Selector="Border.toolgroup Button:nth-child(1)">
         <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <!-- A Night dialog card is the button colour, so its buttons and tool groups are raised one step. -->
+    <Style Selector="Border.dialog Button:not(.primary):not(.quiet):not(:disabled)">
+        <Setter Property="Background" Value="{DynamicResource ButtonRaisedBrush}" />
+    </Style>
+    <Style Selector="Border.dialog Border.toolgroup">
+        <Setter Property="Background" Value="{DynamicResource ButtonRaisedBrush}" />
+    </Style>
+    <Style Selector="Border.dialog Border.toolgroup Button">
+        <Setter Property="Background" Value="Transparent" />
     </Style>
 
     <!-- Screen tabs in the header (system 5.1): text tabs, the selected one Ink1 SemiBold with a 2 px underline. -->
@@ -274,7 +298,8 @@
         <Setter Property="RenderTransform" Value="scaleX(1)" />
     </Style>
 
-    <!-- Segmented control (system 5.4): a Fill track with a 2 px inset; the selected segment is Pane with an Edge. -->
+    <!-- Segmented control (system 5.4): a Fill track with a 2 px inset; the selected segment is raised, with a soft edge
+         and an Ink1 SemiBold label. -->
     <Style Selector="Border.seg">
         <Setter Property="Background" Value="{DynamicResource FillBrush}" />
         <Setter Property="CornerRadius" Value="8" />
@@ -321,8 +346,8 @@
         <Setter Property="Background" Value="{DynamicResource PressedOverlayBrush}" />
     </Style>
     <Style Selector="ToggleButton.seg:checked">
-        <Setter Property="Background" Value="{DynamicResource PaneBrush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource EdgeBrush}" />
+        <Setter Property="Background" Value="{DynamicResource ButtonRaisedBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ButtonEdgeBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
         <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
@@ -417,9 +442,10 @@
     <Style Selector="ComboBox:disabled /template/ ContentControl#ContentPresenter, ComboBox:disabled /template/ PathIcon#DropDownGlyph">
         <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
     </Style>
+    <!-- A picker reads as a button (its label and chevron say what it is): the button surface and soft edge. -->
     <Style Selector="ComboBox">
-        <Setter Property="Background" Value="{DynamicResource PaneBrush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource EdgeBrush}" />
+        <Setter Property="Background" Value="{DynamicResource ButtonBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ButtonEdgeBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
         <Setter Property="CornerRadius" Value="8" />
         <Setter Property="MinHeight" Value="32" />
@@ -427,11 +453,23 @@
         <Setter Property="FocusAdorner" Value="{StaticResource FocusRing}" />
     </Style>
     <Style Selector="ComboBox:pointerover /template/ Border#Background">
-        <Setter Property="Background" Value="{DynamicResource PaneBrush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource EdgeBrush}" />
+        <Setter Property="Background" Value="{DynamicResource ButtonRaisedBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ButtonEdgeBrush}" />
+    </Style>
+    <Style Selector="Border.dialog ComboBox:not(:disabled)">
+        <Setter Property="Background" Value="{DynamicResource ButtonRaisedBrush}" />
     </Style>
     <Style Selector="ComboBox /template/ PathIcon#DropDownGlyph">
         <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+    </Style>
+
+    <!-- Scroll bars: no arrow buttons (the wheel, a drag or a click on the track scrolls), and a pill thumb that stays a thin
+         line until the pointer comes near, as Fluent does, then widens to 10 px. -->
+    <Style Selector="ScrollBar /template/ RepeatButton#PART_LineUpButton, ScrollBar /template/ RepeatButton#PART_LineDownButton">
+        <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="ScrollBar /template/ Thumb">
+        <Setter Property="CornerRadius" Value="5" />
     </Style>
 
     <!-- Loading (system 5.10): a 2 px indeterminate bar in Ink2 on a Hairline track, square ends, never the accent. -->

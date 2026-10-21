@@ -9,6 +9,8 @@
     <FontFamily x:Key="UiFont">Segoe UI, avares://Avalonia.Fonts.Inter/Assets#Inter</FontFamily>
     <FontFamily x:Key="UiDisplayFont">Segoe UI, avares://Avalonia.Fonts.Inter/Assets#Inter</FontFamily>
     <FontFamily x:Key="DataFont">Bahnschrift, avares://Avalonia.Fonts.Inter/Assets#Inter</FontFamily>
+    <!-- Scroll bars: 10 px when shown (Fluent's 16 px bar with arrows covered the grid's last row). -->
+    <x:Double x:Key="ScrollBarSize">10</x:Double>
     <FontFamily x:Key="MonoFont">Cascadia Mono, avares://Avalonia.Fonts.Inter/Assets#Inter</FontFamily>
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Light">
@@ -24,6 +26,14 @@
             <SolidColorBrush x:Key="HairlineBrush" Color="#E1E5EA" />
             <Color x:Key="EdgeColor">#727C8C</Color>
             <SolidColorBrush x:Key="EdgeBrush" Color="#727C8C" />
+            <!-- Buttons, pickers, tool groups and the selected segment: a filled surface with a soft edge, not the Edge outline (the
+                 label names a button; Edge stays on text fields and switch tracks, which have no label inside). -->
+            <Color x:Key="ButtonColor">#FFFFFF</Color>
+            <SolidColorBrush x:Key="ButtonBrush" Color="#FFFFFF" />
+            <Color x:Key="ButtonEdgeColor">#CDD3DB</Color>
+            <SolidColorBrush x:Key="ButtonEdgeBrush" Color="#CDD3DB" />
+            <Color x:Key="ButtonRaisedColor">#FFFFFF</Color>
+            <SolidColorBrush x:Key="ButtonRaisedBrush" Color="#FFFFFF" />
             <Color x:Key="Ink1Color">#121826</Color>
             <SolidColorBrush x:Key="Ink1Brush" Color="#121826" />
             <Color x:Key="Ink2Color">#3D4656</Color>
@@ -109,8 +119,8 @@
             <SolidColorBrush x:Key="ComboBoxItemForeground" Color="#121826" />
             <!-- Keyboard focus on a picker keeps its surface and ink; the focus ring alone marks it (Fluent's accent highlight is cleared). -->
             <SolidColorBrush x:Key="ComboBoxBackgroundUnfocused" Color="#00000000" />
-            <SolidColorBrush x:Key="ComboBoxBackgroundBorderBrushUnfocused" Color="#727C8C" />
-            <SolidColorBrush x:Key="ComboBoxBackgroundBorderBrushFocused" Color="#727C8C" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundBorderBrushUnfocused" Color="#CDD3DB" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundBorderBrushFocused" Color="#CDD3DB" />
             <SolidColorBrush x:Key="ComboBoxForegroundFocused" Color="#121826" />
             <SolidColorBrush x:Key="ComboBoxForegroundFocusedPressed" Color="#121826" />
             <SolidColorBrush x:Key="ComboBoxPlaceHolderForegroundFocusedPressed" Color="#5B6576" />
@@ -150,6 +160,12 @@
             <SolidColorBrush x:Key="HairlineBrush" Color="#23272D" />
             <Color x:Key="EdgeColor">#6E7681</Color>
             <SolidColorBrush x:Key="EdgeBrush" Color="#6E7681" />
+            <Color x:Key="ButtonColor">#1F2328</Color>
+            <SolidColorBrush x:Key="ButtonBrush" Color="#1F2328" />
+            <Color x:Key="ButtonEdgeColor">#30363D</Color>
+            <SolidColorBrush x:Key="ButtonEdgeBrush" Color="#30363D" />
+            <Color x:Key="ButtonRaisedColor">#2D333B</Color>
+            <SolidColorBrush x:Key="ButtonRaisedBrush" Color="#2D333B" />
             <Color x:Key="Ink1Color">#F3F5F7</Color>
             <SolidColorBrush x:Key="Ink1Brush" Color="#F3F5F7" />
             <Color x:Key="Ink2Color">#AEB4BD</Color>
@@ -235,8 +251,8 @@
             <SolidColorBrush x:Key="ComboBoxItemForeground" Color="#F3F5F7" />
             <!-- Keyboard focus on a picker keeps its surface and ink; the focus ring alone marks it (Fluent's accent highlight is cleared). -->
             <SolidColorBrush x:Key="ComboBoxBackgroundUnfocused" Color="#00000000" />
-            <SolidColorBrush x:Key="ComboBoxBackgroundBorderBrushUnfocused" Color="#6E7681" />
-            <SolidColorBrush x:Key="ComboBoxBackgroundBorderBrushFocused" Color="#6E7681" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundBorderBrushUnfocused" Color="#30363D" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundBorderBrushFocused" Color="#30363D" />
             <SolidColorBrush x:Key="ComboBoxForegroundFocused" Color="#F3F5F7" />
             <SolidColorBrush x:Key="ComboBoxForegroundFocusedPressed" Color="#F3F5F7" />
             <SolidColorBrush x:Key="ComboBoxPlaceHolderForegroundFocusedPressed" Color="#858C97" />

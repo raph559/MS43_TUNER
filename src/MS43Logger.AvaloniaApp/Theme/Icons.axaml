@@ -17,6 +17,11 @@
     <StreamGeometry x:Key="Icon.Warn">M 8,2 L 14.5,13.5 L 1.5,13.5 Z M 8,6 L 8,10 M 8,11.25 L 8,12.5</StreamGeometry>
     <!-- Enlarge, for the surface plot (its zoom uses Minus and Plus). -->
     <StreamGeometry x:Key="Icon.Enlarge">M 9.25,2.75 L 13.25,2.75 L 13.25,6.75 M 13.25,2.75 L 9,7 M 6.75,13.25 L 2.75,13.25 L 2.75,9.25 M 2.75,13.25 L 7,9</StreamGeometry>
+    <!-- The theme switch: a crescent moon for Night, a sun for Day. -->
+    <StreamGeometry x:Key="Icon.Moon">M 12.75,10.25 A 5.25,5.25 0 1 1 5.75,3.25 A 4.25,4.25 0 0 0 12.75,10.25 Z</StreamGeometry>
+    <StreamGeometry x:Key="Icon.Sun">M 5.5,8 A 2.5,2.5 0 1 1 10.5,8 A 2.5,2.5 0 1 1 5.5,8 Z M 8,1.75 L 8,3.25 M 8,12.75 L 8,14.25 M 1.75,8 L 3.25,8 M 12.75,8 L 14.25,8 M 3.6,3.6 L 4.65,4.65 M 11.35,11.35 L 12.4,12.4 M 3.6,12.4 L 4.65,11.35 M 11.35,4.65 L 12.4,3.6</StreamGeometry>
+    <!-- Swap: one arrow up, one down, for exchanging A and B. -->
+    <StreamGeometry x:Key="Icon.Swap">M 5,13.25 L 5,2.75 M 2.75,5 L 5,2.75 L 7.25,5 M 11,2.75 L 11,13.25 M 8.75,11 L 11,13.25 L 13.25,11</StreamGeometry>
     <!-- Sort: three lines, longest first. -->
     <StreamGeometry x:Key="Icon.Sort">M 2.75,4.25 L 13.25,4.25 M 2.75,8 L 10.25,8 M 2.75,11.75 L 7.25,11.75</StreamGeometry>
     <!-- A window with its left panel: shows and hides the Tune rail. -->

@@ -270,6 +270,9 @@ internal static class GateClickThrough
         cells = Cells();
         c.Press("SmoothTool", "averages each cell with its neighbours", () => Changed(cells));
         cells = Cells();
+        c.Press("EditAxisX", "makes Interpolate and Smooth work along each row", () => tune.EditAxis == EditAxis.X && editor.Axis == EditAxis.X);
+        c.Press("EditAxisY", "makes them work along each column", () => tune.EditAxis == EditAxis.Y && editor.Axis == EditAxis.Y);
+        c.Press("EditAxisXY", "makes them work both ways again", () => tune.EditAxis == EditAxis.XY && editor.Axis == EditAxis.XY);
         c.Press("SetTool", "sets the selected cells to the value", () => Changed(cells));
         cells = Cells();
         c.Press("AddTool", "adds the value to the selected cells", () => Changed(cells));
@@ -370,7 +373,34 @@ internal static class GateClickThrough
         c.Press("ViewA", "shows A's values in the map colours", () => compare.View == "a");
         c.Press("ViewB", "shows B's values", () => compare.View == "b");
         c.Press("ViewDelta", "shows B − A", () => compare.View == "delta");
+        c.Press("DeltaRaw", "reads B − A in stored counts and saves it", () => compare.DeltaMode == DeltaMode.Raw && compare.Settings.CompareDeltaMode == DeltaMode.Raw);
+        c.Press("DeltaPercent", "reads B − A as a percentage of A", () => compare.DeltaMode == DeltaMode.Percent);
+        c.Press("DeltaUnits", "reads B − A in the map's units", () => compare.DeltaMode == DeltaMode.Units);
+        c.Press("SwapButton", "asks before swapping A and B", () => c.Dialogs.IsOpen && window.GetVisualDescendants().OfType<ConfirmActionDialog>().Any());
+        c.Note(c.Named<Button>("ConfirmActionButton"), "Swap: B opens as A and A becomes B; pressed in CompareSwapTests on copies of both bins");
+        c.Press("ConfirmCancelButton", "closes the question and swaps nothing", () => !c.Dialogs.IsOpen && compare.FileB == fileB);
+        compare.Selected = map;
+        Dispatcher.UIThread.RunJobs();
+        c.Press("CompareCollapseButton", "folds the list to its strip and saves it", () => compare.RailCollapsed && compare.Settings.CompareRailCollapsed);
+        c.Press("CompareExpandButton", "shows the list again", () => !compare.RailCollapsed);
+        compare.SetRailCollapsed(true);
+        Dispatcher.UIThread.RunJobs();
+        c.Press("CompareSearchButton", "shows the list on its search field", () => !compare.RailCollapsed && c.Named<TextBox>("CompareSearchBox").IsFocused);
+        c.Note(c.Named<Control>("CompareResizeHandle"), "the list's edge: dragged in CompareRailTests (the same RailSizer as the Tune rail's)");
+        compare.Selected = map;
+        Dispatcher.UIThread.RunJobs();
         c.Press("EditInTuneButton", "opens this item of A on Tune", () => shell.SelectedTab == ShellViewModel.TuneTab && shell.Tune.SelectedItem?.Title == map.Item.Title);
+        // On Tune with a B open: the map as B or B − A, back to A, and B's values copied into the selection.
+        Dispatcher.UIThread.RunJobs();
+        c.Press("TuneViewB", "shows B's values of the map on Tune", () => shell.Tune.GridView == "b");
+        c.Press("TuneViewDelta", "shows B − A on Tune", () => shell.Tune.GridView == "delta");
+        c.Press("TuneDeltaRaw", "reads B − A in stored counts on Tune", () => shell.Tune.DeltaMode == DeltaMode.Raw && shell.Tune.ShownEditor!.DeltaMode == DeltaMode.Raw);
+        c.Press("TuneDeltaPercent", "reads B − A as a percentage of A on Tune", () => shell.Tune.DeltaMode == DeltaMode.Percent);
+        c.Press("TuneDeltaUnits", "reads B − A in the map's units on Tune", () => shell.Tune.DeltaMode == DeltaMode.Units);
+        c.Press("TuneViewA", "shows A again, the one edited", () => shell.Tune.GridView == "a");
+        c.Press("CopyFromBTool", "writes B's values into the selected cells", () => shell.Tune.UndoTip.StartsWith("Undo: Copy ", StringComparison.Ordinal),
+            () => shell.Tune.Editor!.Selection = new MS43Logger.Core.Tuning.CellRange(3, 3, 3, 3));
+        shell.Tune.Undo();
         shell.SelectedTab = ShellViewModel.CompareTab;
         compare.Selected = compare.Result!.Items.Single(item => item.Item.Title == map.Item.Title);
         Dispatcher.UIThread.RunJobs();

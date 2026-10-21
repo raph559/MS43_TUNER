@@ -17,6 +17,14 @@ public sealed record AxisDifference(string Direction, AxisValues A, AxisValues B
         axis.Labels.Count == 0 ? "nothing" : $"{axis.Labels[0]} to {axis.Labels[^1]}";
 }
 
+/// <summary>How a difference is read: in the map's units, in stored counts, or as a percentage of A.</summary>
+public enum DeltaMode
+{
+    Units,
+    Raw,
+    Percent,
+}
+
 /// <summary>One table in A and B; <see cref="Delta"/> holds B − A in raw and physical units on A's axes.</summary>
 public sealed record TableComparison(
     TableValues A,
@@ -174,6 +182,56 @@ public static class BinComparer
     /// Signed text for one B − A value: "+1.50", "-0.38" (ASCII minus: Bahnschrift has no U+2212), and no change as
     /// the item's own zero ("0.00"). Hex and ASCII items show raw counts.
     /// </summary>
+    /// <summary>
+    /// B − A of a table read as <paramref name="mode"/>: in the map's units (<see cref="TableComparison.Delta"/> itself), in
+    /// stored counts, or as a percentage of A. The raw differences stay in <see cref="TableValues.Raw"/> either way.
+    /// </summary>
+    public static TableValues Difference(TableComparison table, DeltaMode mode)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        if (mode == DeltaMode.Units)
+        {
+            return table.Delta;
+        }
+
+        var delta = table.Delta;
+        var physical = new double[delta.Rows, delta.Cols];
+        for (var r = 0; r < delta.Rows; r++)
+        {
+            for (var c = 0; c < delta.Cols; c++)
+            {
+                physical[r, c] = mode == DeltaMode.Raw
+                    ? delta.Raw[r, c]
+                    : double.IsFinite(table.A.Physical[r, c]) && double.IsFinite(table.B.Physical[r, c])
+                        ? PercentOf(table.A.Physical[r, c], table.B.Physical[r, c])
+                        : double.NaN;
+            }
+        }
+
+        return delta with { Physical = physical };
+    }
+
+    /// <summary>B − A as a percentage of A's size; 0 when both are 0, and undefined (NaN) when only A is.</summary>
+    public static double PercentOf(double a, double b) => a == 0 ? (b == 0 ? 0 : double.NaN) : (b - a) / Math.Abs(a) * 100;
+
+    /// <summary>A difference as <paramref name="mode"/> prints it: "+2.0", "+4" (counts), "+40.0 %".</summary>
+    public static string FormatDelta(double delta, long rawDelta, XdfZ z, DeltaMode mode)
+    {
+        ArgumentNullException.ThrowIfNull(z);
+        if (mode != DeltaMode.Percent)
+        {
+            return FormatDelta(delta, rawDelta, z, raw: mode == DeltaMode.Raw);
+        }
+
+        if (!double.IsFinite(delta))
+        {
+            return "n/a";
+        }
+
+        var size = Math.Abs(delta).ToString("0.0", CultureInfo.InvariantCulture);
+        return (delta > 0 ? "+" : delta < 0 ? "-" : string.Empty) + size + " %";
+    }
+
     public static string FormatDelta(double delta, long rawDelta, XdfZ z, bool raw)
     {
         ArgumentNullException.ThrowIfNull(z);

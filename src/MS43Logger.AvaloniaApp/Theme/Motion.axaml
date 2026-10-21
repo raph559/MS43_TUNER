@@ -10,7 +10,8 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:views="using:MS43Logger.AvaloniaApp.Views"
-        xmlns:shell="using:MS43Logger.AvaloniaApp.Shell">
+        xmlns:shell="using:MS43Logger.AvaloniaApp.Shell"
+        xmlns:controls="using:MS43Logger.AvaloniaApp.Controls">
 
     <!-- Hover and press: the overlay fades instead of blinking, so moving across a toolbar does not flicker. -->
     <Style Selector="Button /template/ Border#PART_Overlay, ToggleButton /template/ Border#PART_Overlay, ListBoxItem /template/ Border#PART_Overlay">
@@ -116,13 +117,27 @@
         </Style.Animations>
     </Style>
 
-    <!-- The Tune rail slides closed to its strip and open again (Ctrl B), so it is seen going where it went. -->
-    <Style Selector="Border#RailHost.toggling">
+    <!-- A side list (Tune rail, Compare list) slides closed to its strip and open again (Ctrl B), so it is seen going where it went. -->
+    <Style Selector="Border.toggling">
         <Setter Property="Transitions">
             <Transitions>
                 <DoubleTransition Property="Width" Duration="0:0:0.18" Easing="CubicEaseOut" />
             </Transitions>
         </Setter>
+    </Style>
+
+    <!-- The theme switch: the moon or sun just picked turns into place as the window cross-fades (MainWindow.FadeTheme). -->
+    <Style Selector="ToggleButton#NightButton:checked > controls|StrokeIcon, ToggleButton#DayButton:checked > controls|StrokeIcon">
+        <Style.Animations>
+            <Animation Duration="0:0:0.36" Easing="CubicEaseOut">
+                <KeyFrame Cue="0%">
+                    <Setter Property="RotateTransform.Angle" Value="-90" />
+                </KeyFrame>
+                <KeyFrame Cue="100%">
+                    <Setter Property="RotateTransform.Angle" Value="0" />
+                </KeyFrame>
+            </Animation>
+        </Style.Animations>
     </Style>
 
     <!-- Switches: the knob slides to its side, which says which way it went. -->

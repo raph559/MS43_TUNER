@@ -45,7 +45,7 @@ public sealed record RailItem(XdfItem Item, ItemKind Kind, bool IsPinned, bool I
 }
 
 /// <summary>The Tune screen: the open bin and XDF, the map rail, and the selected item.</summary>
-public sealed class TuneViewModel : ViewModelBase
+public sealed class TuneViewModel : ViewModelBase, ISidePanel
 {
     private readonly AppSettings _settings;
     private readonly HashSet<string> _expanded = new(StringComparer.Ordinal);
@@ -280,7 +280,7 @@ public sealed class TuneViewModel : ViewModelBase
     /// <summary>The surface's line: how to turn it, then what it leaves out.</summary>
     public string SurfaceHint => SurfaceNote is { } note ? SurfaceHelp + " " + note : SurfaceHelp;
 
-    private const string SurfaceHelp = "Drag to turn, Shift-drag to move, wheel to zoom. Home resets.";
+    private const string SurfaceHelp = "Drag to turn, wheel to zoom. Click points to select cells, + or - to step them. Home resets.";
 
     /// <summary>Asks whether to save unsaved edits; set by the window. Without it, unsaved edits are never dropped.</summary>
     public Func<string, Task<SaveChoice>>? AskToSave { get; set; }
@@ -424,10 +424,11 @@ public sealed class TuneViewModel : ViewModelBase
     }
 
     /// <summary>Set by the Compare screen after each comparison; null items when there is no B.</summary>
-    public void CompareWith(string? fileB, IReadOnlySet<XdfItem>? items)
+    public void CompareWith(string? fileB, IReadOnlySet<XdfItem>? items, BinImage? image = null)
     {
         CompareFileB = fileB;
         CompareItems = items;
+        _compareImage = items is null ? null : image;
         OnPropertyChanged(nameof(HasCompare));
         if (items is null)
         {
@@ -435,6 +436,242 @@ public sealed class TuneViewModel : ViewModelBase
         }
 
         RebuildRail();
+        RefreshCompare();
+    }
+
+    private BinImage? _compareImage;
+    private string _gridView = "a";
+    private TableComparison? _comparison;
+    private TableEditorViewModel? _compareGrid;
+
+    /// <summary>True while a B is open on Compare and an item is shown: Tune offers A, B and B − A and Copy from B.</summary>
+    public bool ShowsCompare => _compareImage is not null && (Editor is not null || Value is not null);
+
+    public bool ShowsCompareGrid => _compareImage is not null && Editor is not null;
+
+    public bool ShowsUseB => _compareImage is not null && Value is not null;
+
+    /// <summary>The grid shown on Tune: "a" (the bin edited), "b" (the compare bin) or "delta" (B − A); B and B − A are read-only.</summary>
+    public string GridView
+    {
+        get => _gridView;
+        set
+        {
+            if (value is "a" or "b" or "delta" && SetField(ref _gridView, value))
+            {
+                OnPropertyChanged(nameof(IsGridA));
+                OnPropertyChanged(nameof(IsGridB));
+                OnPropertyChanged(nameof(IsGridDelta));
+                OnPropertyChanged(nameof(ShowsDeltaMode));
+                RefreshCompare();
+            }
+        }
+    }
+
+    public bool IsGridA { get => GridView == "a"; set { if (value) { GridView = "a"; } else { OnPropertyChanged(); } } }
+
+    public bool IsGridB { get => GridView == "b"; set { if (value) { GridView = "b"; } else { OnPropertyChanged(); } } }
+
+    public bool IsGridDelta { get => GridView == "delta"; set { if (value) { GridView = "delta"; } else { OnPropertyChanged(); } } }
+
+    /// <summary>
+    /// How B − A reads, in Tune and on Compare alike (one setting): in the map's units, in stored counts, or as a percentage
+    /// of A. Remembered.
+    /// </summary>
+    public DeltaMode DeltaMode
+    {
+        get => _settings.CompareDeltaMode;
+        set
+        {
+            if (_settings.CompareDeltaMode == value)
+            {
+                return;
+            }
+
+            _settings.CompareDeltaMode = value;
+            _settings.Save();
+            foreach (var name in new[] { nameof(DeltaMode), nameof(IsDeltaUnits), nameof(IsDeltaRaw), nameof(IsDeltaPercent) })
+            {
+                OnPropertyChanged(name);
+            }
+
+            RefreshCompare();
+        }
+    }
+
+    public bool IsDeltaUnits { get => DeltaMode == DeltaMode.Units; set { if (value) { DeltaMode = DeltaMode.Units; } else { OnPropertyChanged(); } } }
+
+    public bool IsDeltaRaw { get => DeltaMode == DeltaMode.Raw; set { if (value) { DeltaMode = DeltaMode.Raw; } else { OnPropertyChanged(); } } }
+
+    public bool IsDeltaPercent { get => DeltaMode == DeltaMode.Percent; set { if (value) { DeltaMode = DeltaMode.Percent; } else { OnPropertyChanged(); } } }
+
+    /// <summary>The Units, Raw and % choice shows with the B − A grid it changes.</summary>
+    public bool ShowsDeltaMode => ShowsCompareGrid && IsGridDelta;
+
+    /// <summary>"Compare with MS43X001.bin": the strip that holds A, B, B − A and Copy from B.</summary>
+    public string? CompareStripText => CompareFileB is { } b ? "Compare with " + b : null;
+
+    /// <summary>Which way Interpolate and Smooth work on a map: X along each row, Y along each column, XY both. Remembered.</summary>
+    public EditAxis EditAxis
+    {
+        get => _settings.EditAxis;
+        set
+        {
+            if (_settings.EditAxis == value)
+            {
+                return;
+            }
+
+            _settings.EditAxis = value;
+            _settings.Save();
+            if (Editor is { } editor)
+            {
+                editor.Axis = value;
+            }
+
+            foreach (var name in new[] { nameof(EditAxis), nameof(IsEditAxisX), nameof(IsEditAxisY), nameof(IsEditAxisXY) })
+            {
+                OnPropertyChanged(name);
+            }
+        }
+    }
+
+    public bool IsEditAxisX { get => EditAxis == EditAxis.X; set { if (value) { EditAxis = EditAxis.X; } else { OnPropertyChanged(); } } }
+
+    public bool IsEditAxisY { get => EditAxis == EditAxis.Y; set { if (value) { EditAxis = EditAxis.Y; } else { OnPropertyChanged(); } } }
+
+    public bool IsEditAxisXY { get => EditAxis == EditAxis.XY; set { if (value) { EditAxis = EditAxis.XY; } else { OnPropertyChanged(); } } }
+
+    /// <summary>X, Y and XY show for a map; on a curve the tools work along it.</summary>
+    public bool ShowsEditAxis => Editor is { IsMap: true };
+
+    /// <summary>The grid's editor: A's, or a read-only B or B − A over the same cells and selection.</summary>
+    public TableEditorViewModel? ShownEditor => GridView != "a" && _compareGrid is not null ? _compareGrid : Editor;
+
+    /// <summary>Where B's breakpoints differ from A's (cells are compared position by position), as the Compare tab says it.</summary>
+    public string? CompareAxisNote => _comparison is { Axes.Count: > 0 } compared ? string.Join(" ", compared.Axes.Select(axis => axis.Describe())) : null;
+
+    /// <summary>B at the active cell (or B's value): "B 25.5 °CRK, B − A -1.5", for the key line.</summary>
+    public string? CompareText
+    {
+        get
+        {
+            if (Document is not { } document || _compareImage is not { } image)
+            {
+                return null;
+            }
+
+            if (Editor is { } editor && _comparison is { } compared)
+            {
+                var (row, col) = editor.ActiveCell;
+                if (row >= compared.B.Rows || col >= compared.B.Cols)
+                {
+                    return null;
+                }
+
+                var z = compared.A.Table.Z;
+                var units = editor.Units.Length > 0 ? " " + editor.Units : string.Empty;
+                var b = ValueCodec.Format(compared.B.Physical[row, col], compared.B.Raw[row, col], z.DecimalPlaces, z.OutputType, z.Data.ElementBits);
+                var delta = BinComparer.Difference(compared, DeltaMode);
+                return compared.Delta.Raw[row, col] == 0
+                    ? $"B {b}{units}, same as A"
+                    : $"B {b}{units}, B − A {BinComparer.FormatDelta(delta.Physical[row, col], delta.Raw[row, col], z, DeltaMode)}";
+            }
+
+            return SelectedItem switch
+            {
+                XdfConstant constant => $"B {ValueCodec.Format(document.Reader.Codec.ToPhysical(constant.Math, image.ReadElement(constant.Data, 0)), image.ReadElement(constant.Data, 0), constant.DecimalPlaces, constant.OutputType, constant.Data.ElementBits)}{(constant.Units is { Length: > 0 } u && u != "-" ? " " + u : string.Empty)}",
+                XdfFlag flag => $"B {((image.ReadElement(flag.Data, 0) & flag.Mask) != 0 ? "on" : "off")}",
+                _ => null,
+            };
+        }
+    }
+
+    /// <summary>
+    /// Writes B's values into A: the selected cells of a map (one undo step), or the whole of a value, switch or flag.
+    /// Ctrl Shift B, or the Copy from B and Use B's value buttons.
+    /// </summary>
+    public bool CopyFromB()
+    {
+        if (Document is not { } document || History is not { } history || _compareImage is not { } image || SelectedItem is not { } item)
+        {
+            return false;
+        }
+
+        try
+        {
+            if (Editor is { Selection: CellRange range } editor && item is XdfTable table)
+            {
+                var plan = TableEdits.CopyFrom(document, table, range, image);
+                if (plan.Changes.Count == 0)
+                {
+                    editor.Message = "These cells already hold B's values.";
+                    return false;
+                }
+
+                history.Apply(plan, $"Copy {plan.Changes.Count} {(plan.Changes.Count == 1 ? "cell" : "cells")} of {table.Title} from {CompareFileB}");
+                editor.Message = plan.Warnings.Count > 0 ? string.Join(" ", plan.Warnings) : null;
+                return true;
+            }
+
+            var copy = TableEdits.CopyFrom(document, item, image);
+            if (copy.Changes.Count == 0)
+            {
+                return false;
+            }
+
+            history.Apply(copy, $"Use {CompareFileB}'s {item.Title}");
+            return true;
+        }
+        catch (EditRefusedException error)
+        {
+            if (Editor is { } shown)
+            {
+                shown.Message = error.Message;
+            }
+
+            return false;
+        }
+    }
+
+    // B's view of the shown map: the differing cells ringed on A, and the B or B − A grid when one is picked.
+    private void RefreshCompare()
+    {
+        var old = _compareGrid;
+        _comparison = Editor is { } editor && Document is { } document && _compareImage is { } image
+            ? BinComparer.CompareTable(document.Xdf, document.Image, image, editor.Table)
+            : null;
+        if (Editor is { } shown)
+        {
+            shown.DiffersCells = _comparison?.Changed ?? new HashSet<(int Row, int Col)>();
+        }
+
+        _compareGrid = _comparison is { } compared && Editor is { } a && GridView != "a"
+            ? GridView == "b"
+                ? TableEditorViewModel.Snapshot(compared.B, compared.Changed, mark: CellMark.Differs)
+                : TableEditorViewModel.Snapshot(BinComparer.Difference(compared, DeltaMode), new HashSet<(int Row, int Col)>(), isDelta: true, deltaMode: DeltaMode)
+            : null;
+        if (_compareGrid is { } grid && Editor is { } source)
+        {
+            grid.ShowRaw = source.ShowRaw;
+            grid.Selection = source.Selection;
+            grid.ActiveCell = source.ActiveCell;
+            grid.PropertyChanged += (_, e) =>
+            {
+                // A selection made on B or B − A is A's selection too: Copy from B and the tools act on it.
+                if (ReferenceEquals(grid, _compareGrid) && e.PropertyName is nameof(TableEditorViewModel.Selection) or nameof(TableEditorViewModel.ActiveCell))
+                {
+                    source.Selection = grid.Selection;
+                    source.ActiveCell = grid.ActiveCell;
+                }
+            };
+        }
+
+        old?.Dispose();
+        foreach (var name in new[] { nameof(ShownEditor), nameof(ShowsCompare), nameof(ShowsCompareGrid), nameof(ShowsUseB), nameof(ShowsDeltaMode), nameof(CompareStripText), nameof(CompareText), nameof(CompareAxisNote) })
+        {
+            OnPropertyChanged(name);
+        }
     }
 
     public XdfItem? SelectedItem
@@ -452,6 +689,7 @@ public sealed class TuneViewModel : ViewModelBase
                         Selection = new CellRange(0, 0, 0, 0),
                         ShowRaw = _settings.OpenMapsRaw,
                         NumberRows = Catalog.Kind(table) == ItemKind.Axis,
+                        Axis = _settings.EditAxis,
                     }
                     : null;
                 Value = value is XdfConstant or XdfFlag && Document is not null && History is not null && Catalog is not null
@@ -467,6 +705,15 @@ public sealed class TuneViewModel : ViewModelBase
                             && ReferenceEquals(editor, Editor))
                         {
                             BuildFacts();
+                            if (e.PropertyName == nameof(TableEditorViewModel.Values))
+                            {
+                                // An edit to A changes what differs from B and B − A.
+                                RefreshCompare();
+                            }
+                            else
+                            {
+                                OnPropertyChanged(nameof(CompareText));
+                            }
                         }
                     };
                 }
@@ -478,9 +725,12 @@ public sealed class TuneViewModel : ViewModelBase
                         if (e.PropertyName == nameof(ValueEditorViewModel.Current) && ReferenceEquals(single, Value))
                         {
                             BuildFacts();
+                            OnPropertyChanged(nameof(CompareText));
                         }
                     };
                 }
+
+                RefreshCompare();
                 LiveCursor.Bind(Document, Editor);
                 OnPropertyChanged(nameof(SelectedKindText));
                 OnPropertyChanged(nameof(SelectedKind));
@@ -490,6 +740,7 @@ public sealed class TuneViewModel : ViewModelBase
                 OnPropertyChanged(nameof(IsReadOnlyItem));
                 OnPropertyChanged(nameof(ShowsSurface));
                 OnPropertyChanged(nameof(ShowsCurve));
+                OnPropertyChanged(nameof(ShowsEditAxis));
                 OnPropertyChanged(nameof(CentreGrid));
                 OnPropertyChanged(nameof(IsAxis));
                 OnPropertyChanged(nameof(UsedBy));
@@ -617,34 +868,6 @@ public sealed class TuneViewModel : ViewModelBase
         RebuildRail();
     }
 
-    // "Map, 20 × 16, °CRK, at 0x77315": what the item is, how big, in what, and where.
-    private static string Detail(XdfItem item, ItemKind kind)
-    {
-        var parts = new List<string> { kind.ToString() };
-        if (item is XdfTable table)
-        {
-            parts.Add(table.Z.Data.Cols > 1 && table.Z.Data.Rows > 1 ? $"{table.Z.Data.Rows} × {table.Z.Data.Cols}" : $"{table.Z.Data.Count} points");
-        }
-
-        var units = item switch
-        {
-            XdfTable table2 => table2.Z.Units,
-            XdfConstant constant => constant.Units,
-            _ => string.Empty,
-        };
-        if (!string.IsNullOrWhiteSpace(units) && units != "-")
-        {
-            parts.Add(units);
-        }
-
-        if (XdfCatalog.Address(item) is long address)
-        {
-            parts.Add($"at 0x{address:X}");
-        }
-
-        return string.Join(", ", parts);
-    }
-
     public const double RailMinWidth = 200;
 
     public const double RailMaxWidth = 480;
@@ -691,8 +914,12 @@ public sealed class TuneViewModel : ViewModelBase
 
     public void RefreshModified() => RebuildRail();
 
+    /// <summary>The XDF the open bin is read with, in full (Compare's swap reopens the other bin with it).</summary>
+    public string? XdfPath { get; private set; }
+
     private void Attach(CalibrationDocument document, string xdfPath)
     {
+        XdfPath = Path.GetFullPath(xdfPath);
         if (Document is not null)
         {
             Document.Changed -= OnDocumentChanged;
@@ -951,7 +1178,7 @@ public sealed class TuneViewModel : ViewModelBase
         var differs = CompareItems ?? new HashSet<XdfItem>();
         RailItem Entry(XdfItem item, bool indented) =>
             new(item, catalog.Kind(item), _settings.IsPinned(item.Title), modified.Contains(item), ReferenceEquals(item, SelectedItem), indented, differs.Contains(item),
-                Detail(item, catalog.Kind(item)));
+                ItemFacts.Line(item, catalog.Kind(item)));
         IReadOnlyList<XdfItem> Sorted(IEnumerable<XdfItem> items) => catalog.Sort(items, Sort, SortDescending);
 
         if (SearchText.Trim().Length > 0)
