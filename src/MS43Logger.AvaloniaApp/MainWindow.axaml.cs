@@ -102,7 +102,7 @@ public partial class MainWindow : Window
     // usual), a double-click maximizes or restores. Presses on its buttons, tabs and pickers are handled by them first.
     private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed || !StartsWindowDrag(e.Source as Visual))
         {
             return;
         }
@@ -117,6 +117,28 @@ public partial class MainWindow : Window
         }
 
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// Whether a press here moves the window: on the header's background or plain text, yes; on anything a person
+    /// operates (a picker, a button, a tab), no. A picker opens on the release, which a window drag would swallow.
+    /// </summary>
+    internal static bool StartsWindowDrag(Visual? source)
+    {
+        for (var visual = source; visual is not null; visual = visual.GetVisualParent())
+        {
+            if (visual is InputElement { Focusable: true })
+            {
+                return false;
+            }
+
+            if (visual is Border { Name: "TitleBar" })
+            {
+                return true;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>Three 46 px window buttons plus the 8 px before them: the header's right padding.</summary>
