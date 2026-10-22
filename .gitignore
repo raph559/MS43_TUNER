@@ -5,10 +5,19 @@ bin/
 obj/
 .vs/
 artifacts/
+TestResults/
 
 # Local copies of real bins and XDFs for tests (never committed)
 testdata/local/
 
+# ECU bins and the .bak copies the app keeps beside them (never committed)
+*.bin
+*.bak
+
 # MS4X map definitions: no stated licence, kept local (never committed)
 definitions/Siemens_MS43_MS43X001_512K_v1.0.0.xdf
 *.xdf
+
+# Local work notes and tool settings (never committed)
+.superpowers/
+.claude/
