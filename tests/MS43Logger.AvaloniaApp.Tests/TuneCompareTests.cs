@@ -10,7 +10,7 @@ using MS43Logger.Core.Tuning;
 
 namespace MS43Logger.AvaloniaApp.Tests;
 
-/// <summary>Compare inside Tune: with a B open, the map shows A, B or B − A, differing cells are ringed, and B's values copy in.</summary>
+/// <summary>Compare inside Tune: with a B open, the map shows A, B or A − B, differing cells are ringed, and B's values copy in.</summary>
 public sealed class TuneCompareTests : IDisposable
 {
     private static readonly string? Release = TuneRailTests.Local("MS43X001_release_E46_M54B25.bin");
@@ -58,7 +58,7 @@ public sealed class TuneCompareTests : IDisposable
         Assert.False(Find.Named<Button>(window, "CopyFromBTool").IsEffectivelyVisible);
     }
 
-    // The owner: Tune showed no compare until Compare had been opened once ("Edit in Tune"); the remembered B opened only
+    // Tune showed no compare until Compare had been opened once ("Edit in Tune"); the remembered B opened only
     // when the Compare tab was shown.
     [AvaloniaFact]
     public async Task TheRememberedBShowsOnTuneWithoutVisitingCompare()
@@ -87,7 +87,7 @@ public sealed class TuneCompareTests : IDisposable
         Assert.True(Find.Named<Border>(window, "CompareStrip").IsEffectivelyVisible);
     }
 
-    // The owner: the compare controls sat among the edit tools with nothing to say they belong to Compare.
+    // The compare controls sat among the edit tools with nothing to say they belong to Compare.
     [AvaloniaFact]
     public async Task CompareControlsSitInTheirOwnLabelledStrip()
     {
@@ -129,7 +129,7 @@ public sealed class TuneCompareTests : IDisposable
         Assert.False(Find.Named<Border>(window, "CompareStrip").IsEffectivelyVisible);
     }
 
-    // As on Compare (TunerPro's compare): B − A in units, in counts, or as a percentage of A, shown with the B − A grid.
+    // As on Compare (TunerPro's compare): A − B in units, in counts, or as a percentage of B, shown with the A − B grid.
     [AvaloniaFact]
     public async Task TheDifferenceReadsInUnitsRawOrPercent()
     {
@@ -207,7 +207,7 @@ public sealed class TuneCompareTests : IDisposable
         Assert.True(grid.Editor!.IsDelta);
         Assert.Equal(compared.Delta.Physical[3, 4], grid.Editor.Values.Physical[3, 4]);
 
-        // A selection made on B or B − A is A's selection too.
+        // A selection made on B or A − B is A's selection too.
         grid.Editor.Selection = new CellRange(8, 1, 8, 1);
         tune.GridView = "a";
         Dispatcher.UIThread.RunJobs();

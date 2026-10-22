@@ -41,7 +41,7 @@ public sealed class ReadoutBandTests
         _ => string.Empty,
     };
 
-    // Pixels of the band close to Now (system 1.4: orange means now), in Night or Day.
+    // Pixels of the band close to Now (orange means now), in Night or Day.
     private static int OrangePixels(Window window)
     {
         var band = Find.Named<Control>(window, "ReadoutBand");
@@ -137,14 +137,16 @@ public sealed class ReadoutBandTests
         // Load is missing from the next reply, and the gear reads 0 (neutral or clutch in).
         Sample(shell.Live, ("N", 2500), ("IGAAVG", 30.0), ("GEAR", 0), ("VS", 77));
 
+        // The numbers change at most five times a second (LiveRateTests): the n/a shows at the next turn.
+        Thread.Sleep(250);
+        Dispatcher.UIThread.RunJobs();
         Assert.Equal("n/a", Text(window, "ReadoutLoad"));
         Assert.Null(shell.Live.Gear);
         Assert.Equal("n/a", shell.Live.GearText);
         Assert.Null(Find.Named<GearSlots>(window, "GearSlots").Gear);
     }
 
-    // GEAR carries the high bits of N as its fraction (4.59 is 4th near 5000 rpm), so rounding read one gear high
-    // (performance spec 4.1).
+    // GEAR carries the high bits of N as its fraction (4.59 is 4th near 5000 rpm), so rounding read one gear high.
     [AvaloniaFact]
     public void GearIsFlooredNotRounded()
     {
@@ -238,7 +240,7 @@ public sealed class ReadoutBandTests
         {
             if (connected)
             {
-                // The mockups' sample values (system 11.1).
+                // The mockups' sample values.
                 shell.Live.IsConnected = true;
                 Sample(shell.Live, ("N", 2480), ("MAFIGA", 112.4), ("IGAAVG", 31.1), ("GEAR", 4), ("VS", 77), ("AMP", 101.2), ("TCO", 88.5));
             }
