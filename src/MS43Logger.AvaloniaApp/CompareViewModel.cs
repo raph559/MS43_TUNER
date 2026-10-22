@@ -229,6 +229,9 @@ public sealed class CompareViewModel : ViewModelBase, ISidePanel
 
     public bool ShowsValue => Selected is { Item: not XdfTable } && !_showsBytes;
 
+    /// <summary>A switch's values are its choices, sentences that wrap as text instead of a number reading.</summary>
+    public bool ValuesAreChoices => ShowsValue && Selected?.Kind == ItemKind.Switch;
+
     /// <summary>The grid shown: "delta" (B − A), "a" or "b".</summary>
     public string View
     {
@@ -584,7 +587,7 @@ public sealed class CompareViewModel : ViewModelBase, ISidePanel
             ? BinComparer.CompareTable(document.Xdf, document.Image, _b, table)
             : null;
         BuildGrid();
-        foreach (var name in new[] { nameof(ShowsTable), nameof(ShowsValue), nameof(AxisBanner), nameof(Units), nameof(Description), nameof(CellsText), nameof(LargestText), nameof(ValueDeltaText) })
+        foreach (var name in new[] { nameof(ShowsTable), nameof(ShowsValue), nameof(ValuesAreChoices), nameof(AxisBanner), nameof(Units), nameof(Description), nameof(CellsText), nameof(LargestText), nameof(ValueDeltaText) })
         {
             OnPropertyChanged(name);
         }
