@@ -13,4 +13,5 @@ Where the rules file departs from a verdict in these notes:
 
 - The E85 twins marked LEAVE OUT (read, weight 0) are in the rules with a weight taken from the calibration (cal 0x70A10..0x70A13 − 128) / 32, valid only while flex fuel is off (cal 0x70DF8 = 0). Otherwise they say "Selection unknown".
 - The VANOS idle maps treat logged state 6 (full-load enrichment) as "Selection unknown", not as "not idle", like the idle ignition map.
-- VANOS part load vs full load is left as "Possibly in use"; injection timing and the knock-adaptation maps are left out.
+- VANOS part load vs full load follows loadstate.md: full load when E33B (high byte of MAFTI) is above curve 0x75D7F at rpm, the curve read from the open bin. With the logged state showing overrun, start or stopped the choice is "Selection unknown", because FD38.14 is held while the pedal is released; loadstate.md asks only for overrun.
+- Injection timing and the knock-adaptation maps are left out.

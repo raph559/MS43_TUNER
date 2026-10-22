@@ -164,10 +164,20 @@ public sealed class LiveTableBinding
             return null;
         }
 
+        return new LiveAxisBinding(source, ReadBreakpoints(image, axis)!, display.Math, display.Units, display.Decimals);
+    }
+
+    /// <summary>The breakpoints of an axis as stored in the bin (count, then the values), or null when they cannot be read.</summary>
+    internal static IReadOnlyList<long>? ReadBreakpoints(BinImage image, CatalogAxis axis)
+    {
         var count = ReadCount(image, axis);
+        if (count < 0)
+        {
+            return null;
+        }
+
         var values = new XdfData(axis.CountAddress + axis.ElementBits / 8, axis.ElementBits, false, true, count, 1, null);
-        var breakpoints = Enumerable.Range(0, count).Select(i => image.ReadElement(values, i)).ToList();
-        return new LiveAxisBinding(source, breakpoints, display.Math, display.Units, display.Decimals);
+        return Enumerable.Range(0, count).Select(i => image.ReadElement(values, i)).ToList();
     }
 
     /// <summary>The axis's point count as stored in the bin, or −1 when it cannot be read.</summary>

@@ -11,11 +11,20 @@ public enum MapUseState
     Unknown,
 }
 
-/// <summary>A value the ECU picks maps with, as the logger frame carries it: <c>raw &amp; Mask</c> of the channel at <see cref="PacketOffset"/>.</summary>
-public sealed record UseSelector(string Id, string Ram, string Channel, int PacketOffset, int Bits, long Mask, string Evidence);
+/// <summary>A value the ECU picks maps with, as the logger frame carries it: <c>(raw &amp; Mask) &gt;&gt; Shift</c> of the channel at <see cref="PacketOffset"/>.</summary>
+public sealed record UseSelector(string Id, string Ram, string Channel, int PacketOffset, int Bits, long Mask, string Evidence, int Shift = 0);
 
-/// <summary>True when <c>selector &amp; Mask</c> is one of <see cref="Values"/>, or is not one of them when <see cref="Negate"/> is set.</summary>
-public sealed record UseCondition(string Selector, long Mask, IReadOnlyList<long> Values, bool Negate);
+/// <summary>
+/// A calibration curve the ECU compares a selector with, read from the open bin: unsigned <see cref="Bits"/>-bit values at <see cref="Data"/>,
+/// searched without interpolation on the axis whose count sits at <see cref="Axis"/>, with the selector <see cref="Input"/>.
+/// </summary>
+public sealed record UseCurve(string Id, long Data, string Name, int Bits, long Axis, int AxisBits, string Input, string Evidence);
+
+/// <summary>
+/// True when <c>selector &amp; Mask</c> is one of <see cref="Values"/>, or is not one of them when <see cref="Negate"/> is set.
+/// With <see cref="AboveCurve"/> set it is instead true when the selector is above that curve at the curve's input.
+/// </summary>
+public sealed record UseCondition(string Selector, long Mask, IReadOnlyList<long> Values, bool Negate, string? AboveCurve = null);
 
 /// <summary>A case matches when all its conditions hold; an empty list always matches.</summary>
 public sealed record UseCase(IReadOnlyList<UseCondition> When, MapUseState Then, string? Why);
@@ -34,7 +43,7 @@ public sealed record UseMember(long Data, string Name, string Label, IReadOnlyLi
 public sealed record MapUseRule(string Id, string Title, string Selection, string? Inferred, string Evidence, string? Caveat, string Blend, string? IndexSelector,
     IReadOnlyList<UseCase> Cases, IReadOnlyList<UseMember> Members);
 
-/// <summary>When the ECU of one firmware uses which map, from definitions/*_map_use.json (hand-written, with its evidence).</summary>
+/// <summary>Firmware-specific map-selection rules and their evidence from definitions/*_map_use.json.</summary>
 public sealed class MapUseRules
 {
     private static readonly Dictionary<string, string> BundledFiles = new(StringComparer.OrdinalIgnoreCase)
@@ -46,11 +55,12 @@ public sealed class MapUseRules
     private readonly Dictionary<long, string> _leftOut;
 
     private MapUseRules(string softwareId, IReadOnlyDictionary<string, string> provenance, IReadOnlyDictionary<string, UseSelector> selectors,
-        IReadOnlyDictionary<string, UseFactor> factors, IReadOnlyList<MapUseRule> rules, Dictionary<long, string> leftOut)
+        IReadOnlyDictionary<string, UseCurve> curves, IReadOnlyDictionary<string, UseFactor> factors, IReadOnlyList<MapUseRule> rules, Dictionary<long, string> leftOut)
     {
         SoftwareId = softwareId;
         Provenance = provenance;
         Selectors = selectors;
+        Curves = curves;
         Factors = factors;
         Rules = rules;
         _leftOut = leftOut;
@@ -72,6 +82,8 @@ public sealed class MapUseRules
     public IReadOnlyDictionary<string, string> Provenance { get; }
 
     public IReadOnlyDictionary<string, UseSelector> Selectors { get; }
+
+    public IReadOnlyDictionary<string, UseCurve> Curves { get; }
 
     public IReadOnlyDictionary<string, UseFactor> Factors { get; }
 
@@ -106,8 +118,11 @@ public sealed class MapUseRules
             var provenance = Required(root, "provenance").EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetString() ?? string.Empty);
             var selectors = Required(root, "selectors").EnumerateArray()
                 .Select(s => new UseSelector(Text(s, "id"), Text(s, "ram"), Text(s, "channel"), (int)Hex(Text(s, "offset")), Required(s, "bits").GetInt32(),
-                    Hex(Text(s, "mask")), Text(s, "evidence")))
+                    Hex(Text(s, "mask")), Text(s, "evidence"), s.TryGetProperty("shift", out var shift) ? shift.GetInt32() : 0))
                 .ToDictionary(s => s.Id, StringComparer.Ordinal);
+            var curves = Required(root, "curves").EnumerateArray()
+                .Select(c => ReadCurve(c, selectors))
+                .ToDictionary(c => c.Id, StringComparer.Ordinal);
             var factors = Required(root, "factors").EnumerateArray()
                 .Select(f => new UseFactor(
                     Text(f, "id"),
@@ -118,7 +133,7 @@ public sealed class MapUseRules
                     Required(f, "requires").EnumerateArray().Select(r => new CalibrationRequirement(Hex(Text(r, "cal")), Required(r, "equals").GetInt64())).ToList(),
                     Text(f, "evidence")))
                 .ToDictionary(f => f.Id, StringComparer.Ordinal);
-            var rules = Required(root, "rules").EnumerateArray().Select(r => ReadRule(r, selectors, factors)).ToList();
+            var rules = Required(root, "rules").EnumerateArray().Select(r => ReadRule(r, selectors, curves, factors)).ToList();
             var leftOut = new Dictionary<long, string>();
             foreach (var entry in Required(root, "leftOut").EnumerateArray())
             {
@@ -128,7 +143,7 @@ public sealed class MapUseRules
                 }
             }
 
-            return new MapUseRules(Text(root, "softwareId"), provenance, selectors, factors, rules, leftOut);
+            return new MapUseRules(Text(root, "softwareId"), provenance, selectors, curves, factors, rules, leftOut);
         }
         catch (Exception error) when (error is JsonException or InvalidOperationException or FormatException or KeyNotFoundException or ArgumentException)
         {
@@ -136,7 +151,18 @@ public sealed class MapUseRules
         }
     }
 
-    private static MapUseRule ReadRule(JsonElement r, Dictionary<string, UseSelector> selectors, Dictionary<string, UseFactor> factors)
+    private static UseCurve ReadCurve(JsonElement c, Dictionary<string, UseSelector> selectors)
+    {
+        if (Required(c, "interpolate").GetBoolean())
+        {
+            throw new InvalidOperationException($"the curve \"{Text(c, "id")}\" interpolates, which the rules do not model");
+        }
+
+        return new UseCurve(Text(c, "id"), Hex(Text(c, "data")), Text(c, "name"), Required(c, "bits").GetInt32(), Hex(Text(c, "axis")), Required(c, "axisBits").GetInt32(),
+            Known(selectors, Text(c, "input"), "selector"), Text(c, "evidence"));
+    }
+
+    private static MapUseRule ReadRule(JsonElement r, Dictionary<string, UseSelector> selectors, Dictionary<string, UseCurve> curves, Dictionary<string, UseFactor> factors)
     {
         var selection = Text(r, "selection");
         if (selection is not ("observed" or "inferred"))
@@ -152,7 +178,7 @@ public sealed class MapUseRules
 
         var cases = Required(r, "cases").EnumerateArray()
             .Select(c => new UseCase(
-                Required(c, "when").EnumerateArray().Select(w => ReadCondition(w, selectors)).ToList(),
+                Required(c, "when").EnumerateArray().Select(w => ReadCondition(w, selectors, curves)).ToList(),
                 Text(c, "then") switch
                 {
                     "use" => MapUseState.InUse,
@@ -179,8 +205,13 @@ public sealed class MapUseRules
         return new MapUseRule(Text(r, "id"), Text(r, "title"), selection, Optional(r, "inferred"), Text(r, "evidence"), Optional(r, "caveat"), blend, indexSelector, cases, members);
     }
 
-    private static UseCondition ReadCondition(JsonElement w, Dictionary<string, UseSelector> selectors)
+    private static UseCondition ReadCondition(JsonElement w, Dictionary<string, UseSelector> selectors, Dictionary<string, UseCurve> curves)
     {
+        if (Optional(w, "above") is { } curve)
+        {
+            return new UseCondition(Known(selectors, Text(w, "selector"), "selector"), -1, Array.Empty<long>(), false, Known(curves, curve, "curve"));
+        }
+
         var negate = w.TryGetProperty("notIn", out var values);
         if (!negate)
         {

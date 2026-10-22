@@ -87,10 +87,90 @@ public class MapUseTests
         Assert.Equal("Not in use", Text("ip_cam_sp_ron98_in_is__n__maf_ivvt", (State, 0x04), (Vanos, 0x02)));
         Assert.Equal("Selection unknown", Text("ip_cam_sp_ron98_in_is__n__maf_ivvt", (State, 0x06), (Vanos, 0x02)));
         Assert.Equal("Selection unknown", Text("ip_cam_sp_ron98_ex_is__n__maf_ivvt", (State, 0x06), (Vanos, 0x02)));
-        Assert.Equal("Possibly in use", Text("ip_cam_sp_ron98_in_pl__n__maf_ivvt", (State, 0x04), (Vanos, 0x02)));
-        Assert.Equal("Not in use", Text("ip_cam_sp_e85_in_pl__n__maf_ivvt", (State, 0x04), (Vanos, 0x02)));
+        Assert.Equal("In use", Text("ip_cam_sp_ron98_in_pl__n__maf_ivvt", (State, 0x04), (Vanos, 0x02)));
+        Assert.Equal("Not in use · RON98 100 %", Text("ip_cam_sp_e85_in_pl__n__maf_ivvt", (State, 0x04), (Vanos, 0x02)));
         Assert.Equal("Not in use", Text("ip_cam_sp_ron98_in_pl__n__maf_ivvt", (State, 0x02), (Vanos, 0x02)));
         Assert.Equal("Not in use", Text("ip_cam_sp_ron98_in_fl__n", (State, 0x06), (Vanos, 0x03)));
+    }
+
+    private static MapUse LoadUse(BinImage image, string title, byte state, long rpm, long e33b)
+    {
+        var table = Ms43xTables.Value.Single(t => t.Title == title);
+        var payload = LivePayloads.Build(Ms43x, new (int, byte)[] { (State, state), (Vanos, 0x02) }, ("N", rpm), ("MAFTI", e33b << 8 | 0x80));
+        return MapUseBinding.Resolve(Rules, image, table.Z.Data.Address!.Value).Evaluate(Ms43x, payload);
+    }
+
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void VanosFullLoadIsLoadAboveTheCurve()
+    {
+        var image = Car().Image;
+        foreach (byte state in new byte[] { 0x04, 0x06 })
+        {
+            Assert.Equal("In use", LoadUse(image, "ip_cam_sp_ron98_in_fl__n", state, 3000, 31).Text);
+            Assert.Equal("In use", LoadUse(image, "ip_cam_sp_ron98_ex_fl__n", state, 3000, 31).Text);
+            Assert.Equal("Not in use", LoadUse(image, "ip_cam_sp_ron98_in_pl__n__maf_ivvt", state, 3000, 31).Text);
+            Assert.Equal("Not in use", LoadUse(image, "ip_cam_sp_ron98_ex_pl__n__maf_ivvt", state, 3000, 31).Text);
+            Assert.Equal("Not in use · RON98 100 %", LoadUse(image, "ip_cam_sp_e85_in_fl__n", state, 3000, 31).Text);
+
+            Assert.Equal("Not in use", LoadUse(image, "ip_cam_sp_ron98_in_fl__n", state, 3000, 30).Text);
+            Assert.Equal("Not in use", LoadUse(image, "ip_cam_sp_ron98_ex_fl__n", state, 3000, 30).Text);
+            Assert.Equal("In use", LoadUse(image, "ip_cam_sp_ron98_in_pl__n__maf_ivvt", state, 3000, 30).Text);
+            Assert.Equal("In use", LoadUse(image, "ip_cam_sp_ron98_ex_pl__n__maf_ivvt", state, 3000, 30).Text);
+            Assert.Equal("Not in use · RON98 100 %", LoadUse(image, "ip_cam_sp_e85_ex_pl__n__maf_ivvt", state, 3000, 30).Text);
+        }
+
+        var use = LoadUse(image, "ip_cam_sp_ron98_in_fl__n", 0x04, 3000, 31);
+        Assert.Equal(MapUseState.InUse, use.State);
+        Assert.Equal(1.0, use.Shares.Single().Weight);
+        Assert.Equal("Not in use", LoadUse(image, "ip_cam_sp_ron98_in_fl__n", 0x02, 3000, 31).Text);
+    }
+
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void VanosFullLoadReadsTheCurveFromTheOpenBin()
+    {
+        // Breakpoint 3 of axis 0x74B6C is 2200 rpm and breakpoint 4 is 2500; the curve is not interpolated, so 2200-2499 reads entry 3.
+        var image = Car().Image.Clone();
+        image.WriteElement(new XdfData(0x75D7F, 8, false, true, 16, 1, null), 3, 40);
+
+        Assert.Equal("Not in use", LoadUse(image, "ip_cam_sp_ron98_in_fl__n", 0x04, 2300, 31).Text);
+        Assert.Equal("In use", LoadUse(image, "ip_cam_sp_ron98_in_pl__n__maf_ivvt", 0x04, 2300, 31).Text);
+        Assert.Equal("In use", LoadUse(image, "ip_cam_sp_ron98_in_fl__n", 0x04, 2300, 41).Text);
+        Assert.Equal("In use", LoadUse(image, "ip_cam_sp_ron98_in_fl__n", 0x04, 2499, 41).Text);
+        Assert.Equal("In use", LoadUse(image, "ip_cam_sp_ron98_in_fl__n", 0x04, 2199, 31).Text);
+        Assert.Equal("In use", LoadUse(image, "ip_cam_sp_ron98_in_fl__n", 0x04, 2500, 31).Text);
+        Assert.Equal("Not in use", LoadUse(Car().Image, "ip_cam_sp_ron98_in_fl__n", 0x04, 2300, 30).Text);
+
+        image.WriteElement(new XdfData(0x75D7F, 8, false, true, 16, 1, null), 15, 255);
+        Assert.Equal("In use", LoadUse(image, "ip_cam_sp_ron98_in_pl__n__maf_ivvt", 0x04, 8000, 255).Text);
+    }
+
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void VanosLoadChoiceIsUnknownWhileItIsHeld()
+    {
+        var image = Car().Image;
+        foreach (byte held in new byte[] { 0x08, 0x10, 0x01, 0x00 })
+        {
+            foreach (var title in new[] { "ip_cam_sp_ron98_in_fl__n", "ip_cam_sp_ron98_ex_pl__n__maf_ivvt" })
+            {
+                var use = LoadUse(image, title, held, 3000, 31);
+                Assert.Equal("Selection unknown", use.Text);
+                Assert.Contains("FD38.14", use.Detail);
+            }
+        }
+
+        Assert.Contains("Overrun", LoadUse(image, "ip_cam_sp_ron98_in_fl__n", 0x08, 3000, 31).Detail);
+    }
+
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void AnUnreadableCurveMakesTheLoadChoiceUnknown()
+    {
+        var image = Car().Image.Clone();
+        image.WriteElement(new XdfData(0x74B6C, 16, false, true, 1, 1, null), 0, 0);
+
+        var use = LoadUse(image, "ip_cam_sp_ron98_in_fl__n", 0x04, 3000, 31);
+        Assert.Equal("Selection unknown", use.Text);
+        Assert.Contains("0x75D7F", use.Detail);
+        Assert.Equal("Not in use", LoadUse(image, "ip_cam_sp_ron98_in_fl__n", 0x02, 3000, 31).Text);
     }
 
     [RealFileFact(TestData.CarBin, TestData.Xdf)]
