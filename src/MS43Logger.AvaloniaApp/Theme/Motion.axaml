@@ -162,11 +162,19 @@
         </Style.Animations>
     </Style>
 
-    <!-- Switches: the knob slides to its side, which says which way it went. -->
+    <!-- Switches: the knob slides to its side, which says which way it went, while the track fills and the knob turns
+         colour with it; an instant fill hid the short slide. -->
     <Style Selector="ToggleSwitch">
         <Setter Property="KnobTransitions">
             <Transitions>
-                <DoubleTransition Property="Canvas.Left" Duration="0:0:0.15" Easing="CubicEaseOut" />
+                <DoubleTransition Property="Canvas.Left" Duration="0:0:0.18" Easing="CubicEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="ToggleSwitch /template/ Border#OuterBorder, ToggleSwitch /template/ Border#SwitchKnobBounds, ToggleSwitch /template/ Ellipse#SwitchKnobOn, ToggleSwitch /template/ Ellipse#SwitchKnobOff">
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="0:0:0.18" Easing="CubicEaseOut" />
             </Transitions>
         </Setter>
     </Style>
