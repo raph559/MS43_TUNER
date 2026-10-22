@@ -47,7 +47,7 @@ jobs:
           Compress-Archive -Path "$publish/cli/*" -DestinationPath "artifacts/MS43Tuner-CLI-$env:TAG-win-x64.zip"
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           # Tags such as v1.2.0-beta.1 are marked as pre-releases.
