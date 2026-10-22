@@ -5,7 +5,7 @@ using MS43Logger.Core.Tests;
 
 namespace MS43Logger.AvaloniaApp.Tests;
 
-/// <summary>The Performance tab's results library and compare (performance spec 8, 9.1, 9.2).</summary>
+/// <summary>The Performance tab's results library and compare.</summary>
 public sealed class PerformanceResultsTests : IDisposable
 {
     private static readonly AnalysisInputs Inputs = new(new CarValues(1480, "205/55 R16", false), new Dictionary<int, double>(), SyntheticRuns.FullPedal);
@@ -189,9 +189,9 @@ public sealed class PerformanceResultsTests : IDisposable
         Assert.NotEmpty(comparison.TraceB);
         Assert.Equal("rpm", comparison.XUnits);
         Assert.Equal("kW", comparison.YUnits);
-        // A is the earlier run, so B − A is what the change did (performance spec 9.2).
-        Assert.Equal("A: Baseline", comparison.LabelA);
-        Assert.Equal("B: Ignition +1.5", comparison.LabelB);
+        // A is the newer run and B the older, as in Compare, so A − B is what the change did.
+        Assert.Equal("A: Ignition +1.5", comparison.LabelA);
+        Assert.Equal("B: Baseline", comparison.LabelB);
         var time = Assert.Single(comparison.Deltas, delta => delta.Key == "time");
         Assert.StartsWith("-0.", time.Delta);
         Assert.Equal("Compared over 2000 to 6400 rpm, the band both runs share.", comparison.BandText);
@@ -205,7 +205,7 @@ public sealed class PerformanceResultsTests : IDisposable
     }
 
     // Each run's doubts show beside the deltas, so a cold, invalid or knocking run never gets bare B − A figures; notes stay
-    // in the result itself (final review, finding 5).
+    // in the result itself.
     [AvaloniaFact]
     public void CompareShowsEachRunsFlags()
     {
@@ -221,16 +221,16 @@ public sealed class PerformanceResultsTests : IDisposable
         results.Compare();
 
         var comparison = results.Comparison!;
-        Assert.Equal("A: Warm", comparison.LabelA);
-        Assert.Empty(comparison.FlagsA);
-        Assert.False(comparison.HasFlagsA);
-        var cold = Assert.Single(comparison.FlagsB, flag => flag.Code == "cold");
+        Assert.Equal("A: Morning", comparison.LabelA);
+        Assert.Empty(comparison.FlagsB);
+        Assert.False(comparison.HasFlagsB);
+        var cold = Assert.Single(comparison.FlagsA, flag => flag.Code == "cold");
         Assert.True(cold.IsWarn);
-        Assert.True(comparison.HasFlagsB);
-        Assert.DoesNotContain(comparison.FlagsB, flag => flag.IsInfo);
+        Assert.True(comparison.HasFlagsA);
+        Assert.DoesNotContain(comparison.FlagsA, flag => flag.IsInfo);
     }
 
-    // Back to the list keeps what was typed into an opened result: it is written to the file (minor review, finding 30).
+    // Back to the list keeps what was typed into an opened result: it is written to the file.
     [AvaloniaFact]
     public void ClosingAnOpenedResultKeepsItsEdits()
     {
@@ -256,8 +256,7 @@ public sealed class PerformanceResultsTests : IDisposable
         Assert.Equal("Not renamed: a result needs a name", results.Error);
     }
 
-    // A ticked row stays ticked and in view while the search changes, so A and B can each be found by search (minor review,
-    // finding 63).
+    // A ticked row stays ticked and in view while the search changes, so A and B can each be found by search.
     [AvaloniaFact]
     public void SearchKeepsTheTicks()
     {
@@ -278,7 +277,7 @@ public sealed class PerformanceResultsTests : IDisposable
         Assert.Equal(2, results.PickedCount);
     }
 
-    // The rpm of each run's peak goes beside its peak, not in a row of its own reading "0 rpm" (minor review, finding 69).
+    // The rpm of each run's peak goes beside its peak, not in a row of its own reading "0 rpm".
     [AvaloniaFact]
     public void ThePeakRpmShowsBesideThePeak()
     {
@@ -298,7 +297,7 @@ public sealed class PerformanceResultsTests : IDisposable
         Assert.Matches(@"^A \d+ Nm at \d+ rpm, B \d+ Nm at \d+ rpm$", Assert.Single(deltas, delta => delta.Key == "peak-torque").Pair);
     }
 
-    // Two gears are named, and their times are not subtracted (minor review, finding 26).
+    // Two gears are named, and their times are not subtracted.
     [AvaloniaFact]
     public void DifferentGearsLeaveTheTimesOut()
     {
@@ -313,15 +312,15 @@ public sealed class PerformanceResultsTests : IDisposable
         results.Compare();
 
         var comparison = results.Comparison!;
-        Assert.Contains("Different gears: 2nd and 3rd; times are not compared.", comparison.Mismatches);
+        // A (the newer run, 3rd) first, as every A and B pair reads.
+        Assert.Contains("Different gears: 3rd and 2nd; times are not compared.", comparison.Mismatches);
         var times = comparison.Deltas.Where(delta => delta.Unit == "s").ToArray();
         Assert.NotEmpty(times);
         Assert.All(times, delta => Assert.Equal("n/a", delta.Delta));
         Assert.NotEqual("n/a", Assert.Single(comparison.Deltas, delta => delta.Key == "time").A);
     }
 
-    // An empty table list says why, from the comparison, and one saved image is a plain line, not a mismatch (minor review,
-    // findings 12, 13 and 25).
+    // An empty table list says why, from the comparison, and one saved image is a plain line, not a mismatch.
     [AvaloniaFact]
     public void TablesSayWhyNoneIsListed()
     {
@@ -357,7 +356,7 @@ public sealed class PerformanceResultsTests : IDisposable
         Assert.Equal("Before", Assert.Single(results.Rows).Name);
     }
 
-    // A trace neither run has is said plainly, and its segment is off with the reason (minor review, finding 37).
+    // A trace neither run has is said plainly, and its segment is off with the reason.
     [AvaloniaFact]
     public void ATraceNeitherRunHasIsOff()
     {
@@ -380,7 +379,7 @@ public sealed class PerformanceResultsTests : IDisposable
         Assert.Null(comparison.NoTraceText);
     }
 
-    // An opened result is titled with its name, the test beside it; Save changes waits for a change (minor review, finding 46).
+    // An opened result is titled with its name, the test beside it; Save changes waits for a change.
     [AvaloniaFact]
     public void AnOpenedResultIsTitledWithItsName()
     {

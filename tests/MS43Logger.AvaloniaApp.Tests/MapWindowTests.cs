@@ -314,4 +314,199 @@ public class MapWindowTests
         Assert.True(map.IsClosed);
         Assert.NotSame(map, shell.Tune.OpenMapWindow(table));
     }
+
+    [AvaloniaFact]
+    public async Task TheLiveCursorShowsInEveryWindowOnAnyTab()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell, _) = await LiveFeed.OpenAsync();
+        var map = shell.Tune.OpenMapWindow(Table(shell, Ignition));
+        var other = shell.Tune.OpenMapWindow(Table(shell, "ip_iga_ron91_pl__n__maf"));
+        Dispatcher.UIThread.RunJobs();
+        var view = window.MapWindows.Single(found => ReferenceEquals(found.DataContext, map));
+        shell.SelectedTab = ShellViewModel.LiveTab;
+        Assert.False(shell.Tune.LiveCursor.IsVisible);
+
+        LiveFeed.Push(shell, ("N", 2480), ("MAFIGA", 1415));
+        map.LiveCursor.Tick();
+        other.LiveCursor.Tick();
+        Dispatcher.UIThread.RunJobs();
+
+        var live = map.Editor.Live!;
+        Assert.Equal((5, 1), (live.Fix.Cells[0].Row, live.Fix.Cells[0].Col));
+        Assert.NotNull(other.Editor.Live);
+        Assert.StartsWith("Live 2480 rpm · ", map.LiveCursor.Readout);
+        Assert.Equal(map.LiveCursor.Readout, Find.Named<TextBlock>(view, "LiveReadout").Text);
+
+        // The Settings trail reaches the windows too.
+        shell.Tune.SetCursorTrail(TrailMode.Long);
+        Assert.Equal(TrailMode.Long, map.LiveCursor.Trail);
+        Assert.Equal(TrailMode.Long, other.LiveCursor.Trail);
+
+        // The logger stopping drops the cursor in the windows too.
+        shell.Live.IsConnected = false;
+        Assert.Null(map.Editor.Live);
+        Assert.Null(other.Editor.Live);
+    }
+
+    [AvaloniaFact]
+    public async Task TheTitleRowOpensTheMapInAWindow()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell) = await TuneScreen.OpenAsync();
+        var button = Find.Named<Button>(window, "OpenWindowButton");
+        Assert.True(button.IsEffectivelyVisible);
+
+        button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(Ignition, Assert.Single(shell.Tune.MapWindows).Table.Title);
+        Assert.Single(window.MapWindows);
+
+        // Values, switches and flags stay in the main pane.
+        shell.Tune.SelectedItem = shell.Tune.Document!.Xdf.Constants.First();
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(button.IsEffectivelyVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task DoubleClickingARailMapOpensItsWindow()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell) = await TuneScreen.OpenAsync(select: null);
+        var tune = shell.Tune;
+        tune.ToggleCategory("Ignition");
+        Dispatcher.UIThread.RunJobs();
+        var list = Find.Named<ListBox>(window, "RailList");
+        var index = tune.Rail.Select((entry, i) => (entry, i)).First(pair => pair.entry is RailItem { Item.Title: Ignition }).i;
+        list.ScrollIntoView(index);
+        Dispatcher.UIThread.RunJobs();
+
+        // The first click shows the map and rebuilds the rail (Recent), so the second lands on a new row: a double-tap
+        // gesture, which wants both presses on one element, never came.
+        DoubleClick(window, Centre(list.ContainerFromIndex(index)!, window));
+
+        Assert.Equal(Ignition, Assert.Single(tune.MapWindows).Table.Title);
+    }
+
+    // with the rail at its top, the first click moves a Recent row to the top of Recent and the row above slides
+    // under the pointer; the second press opened that one. The window is the map the first click picked.
+    [AvaloniaFact]
+    public async Task DoubleClickingARecentRowOpensThatMap()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell) = await TuneScreen.OpenAsync(select: null);
+        var tune = shell.Tune;
+        var maps = EditableMaps(shell).Take(4).ToList();
+        foreach (var picked in Enumerable.Reverse(maps))
+        {
+            tune.SelectedItem = picked;
+        }
+
+        Dispatcher.UIThread.RunJobs();
+        var list = Find.Named<ListBox>(window, "RailList");
+        list.ScrollIntoView(0);
+        Dispatcher.UIThread.RunJobs();
+        var target = maps[2];
+        var index = tune.Rail.Select((entry, i) => (entry, i)).First(pair => pair.entry is RailItem row && ReferenceEquals(row.Item, target)).i;
+
+        DoubleClick(window, Centre(list.ContainerFromIndex(index)!, window));
+
+        Assert.Same(target, Assert.Single(tune.MapWindows).Table);
+        Assert.Same(target, tune.SelectedItem);
+    }
+
+    // a right press selected the row, the rail rebuilt under the pointer and the menu then opened on another row,
+    // or not at all. The menu is the pressed row's, and the main pane keeps its map.
+    [AvaloniaFact]
+    public async Task RightClickingARailRowOffersOpenInWindowForThatRow()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell) = await TuneScreen.OpenAsync();
+        var tune = shell.Tune;
+        var other = OtherMap(shell);
+        var list = Find.Named<ListBox>(window, "RailList");
+        tune.SearchText = other.Title;
+        Dispatcher.UIThread.RunJobs();
+        var index = tune.Rail.Select((entry, i) => (entry, i)).First(pair => pair.entry is RailItem row && ReferenceEquals(row.Item, other)).i;
+        list.ScrollIntoView(index);
+        Dispatcher.UIThread.RunJobs();
+        var at = Centre(list.ContainerFromIndex(index)!, window);
+
+        window.MouseDown(at, MouseButton.Right);
+        window.MouseUp(at, MouseButton.Right);
+        Dispatcher.UIThread.RunJobs();
+
+        var menu = window.GetVisualDescendants().OfType<TuneView>().Single().RowMenu;
+        Assert.True(menu.IsOpen);
+        Assert.Equal(Ignition, tune.SelectedItem?.Title);
+        var open = menu.Items.OfType<MenuItem>().Single(item => item.Name == "OpenWindowItem");
+        Assert.Equal("Open in window", open.Header);
+        Assert.True(open.IsVisible);
+        Assert.Equal("Pin", menu.Items.OfType<MenuItem>().Single(item => item.Name == "PinItem").Header);
+
+        open.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Same(other, Assert.Single(tune.MapWindows).Table);
+    }
+
+    // Shift F10 and the menu key raise the request on the focused row, which the menu never heard.
+    [AvaloniaFact]
+    public async Task TheRowMenuOpensFromTheKeyboard()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (window, shell) = await TuneScreen.OpenAsync();
+        var tune = shell.Tune;
+        var list = Find.Named<ListBox>(window, "RailList");
+        var index = tune.Rail.Select((entry, i) => (entry, i)).First(pair => pair.entry is RailItem { Item.Title: Ignition }).i;
+        list.ScrollIntoView(index);
+        Dispatcher.UIThread.RunJobs();
+        var row = list.ContainerFromIndex(index)!;
+        row.Focus(NavigationMethod.Tab);
+
+        row.RaiseEvent(new ContextRequestedEventArgs());
+        Dispatcher.UIThread.RunJobs();
+
+        var menu = window.GetVisualDescendants().OfType<TuneView>().Single().RowMenu;
+        Assert.True(menu.IsOpen);
+        menu.Items.OfType<MenuItem>().Single(item => item.Name == "PinItem").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(tune.Settings.IsPinned(Ignition));
+
+        // A value's row offers Pin only.
+        var value = tune.Document!.Xdf.Constants.First();
+        tune.SearchText = value.Title;
+        Dispatcher.UIThread.RunJobs();
+        var valueIndex = tune.Rail.Select((entry, i) => (entry, i)).First(pair => pair.entry is RailItem found && ReferenceEquals(found.Item, value)).i;
+        list.ScrollIntoView(valueIndex);
+        Dispatcher.UIThread.RunJobs();
+        list.ContainerFromIndex(valueIndex)!.RaiseEvent(new ContextRequestedEventArgs());
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(menu.Items.OfType<MenuItem>().Single(item => item.Name == "OpenWindowItem").IsVisible);
+    }
 }
