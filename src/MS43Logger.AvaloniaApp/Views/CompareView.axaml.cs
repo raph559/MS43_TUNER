@@ -88,15 +88,20 @@ public partial class CompareView : UserControl
             return;
         }
 
-        switch (list.SelectedItem)
+        // Both actions rebuild the list; inside the ListBox's own selection change that crashed it (see TuneView's rail).
+        var entry = list.SelectedItem;
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
-            case CompareRow row:
-                compare.Selected = row.Difference;
-                break;
-            case CompareBytesRow:
-                compare.ShowBytes();
-                break;
-        }
+            switch (entry)
+            {
+                case CompareRow row:
+                    compare.Selected = row.Difference;
+                    break;
+                case CompareBytesRow:
+                    compare.ShowBytes();
+                    break;
+            }
+        });
     }
 
     private void Copy_Click(object? sender, RoutedEventArgs e) => ViewModel?.CopySelectedFromB();

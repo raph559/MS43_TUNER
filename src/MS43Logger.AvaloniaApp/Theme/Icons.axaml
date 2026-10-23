@@ -15,6 +15,11 @@
     <StreamGeometry x:Key="Icon.ChevronRight">M 6.25,4.5 L 9.75,8 L 6.25,11.5</StreamGeometry>
     <StreamGeometry x:Key="Icon.Rescan">M 12.75,6.5 A 5,5 0 0 0 3.6,5.2 M 3.25,9.5 A 5,5 0 0 0 12.4,10.8 M 3.25,2.5 L 3.25,5.5 L 6.25,5.5 M 12.75,13.5 L 12.75,10.5 L 9.75,10.5</StreamGeometry>
     <StreamGeometry x:Key="Icon.Warn">M 8,2 L 14.5,13.5 L 1.5,13.5 Z M 8,6 L 8,10 M 8,11.25 L 8,12.5</StreamGeometry>
+    <!-- Window buttons: the shapes Windows uses, on the same grid and stroke. -->
+    <StreamGeometry x:Key="Icon.WindowMinimize">M 3.5,8 L 12.5,8</StreamGeometry>
+    <StreamGeometry x:Key="Icon.WindowMaximize">M 3.75,3.75 L 12.25,3.75 L 12.25,12.25 L 3.75,12.25 Z</StreamGeometry>
+    <StreamGeometry x:Key="Icon.WindowRestore">M 3.75,5.75 L 10.25,5.75 L 10.25,12.25 L 3.75,12.25 Z M 5.75,5.75 L 5.75,3.75 L 12.25,3.75 L 12.25,10.25 L 10.25,10.25</StreamGeometry>
+    <StreamGeometry x:Key="Icon.WindowClose">M 3.75,3.75 L 12.25,12.25 M 12.25,3.75 L 3.75,12.25</StreamGeometry>
     <StreamGeometry x:Key="Icon.Info">M 1.75,8 A 6.25,6.25 0 1 1 14.25,8 A 6.25,6.25 0 1 1 1.75,8 Z M 8,7 L 8,11.5 M 8,4.5 L 8,6</StreamGeometry>
     <StreamGeometry x:Key="Icon.Check">M 3.25,8.25 L 6.5,11.5 L 12.75,4.5</StreamGeometry>
     <StreamGeometry x:Key="Icon.Gear">M 6.45,3.51 L 6.71,1.37 L 9.29,1.37 L 9.55,3.51 L 11.12,4.42 L 13.09,3.57 L 14.38,5.8 L 12.66,7.09 L 12.66,8.91 L 14.38,10.2 L 13.09,12.43 L 11.12,11.58 L 9.55,12.49 L 9.29,14.63 L 6.71,14.63 L 6.45,12.49 L 4.88,11.58 L 2.91,12.43 L 1.62,10.2 L 3.34,8.91 L 3.34,7.09 L 1.62,5.8 L 2.91,3.57 L 4.88,4.42 Z M 6,8 A 2,2 0 1 1 10,8 A 2,2 0 1 1 6,8 Z</StreamGeometry>

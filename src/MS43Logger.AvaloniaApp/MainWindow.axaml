@@ -12,9 +12,21 @@
         x:DataType="local:ShellViewModel"
         Title="MS43 Tuner"
         Width="1440" Height="900"
-        MinWidth="1024" MinHeight="680">
+        MinWidth="1024" MinHeight="680"
+        ExtendClientAreaToDecorationsHint="True" ExtendClientAreaChromeHints="NoChrome" ExtendClientAreaTitleBarHeightHint="-1">
 
     <Window.Styles>
+        <!-- The maximize button shows the glyph of what it will do: maximize, or restore once maximized. -->
+        <Style Selector="controls|StrokeIcon#RestoreGlyph">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="Window.maximized controls|StrokeIcon#RestoreGlyph">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+        <Style Selector="Window.maximized controls|StrokeIcon#MaximizeGlyph">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+
         <!-- Ink3 falls under 4.5:1 on the pressed overlay (4.20 Day, 3.79 Night), so the file line's labels rise to Ink2. -->
         <Style Selector="Button#FileMenuButton:pressed TextBlock.meta">
             <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
@@ -24,17 +36,19 @@
             <Setter Property="FontWeight" Value="Normal" />
         </Style>
 
-        <!-- Below 1280 px (system 8): no wordmark, no XDF line, and the connection pickers merge into one button. -->
+        <!-- Below 1280 px of header (system 8): no wordmark, no XDF line, and the connection pickers merge into one button.
+             The window buttons take 146 px of the window's width, so the header compacts below 1426 px of window
+             (class "compactheader"); the panes keep the 1280 px step ("compact"). -->
         <Style Selector="Button#ConnectionButton">
             <Setter Property="IsVisible" Value="False" />
         </Style>
-        <Style Selector="Window.compact TextBlock#Wordmark, Window.compact Panel#PlateDetails, Window.compact StackPanel#ConnectionPickers, Window.compact TextBlock#ReadoutsLabel">
+        <Style Selector="Window.compactheader TextBlock#Wordmark, Window.compactheader Panel#PlateDetails, Window.compactheader StackPanel#ConnectionPickers, Window.compact TextBlock#ReadoutsLabel">
             <Setter Property="IsVisible" Value="False" />
         </Style>
-        <Style Selector="Window.compact Button#ConnectionButton">
+        <Style Selector="Window.compactheader Button#ConnectionButton">
             <Setter Property="IsVisible" Value="True" />
         </Style>
-        <Style Selector="Window.compact StackPanel#Brand, Window.compact StackPanel#Tabs">
+        <Style Selector="Window.compactheader StackPanel#Brand, Window.compactheader StackPanel#Tabs">
             <Setter Property="Margin" Value="0,0,16,0" />
         </Style>
         <!-- Sizes live in styles, not on the elements, so the compact rules below can change them. -->
@@ -44,17 +58,20 @@
         <Style Selector="TextBlock#PlateFile">
             <Setter Property="MaxWidth" Value="320" />
         </Style>
-        <Style Selector="Window.compact Button#FileMenuButton">
+        <Style Selector="Window.compactheader Button#FileMenuButton">
             <Setter Property="Height" Value="32" />
         </Style>
-        <Style Selector="Window.compact TextBlock#PlateFile">
+        <Style Selector="Window.compactheader TextBlock#PlateFile">
             <Setter Property="MaxWidth" Value="200" />
         </Style>
     </Window.Styles>
 
-    <Grid RowDefinitions="48,*,28">
-        <!-- Header (system 5.1) -->
-        <Border Grid.Row="0" Background="{DynamicResource FrameBrush}" BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="0,0,0,1" Padding="16,0">
+    <!-- A maximized window without the system frame reaches past the screen edge by the frame's width; the margin pulls it back. -->
+    <Grid RowDefinitions="48,*,28" Margin="{Binding $parent[Window].OffScreenMargin}">
+        <!-- Header (system 5.1). It is also the window's title bar: drag it to move, double-click it to maximize or restore.
+             The right padding leaves room for the window buttons, which sit above the dialog layer at the end of this grid. -->
+        <Border Name="TitleBar" Grid.Row="0" Background="{DynamicResource FrameBrush}" BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="0,0,0,1"
+                Padding="16,0,146,0" PointerPressed="TitleBar_PointerPressed">
             <Grid ColumnDefinitions="Auto,Auto,*,Auto">
                 <StackPanel Name="Brand" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="0,0,24,0">
                     <shell:AppMark Name="AppMark" IsLive="{Binding Live.IsConnected}" Level="{Binding Live.EngineSpeedLevel}" />
@@ -241,5 +258,21 @@
 
         <!-- Last, so a dialog and its scrim cover the header, the screens and the status bar. -->
         <shell:DialogHost Name="Dialogs" Grid.RowSpan="3" />
+
+        <!-- Window buttons, after the dialog layer so the window can still be minimized or closed while a dialog is open. -->
+        <StackPanel Name="WindowButtons" Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Height="47">
+            <Button Name="MinimizeButton" Classes="caption" Click="Minimize_Click" ToolTip.Tip="Minimize" AutomationProperties.Name="Minimize">
+                <controls:StrokeIcon Data="{StaticResource Icon.WindowMinimize}" />
+            </Button>
+            <Button Name="MaximizeButton" Classes="caption" Click="Maximize_Click" ToolTip.Tip="Maximize" AutomationProperties.Name="Maximize">
+                <Panel>
+                    <controls:StrokeIcon Name="MaximizeGlyph" Data="{StaticResource Icon.WindowMaximize}" />
+                    <controls:StrokeIcon Name="RestoreGlyph" Data="{StaticResource Icon.WindowRestore}" />
+                </Panel>
+            </Button>
+            <Button Name="CloseButton" Classes="caption close" Click="Close_Click" ToolTip.Tip="Close" AutomationProperties.Name="Close">
+                <controls:StrokeIcon Data="{StaticResource Icon.WindowClose}" />
+            </Button>
+        </StackPanel>
     </Grid>
 </Window>
