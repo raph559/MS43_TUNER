@@ -4,7 +4,7 @@
         xmlns:theme="using:MS43Logger.AvaloniaApp.Theme">
     <!--
         Component styles of docs/superpowers/specs/2026-10-20-ms43-restyle-system.md, sections 3 to 5. Hover and press
-        are overlays of Ink1 on whatever surface a control sits on, with no transitions (MOTION 1). Keyboard focus is the
+        are overlays of Ink1 on whatever surface a control sits on. Their fades live in Motion.axaml (MOTION 2). Keyboard focus is the
         one Ink1 ring with a 2 px gap, never orange.
     -->
     <Styles.Resources>
@@ -120,7 +120,7 @@
                 <Panel>
                     <Border Name="PART_Background" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{TemplateBinding CornerRadius}" />
-                    <Border Name="PART_Overlay" CornerRadius="{TemplateBinding CornerRadius}" />
+                    <Border Name="PART_Overlay" CornerRadius="{TemplateBinding CornerRadius}" Background="Transparent" />
                     <ContentPresenter Name="PART_ContentPresenter" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
                                       Padding="{TemplateBinding Padding}" Foreground="{TemplateBinding Foreground}" RecognizesAccessKey="True"
                                       HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
@@ -144,7 +144,7 @@
     </Style>
     <!-- Fluent's own Button theme still styles the part named PART_ContentPresenter while hovered, pressed or disabled: a
          filled box (white on Night hover), its own label colour and a 0.98 press scale. The label box stays clear and keeps
-         the button's colour, so the overlay above is the only state change (system 1.1, MOTION 1). -->
+         the button's colour, so the overlay above is the only state change (system 1.1); no press scale. -->
     <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button:pressed /template/ ContentPresenter#PART_ContentPresenter, Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="Transparent" />
@@ -254,10 +254,11 @@
         <Setter Property="Template">
             <ControlTemplate>
                 <Panel Background="{TemplateBinding Background}">
-                    <Border Name="PART_Overlay" />
+                    <Border Name="PART_Overlay" Background="Transparent" />
                     <ContentPresenter Content="{TemplateBinding Content}" Padding="{TemplateBinding Padding}"
                                       VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}" />
-                    <Border Name="Indicator" Height="2" VerticalAlignment="Bottom" Margin="12,0" />
+                    <Border Name="Indicator" Height="2" VerticalAlignment="Bottom" Margin="12,0" Background="{DynamicResource Ink1Brush}"
+                            RenderTransform="scaleX(0)" />
                 </Panel>
             </ControlTemplate>
         </Setter>
@@ -270,7 +271,7 @@
         <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
     <Style Selector="ToggleButton.tab:checked /template/ Border#Indicator">
-        <Setter Property="Background" Value="{DynamicResource Ink1Brush}" />
+        <Setter Property="RenderTransform" Value="scaleX(1)" />
     </Style>
 
     <!-- Segmented control (system 5.4): a Fill track with a 2 px inset; the selected segment is Pane with an Edge. -->
@@ -304,7 +305,7 @@
                 <Panel>
                     <Border Name="PART_Background" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{TemplateBinding CornerRadius}" />
-                    <Border Name="PART_Overlay" CornerRadius="{TemplateBinding CornerRadius}" />
+                    <Border Name="PART_Overlay" CornerRadius="{TemplateBinding CornerRadius}" Background="Transparent" />
                     <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
                                       Padding="{TemplateBinding Padding}" Foreground="{TemplateBinding Foreground}"
                                       HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
@@ -461,7 +462,7 @@
             <ControlTemplate>
                 <Panel>
                     <Border Name="PART_Background" Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}" />
-                    <Border Name="PART_Overlay" CornerRadius="{TemplateBinding CornerRadius}" />
+                    <Border Name="PART_Overlay" CornerRadius="{TemplateBinding CornerRadius}" Background="Transparent" />
                     <Border Name="PART_Bar" Width="2" HorizontalAlignment="Left" />
                     <ContentPresenter Name="PART_ContentPresenter" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
                                       Padding="{TemplateBinding Padding}" Foreground="{TemplateBinding Foreground}"

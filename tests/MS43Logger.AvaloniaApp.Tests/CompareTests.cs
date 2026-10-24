@@ -41,6 +41,24 @@ public sealed class CompareTests : IDisposable
     private static IEnumerable<string> Rows(CompareViewModel compare) =>
         compare.Entries.OfType<CompareRow>().Select(row => row.Difference.Item.Title);
 
+    [AvaloniaFact]
+    public async Task CompareSearchLooksEverywhereLikeTheRail()
+    {
+        if (!Available)
+        {
+            return;
+        }
+
+        var (_, _, compare) = await Open();
+
+        compare.SearchText = "0x77315";
+        Assert.Equal(new[] { "ip_iga_ron98_pl__n__maf" }, Rows(compare));
+
+        compare.SearchText = "ron98 part";
+        Assert.Contains("ip_iga_ron98_pl__n__maf", Rows(compare));
+        Assert.DoesNotContain("ip_iga_ron91_pl__n__maf", Rows(compare));
+    }
+
     // Same crash as the Tune rail's category headers: selecting a row rebuilds the list inside the ListBox's own selection change.
     [AvaloniaFact]
     public async Task ClickingRowsAndTheBytesRowInTheListDoesNotCrash()

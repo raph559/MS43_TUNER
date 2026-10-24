@@ -15,34 +15,51 @@ public static class SurfaceMath
 {
     /// <summary>
     /// Projects a point of the unit cube (u = column, w = row, h = height, all 0..1) into <paramref name="size"/>.
-    /// The centre of the floor stays at (width / 2, height × 0.58) whatever the rotation. Depth grows towards the viewer.
+    /// Unzoomed and unmoved, the centre of the floor stays at (width / 2, height × 0.58) whatever the rotation; zoom
+    /// scales about that point and <paramref name="pan"/> then moves the picture. Depth grows towards the viewer.
     /// </summary>
-    public static (Point Point, double Depth) Project(double u, double w, double h, double yaw, double pitch, Size size)
+    public static (Point Point, double Depth) Project(double u, double w, double h, double yaw, double pitch, Size size, double zoom = 1, Vector pan = default)
     {
         double x = u - 0.5, y = w - 0.5, z = h * 0.5;
         double cy = Math.Cos(yaw), sy = Math.Sin(yaw), cp = Math.Cos(pitch), sp = Math.Sin(pitch);
         var xr = x * cy - y * sy;
         var yr = x * sy + y * cy;
-        var scale = Math.Min(size.Width * 0.86, size.Height * 1.18);
-        return (new Point(size.Width / 2 + xr * scale, size.Height * 0.58 + (yr * cp - z * sp) * scale * 0.78), yr * sp + z * cp);
+        var scale = Math.Min(size.Width * 0.86, size.Height * 1.18) * zoom;
+        var centre = Centre(size);
+        return (new Point(centre.X + xr * scale + pan.X, centre.Y + (yr * cp - z * sp) * scale * 0.78 + pan.Y), yr * sp + z * cp);
     }
+
+    /// <summary>Where the floor's centre sits, unzoomed and unmoved.</summary>
+    public static Point Centre(Size size) => new(size.Width / 2, size.Height * 0.58);
 }
 
 /// <summary>
 /// The map as a shaded surface in a Pane box (system 8): heights and colours over the working range, cells at the storage
-/// limit left out (system 2.2). Drag to turn it, or use the arrow keys while it has focus; Home resets the view.
+/// limit left out (system 2.2). It is handled like an object in the hand: a drag moves its near side with the pointer (the
+/// arrow keys do the same), the wheel or + and - zoom towards the pointer, Shift-drag or a right-button drag moves it, and
+/// Home puts it back.
 /// </summary>
 public sealed class Surface3D : Control
 {
     public static readonly StyledProperty<TableEditorViewModel?> EditorProperty = AvaloniaProperty.Register<Surface3D, TableEditorViewModel?>(nameof(Editor));
 
+    public const double MinZoom = 0.5;
+    public const double MaxZoom = 4;
+
     private const double StartYaw = -0.72;
     private const double StartPitch = 0.6;
+    private const double MinPitch = 0.15;
+    private const double MaxPitch = 1.35;
+    private const double TurnPerPixel = 0.01;
+    private const double ZoomStep = 1.2;
 
     private double _yaw = StartYaw;
     private double _pitch = StartPitch;
+    private double _zoom = 1;
+    private Vector _pan;
     private Point? _dragFrom;
-    private (double Yaw, double Pitch) _dragStart;
+    private bool _dragMoves;
+    private (double Yaw, double Pitch, Vector Pan) _dragStart;
 
     public Surface3D()
     {
@@ -62,6 +79,44 @@ public sealed class Surface3D : Control
     public double Yaw => _yaw;
 
     public double Pitch => _pitch;
+
+    public double Zoom => _zoom;
+
+    /// <summary>How far the picture is moved, in pixels.</summary>
+    public Vector Pan => _pan;
+
+    /// <summary>
+    /// Takes the turn, zoom and position of <paramref name="other"/> (the enlarged view opens where the small one was).
+    /// The position is in pixels, so it grows with the plot: <paramref name="size"/> is this plot's size.
+    /// </summary>
+    public void CopyView(Surface3D other, Size size)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        static double Scale(Size s) => Math.Min(s.Width * 0.86, s.Height * 1.18);
+        var ratio = Scale(other.Bounds.Size) is > 0 and var from ? Scale(size) / from : 1;
+        (_yaw, _pitch, _zoom, _pan) = (other._yaw, other._pitch, other._zoom, other._pan * ratio);
+        InvalidateVisual();
+    }
+
+    /// <summary>Zooms by <paramref name="factor"/>, keeping the point under <paramref name="at"/> (default: the floor's centre) still.</summary>
+    public void ZoomBy(double factor, Point? at = null)
+    {
+        var zoom = Math.Clamp(_zoom * factor, MinZoom, MaxZoom);
+        var anchor = at ?? SurfaceMath.Centre(Bounds.Size) + _pan;
+        var centre = SurfaceMath.Centre(Bounds.Size);
+
+        // A point now at p = centre + offset + pan lands at anchor + (p - anchor) * k.
+        var k = zoom / _zoom;
+        _pan = (Vector)(anchor - centre) + (_pan - (Vector)(anchor - centre)) * k;
+        _zoom = zoom;
+        InvalidateVisual();
+    }
+
+    public void ResetView()
+    {
+        (_yaw, _pitch, _zoom, _pan) = (StartYaw, StartPitch, 1, default);
+        InvalidateVisual();
+    }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
@@ -85,22 +140,29 @@ public sealed class Surface3D : Control
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
+        // Left and Right turn the near side that way, as a drag would; Up and Down tip it.
         switch (e.Key)
         {
             case Key.Left:
-                _yaw -= 0.1;
-                break;
-            case Key.Right:
                 _yaw += 0.1;
                 break;
+            case Key.Right:
+                _yaw -= 0.1;
+                break;
             case Key.Up:
-                _pitch = Math.Clamp(_pitch + 0.05, 0.15, 1.35);
+                _pitch = Math.Clamp(_pitch + 0.05, MinPitch, MaxPitch);
                 break;
             case Key.Down:
-                _pitch = Math.Clamp(_pitch - 0.05, 0.15, 1.35);
+                _pitch = Math.Clamp(_pitch - 0.05, MinPitch, MaxPitch);
+                break;
+            case Key.OemPlus or Key.Add:
+                ZoomBy(ZoomStep);
+                break;
+            case Key.OemMinus or Key.Subtract:
+                ZoomBy(1 / ZoomStep);
                 break;
             case Key.Home:
-                (_yaw, _pitch) = (StartYaw, StartPitch);
+                ResetView();
                 break;
             default:
                 return;
@@ -110,23 +172,46 @@ public sealed class Surface3D : Control
         InvalidateVisual();
     }
 
+    // The wheel zooms here instead of scrolling the inspector: the pointer is on the plot, so that is what it is about.
+    protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
+    {
+        base.OnPointerWheelChanged(e);
+        if (e.Delta.Y != 0)
+        {
+            ZoomBy(Math.Pow(ZoomStep, e.Delta.Y), e.GetPosition(this));
+            e.Handled = true;
+        }
+    }
+
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
         Focus(NavigationMethod.Pointer);
-        _dragFrom = e.GetPosition(this);
-        _dragStart = (_yaw, _pitch);
+        var point = e.GetCurrentPoint(this);
+        _dragFrom = point.Position;
+        _dragMoves = point.Properties.IsRightButtonPressed || point.Properties.IsMiddleButtonPressed || e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+        _dragStart = (_yaw, _pitch, _pan);
         e.Pointer.Capture(this);
+        e.Handled = true;
     }
 
+    // Grab and turn: the near side follows the pointer sideways, and down tips the near side down.
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         base.OnPointerMoved(e);
         if (_dragFrom is Point from)
         {
-            var now = e.GetPosition(this);
-            _yaw = _dragStart.Yaw + (now.X - from.X) * 0.01;
-            _pitch = Math.Clamp(_dragStart.Pitch + (now.Y - from.Y) * 0.01, 0.15, 1.35);
+            var moved = e.GetPosition(this) - from;
+            if (_dragMoves)
+            {
+                _pan = _dragStart.Pan + moved;
+            }
+            else
+            {
+                _yaw = _dragStart.Yaw - moved.X * TurnPerPixel;
+                _pitch = Math.Clamp(_dragStart.Pitch - moved.Y * TurnPerPixel, MinPitch, MaxPitch);
+            }
+
             InvalidateVisual();
         }
     }
@@ -154,7 +239,7 @@ public sealed class Surface3D : Control
         bool Drawn(int r, int c) => double.IsFinite(values.Physical[r, c]) && !hatched.Contains((r, c));
         double T(double value) => range.IsConstant ? 0.5 : Math.Clamp((value - range.Min) / (range.Max - range.Min), 0, 1);
         double H(int r, int c) => Drawn(r, c) ? T(values.Physical[r, c]) : 0;
-        (Point Point, double Depth) P(double u, double w, double h) => SurfaceMath.Project(u, w, h, _yaw, _pitch, size);
+        (Point Point, double Depth) P(double u, double w, double h) => SurfaceMath.Project(u, w, h, _yaw, _pitch, size, _zoom, _pan);
 
         var floor = new Pen(ThemeBrushes.Get(this, "HairlineBrush"), 1);
         for (var i = 0; i <= 8; i++)

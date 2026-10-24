@@ -216,6 +216,10 @@ public partial class MainWindow : Window
                 e.Handled = true;
                 await OpenBinAsync();
                 break;
+            case Key.B when Shell.IsTune && Shell.Tune.HasDocument:
+                e.Handled = true;
+                Shell.Tune.SetRailCollapsed(!Shell.Tune.RailCollapsed);
+                break;
             case Key.OemComma:
                 e.Handled = true;
                 OpenSettings(NavigationMethod.Tab);
@@ -223,6 +227,12 @@ public partial class MainWindow : Window
             case Key.K:
                 // The search field of the tab in front (system 5.3): channels on Live, items on Tune and Compare.
                 e.Handled = true;
+                if (Shell.IsTune && this.GetVisualDescendants().OfType<TuneView>().FirstOrDefault() is { } tuneView && Shell.Tune.HasDocument)
+                {
+                    tuneView.OpenRailOnSearch();
+                    break;
+                }
+
                 var field = Shell.IsLive ? "ChannelFilter" : Shell.IsTune ? "SearchBox" : "CompareSearchBox";
                 this.GetVisualDescendants().OfType<Avalonia.Controls.TextBox>()
                     .FirstOrDefault(box => box.Name == field && box.IsEffectivelyVisible)?.Focus(NavigationMethod.Tab);

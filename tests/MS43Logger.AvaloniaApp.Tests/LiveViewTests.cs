@@ -83,4 +83,19 @@ public class LiveViewTests
         Assert.Contains(live.LiveValues, value => value.History.Window(DateTimeOffset.UtcNow).Count == 200);
         Screens.Save(window, "live-night");
     }
+
+    [AvaloniaFact]
+    public void ChannelFilterMatchesEveryWordAnywhere()
+    {
+        var (window, shell) = TestShell.Create();
+        window.Show();
+        var live = shell.Live;
+
+        live.SearchText = "speed rpm";
+
+        Assert.Contains(live.LiveValues, value => value.Id == "RPM");
+        Assert.All(live.LiveValues, value =>
+            Assert.True($"{value.Id} {value.Title} {value.Units}".Contains("speed", StringComparison.OrdinalIgnoreCase)
+                        && $"{value.Id} {value.Title} {value.Units}".Contains("rpm", StringComparison.OrdinalIgnoreCase)));
+    }
 }

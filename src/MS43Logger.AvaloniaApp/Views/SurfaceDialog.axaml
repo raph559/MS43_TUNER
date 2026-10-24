@@ -1,0 +1,30 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:MS43Logger.AvaloniaApp.Controls"
+             x:Class="MS43Logger.AvaloniaApp.Views.SurfaceDialog">
+    <!-- The inspector's surface, large (Enlarge on the small plot): the same map, live cursor and view, with room to turn
+         and zoom. Esc or Close goes back. -->
+    <DockPanel>
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto">
+            <StackPanel Spacing="2" VerticalAlignment="Center">
+                <TextBlock Classes="title" Text="Surface" />
+                <TextBlock Name="MapTitle" Classes="mono13" Foreground="{DynamicResource Ink2Brush}" />
+            </StackPanel>
+            <Border Grid.Column="1" Classes="toolgroup" VerticalAlignment="Center" Margin="0,0,12,0">
+                <StackPanel Orientation="Horizontal">
+                    <Button Name="LargeZoomOutButton" Classes="icon" Click="ZoomOut_Click" ToolTip.Tip="Zoom out (-)" AutomationProperties.Name="Zoom out">
+                        <controls:StrokeIcon Data="{StaticResource Icon.Minus}" />
+                    </Button>
+                    <Button Name="LargeZoomInButton" Classes="icon" Click="ZoomIn_Click" ToolTip.Tip="Zoom in (+)" AutomationProperties.Name="Zoom in">
+                        <controls:StrokeIcon Data="{StaticResource Icon.Plus}" />
+                    </Button>
+                    <Button Name="LargeResetButton" Content="Reset view" Click="Reset_Click" ToolTip.Tip="Turn, zoom and position as at first (Home)" />
+                </StackPanel>
+            </Border>
+            <Button Name="CloseSurfaceButton" Grid.Column="2" Classes="primary" Content="Close" Click="Close_Click" VerticalAlignment="Center" />
+        </Grid>
+        <TextBlock DockPanel.Dock="Bottom" Classes="label" Margin="0,12,0,0" TextWrapping="Wrap"
+                   Text="Drag to turn. Shift-drag or right-drag to move. Wheel, + or - to zoom. Home resets the view." />
+        <controls:Surface3D Name="LargeSurface" Margin="0,16,0,0" AutomationProperties.Name="Surface, large; the arrow keys turn it" />
+    </DockPanel>
+</UserControl>

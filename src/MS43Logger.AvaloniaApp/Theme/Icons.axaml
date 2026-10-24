@@ -15,6 +15,12 @@
     <StreamGeometry x:Key="Icon.ChevronRight">M 6.25,4.5 L 9.75,8 L 6.25,11.5</StreamGeometry>
     <StreamGeometry x:Key="Icon.Rescan">M 12.75,6.5 A 5,5 0 0 0 3.6,5.2 M 3.25,9.5 A 5,5 0 0 0 12.4,10.8 M 3.25,2.5 L 3.25,5.5 L 6.25,5.5 M 12.75,13.5 L 12.75,10.5 L 9.75,10.5</StreamGeometry>
     <StreamGeometry x:Key="Icon.Warn">M 8,2 L 14.5,13.5 L 1.5,13.5 Z M 8,6 L 8,10 M 8,11.25 L 8,12.5</StreamGeometry>
+    <!-- Enlarge, for the surface plot (its zoom uses Minus and Plus). -->
+    <StreamGeometry x:Key="Icon.Enlarge">M 9.25,2.75 L 13.25,2.75 L 13.25,6.75 M 13.25,2.75 L 9,7 M 6.75,13.25 L 2.75,13.25 L 2.75,9.25 M 2.75,13.25 L 7,9</StreamGeometry>
+    <!-- Sort: three lines, longest first. -->
+    <StreamGeometry x:Key="Icon.Sort">M 2.75,4.25 L 13.25,4.25 M 2.75,8 L 10.25,8 M 2.75,11.75 L 7.25,11.75</StreamGeometry>
+    <!-- A window with its left panel: shows and hides the Tune rail. -->
+    <StreamGeometry x:Key="Icon.PanelLeft">M 2.75,3.25 L 13.25,3.25 L 13.25,12.75 L 2.75,12.75 Z M 6.25,3.25 L 6.25,12.75</StreamGeometry>
     <!-- Window buttons: the shapes Windows uses, on the same grid and stroke. -->
     <StreamGeometry x:Key="Icon.WindowMinimize">M 3.5,8 L 12.5,8</StreamGeometry>
     <StreamGeometry x:Key="Icon.WindowMaximize">M 3.75,3.75 L 12.25,3.75 L 12.25,12.25 L 3.75,12.25 Z</StreamGeometry>

@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using MS43Logger.AvaloniaApp.Controls;
 using MS43Logger.AvaloniaApp.Views;
 using MS43Logger.Core.Tuning;
 
@@ -215,6 +216,7 @@ internal static class GateClickThrough
         c.Press("FlagSwitch", "flips the flag's bit", () => tune.Value!.IsOn != on);
         c.Audit(c.Window, NotShell);
 
+
         c.Merge(await TuneEmptyAsync(night));
         return c;
     }
@@ -237,6 +239,24 @@ internal static class GateClickThrough
 
         c.Press("ModifiedOnlySwitch", "lists only the items this bin changed", () => tune.ModifiedOnly);
         tune.ModifiedOnly = false;
+        c.Press("RailCollapseButton", "folds the rail to its strip and saves it", () => tune.RailCollapsed && tune.Settings.RailCollapsed);
+        c.Press("RailExpandButton", "shows the rail again", () => !tune.RailCollapsed);
+        tune.SetRailCollapsed(true);
+        Dispatcher.UIThread.RunJobs();
+        c.Press("RailSearchButton", "shows the rail on its search field", () => !tune.RailCollapsed && c.Named<TextBox>("SearchBox").IsFocused);
+        c.Note(c.Named<Control>("RailResizeHandle"), "the rail's edge: dragged, arrow keys and double-click in RailPanelTests");
+        var sort = c.Named<Button>("RailSortButton");
+        c.Press(sort, "opens the sort menu", () => sort.Flyout is { IsOpen: true });
+        var sorts = ((MenuFlyout)sort.Flyout!).Items.OfType<MenuItem>().ToList();
+        foreach (var (name, key) in new[] { ("SortByAddress", ItemSort.Address), ("SortByKind", ItemSort.Kind), ("SortBySize", ItemSort.Size), ("SortByName", ItemSort.Name) })
+        {
+            c.Press(sorts.Single(item => item.Name == name), $"sorts the rail by {key.ToString().ToLowerInvariant()} and saves it",
+                () => tune.Sort == key && tune.Settings.RailSort == key);
+        }
+
+        c.Press(sorts.Single(item => item.Name == "SortDescending"), "reverses the order", () => tune.SortDescending);
+        c.Press(sorts.Single(item => item.Name == "SortAscending"), "puts it back", () => !tune.SortDescending);
+        sort.Flyout!.Hide();
         c.Press("PinButton", "pins the item to the top of the rail", () => tune.Settings.IsPinned(item.Title));
         tune.TogglePin(item);
 
@@ -260,6 +280,15 @@ internal static class GateClickThrough
         cells = Cells();
         c.Press("RedoTool", "puts it back", () => Changed(cells));
         c.Press("DetailsToggle", "opens the inspector over the grid (1024 px)", () => tune.InspectorOpen);
+        var surface = c.Named<Surface3D>("Surface");
+        c.Press("SurfaceZoomInButton", "zooms the surface in", () => surface.Zoom > 1);
+        c.Press("SurfaceZoomOutButton", "zooms it out", () => surface.Zoom < 1.0001);
+        c.Press("SurfaceEnlargeButton", "opens the surface large in a dialog", () => c.Dialogs.IsOpen && window.GetVisualDescendants().OfType<SurfaceDialog>().Any());
+        var large = c.Named<Surface3D>("LargeSurface");
+        c.Press("LargeZoomInButton", "zooms the large surface in", () => large.Zoom > 1);
+        c.Press("LargeZoomOutButton", "zooms it out", () => large.Zoom < 1.0001);
+        c.Press("LargeResetButton", "puts turn, zoom and position back", () => large.Zoom == 1 && large.Pan == default);
+        c.Press("CloseSurfaceButton", "closes the large surface", () => !c.Dialogs.IsOpen);
         c.Audit(window, NotShell);
         tune.InspectorOpen = false;
         Dispatcher.UIThread.RunJobs();
