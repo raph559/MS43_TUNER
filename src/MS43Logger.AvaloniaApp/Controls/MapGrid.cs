@@ -26,6 +26,9 @@ public sealed class MapGrid : Control
 
     public static readonly TimeSpan FlashTime = TimeSpan.FromMilliseconds(450);
 
+    /// <summary>How long the selection box takes to glide to a new cell or range (system 10.3).</summary>
+    public static readonly TimeSpan SelectionGlide = TimeSpan.FromMilliseconds(120);
+
     private const double RowHeaderWidth = 48;
     private const double HeaderHeight = 22;
     private const double Gap = 2;
@@ -36,6 +39,10 @@ public sealed class MapGrid : Control
     private const double CurveCell = 72;
 
     private readonly DispatcherTimer _flashTimer;
+    private readonly DispatcherTimer _glideTimer;
+    private Rect? _glideFrom;
+    private DateTime _glideStart;
+    private Rect? _drawnBox;
     private double _cellWidth = 48;
     private double _rowHeight = MaxRow;
     private (int Row, int Col) _anchor;
@@ -63,6 +70,47 @@ public sealed class MapGrid : Control
 
             InvalidateVisual();
         });
+        _glideTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(15), DispatcherPriority.Render, (_, _) =>
+        {
+            if (DateTime.UtcNow - _glideStart > SelectionGlide)
+            {
+                _glideTimer!.Stop();
+                _glideFrom = null;
+            }
+
+            InvalidateVisual();
+        });
+    }
+
+    /// <summary>
+    /// Where the selection box is drawn now (the selected cells' bounds, 1 px out), on its way while it glides; null without
+    /// a selection.
+    /// </summary>
+    public Rect? SelectionBox
+    {
+        get
+        {
+            if (Editor?.Selection is not CellRange selection)
+            {
+                return null;
+            }
+
+            var target = new Rect(CellBounds(selection.Row0, selection.Col0).TopLeft, CellBounds(selection.Row1, selection.Col1).BottomRight).Inflate(1);
+            if (_glideFrom is not Rect from)
+            {
+                return target;
+            }
+
+            var t = (DateTime.UtcNow - _glideStart).TotalMilliseconds / SelectionGlide.TotalMilliseconds;
+            if (t >= 1)
+            {
+                return target;
+            }
+
+            var eased = 1 - Math.Pow(1 - Math.Clamp(t, 0, 1), 3);
+            double Lerp(double a, double b) => a + (b - a) * eased;
+            return new Rect(new Point(Lerp(from.X, target.X), Lerp(from.Y, target.Y)), new Point(Lerp(from.Right, target.Right), Lerp(from.Bottom, target.Bottom)));
+        }
     }
 
     public TableEditorViewModel? Editor { get => GetValue(EditorProperty); set => SetValue(EditorProperty, value); }
@@ -152,6 +200,7 @@ public sealed class MapGrid : Control
             }
 
             _flashCells = Array.Empty<(int, int)>();
+            (_glideFrom, _drawnBox) = (null, null);
             InvalidateMeasure();
             InvalidateVisual();
         }
@@ -316,13 +365,6 @@ public sealed class MapGrid : Control
             }
         }
 
-        if (editor.Selection is CellRange selection)
-        {
-            var box = new Rect(CellBounds(selection.Row0, selection.Col0).TopLeft, CellBounds(selection.Row1, selection.Col1).BottomRight);
-            context.DrawRectangle(null, new Pen(new SolidColorBrush(ink1), 2), new RoundedRect(box.Inflate(1), Radius + 1));
-            context.DrawRectangle(null, new Pen(new SolidColorBrush(pane), 1), new RoundedRect(box.Deflate(0.5), Radius));
-        }
-
         if (editor.TypedText.Length > 0)
         {
             // Typing: the active cell turns Pane with a 2 px Ink1 inset border; the digits sit right, with a caret.
@@ -341,18 +383,31 @@ public sealed class MapGrid : Control
 
         DrawHeaders(context, values, editor, data, dataBold, pane, fillColour, ink1, ink2, ink3);
 
+        // The rings sit above the headers' bands, which reach 2 px into the gap and used to cut a first-row or first-column
+        // ring; clipped at the headers themselves, a ring scrolled under them still hides.
+        using (context.PushClip(new Rect(Scroll.X + RowHeaderWidth, Scroll.Y + HeaderHeight, Math.Max(0, Bounds.Width - RowHeaderWidth), Math.Max(0, Bounds.Height - HeaderHeight))))
+        {
+            _drawnBox = SelectionBox;
+            if (_drawnBox is Rect ring)
+            {
+                context.DrawRectangle(null, new Pen(new SolidColorBrush(ink1), 2), new RoundedRect(ring, Radius + 1));
+                context.DrawRectangle(null, new Pen(new SolidColorBrush(pane), 1), new RoundedRect(ring.Deflate(1.5), Radius));
+            }
+
+            if (IsFocused && Classes.Contains(":focus-visible"))
+            {
+                // The focus ring of system 1.3 around the active cell: a Pane gap, then 2 px Ink1.
+                var cell = CellBounds(editor.ActiveCell.Row, editor.ActiveCell.Col);
+                context.DrawRectangle(null, new Pen(new SolidColorBrush(pane), 2), new RoundedRect(cell.Inflate(1), Radius + 1));
+                context.DrawRectangle(null, new Pen(new SolidColorBrush(ink1), 2), new RoundedRect(cell.Inflate(3), Radius + 3));
+            }
+        }
+
         if (editor.Live is { IsStale: false } ticking)
         {
             DrawTicks(context, ticking, values);
         }
 
-        if (IsFocused && Classes.Contains(":focus-visible"))
-        {
-            // The focus ring of system 1.3 around the active cell, above everything: a Pane gap, then 2 px Ink1.
-            var cell = CellBounds(editor.ActiveCell.Row, editor.ActiveCell.Col);
-            context.DrawRectangle(null, new Pen(new SolidColorBrush(pane), 2), new RoundedRect(cell.Inflate(1), Radius + 1));
-            context.DrawRectangle(null, new Pen(new SolidColorBrush(ink1), 2), new RoundedRect(cell.Inflate(3), Radius + 3));
-        }
     }
 
     // Row and column headers and the corner, drawn at the scroll offset so they stay in view (system 8).
@@ -666,6 +721,21 @@ public sealed class MapGrid : Control
         if (e.PropertyName is nameof(TableEditorViewModel.Values) or nameof(TableEditorViewModel.ShowRaw))
         {
             InvalidateMeasure();
+        }
+
+        // A new selection glides from where the box was last drawn (Windows' animation effects on; otherwise it jumps).
+        if (e.PropertyName == nameof(TableEditorViewModel.Selection))
+        {
+            if (MotionSettings.AnimationsEnabled && _drawnBox is Rect shown && Editor?.TypedText.Length == 0)
+            {
+                _glideFrom = shown;
+                _glideStart = DateTime.UtcNow;
+                _glideTimer.Start();
+            }
+            else
+            {
+                _glideFrom = null;
+            }
         }
 
         InvalidateVisual();
