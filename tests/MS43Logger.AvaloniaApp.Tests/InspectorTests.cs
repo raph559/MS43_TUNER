@@ -14,9 +14,10 @@ public class InspectorTests
         var size = new Size(300, 250);
         foreach (var (yaw, pitch) in new[] { (-0.72, 0.6), (0.4, 1.2), (2.0, 0.3) })
         {
-            var (point, _) = SurfaceMath.Project(0.5, 0.5, 0, yaw, pitch, size);
+            // The volume's centre (mid-floor, half height) is the plot's centre at any turn and tilt.
+            var (point, _) = SurfaceMath.Project(0.5, 0.5, 0.5, yaw, pitch, size);
             Assert.Equal(150, point.X, 6);
-            Assert.Equal(250 * 0.58, point.Y, 6);
+            Assert.Equal(125, point.Y, 6);
         }
     }
 

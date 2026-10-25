@@ -13,24 +13,37 @@ namespace MS43Logger.AvaloniaApp.Controls;
 
 public static class SurfaceMath
 {
+    /// <summary>Below this height a plot is a preview (the inspector's): first and last values only, and less room kept for them.</summary>
+    public const double CompactHeight = 260;
+
+    /// <summary>Room kept on each side for the scales: values and units beside the floor, the height scale beside the volume.</summary>
+    public static double MarginX(Size size) => size.Height < CompactHeight ? 24 : 36;
+
+    public static double MarginY(Size size) => size.Height < CompactHeight ? 12 : 18;
+
     /// <summary>
-    /// Projects a point of the unit cube (u = column, w = row, h = height, all 0..1) into <paramref name="size"/>.
-    /// Unzoomed and unmoved, the centre of the floor stays at (width / 2, height × 0.58) whatever the rotation; zoom
-    /// scales about that point and <paramref name="pan"/> then moves the picture. Depth grows towards the viewer.
+    /// Projects a point of the unit cube (u = column, w = row, h = height, all 0..1) into <paramref name="size"/>. The
+    /// picture turns about the centre of the whole volume (floor and full height), which stays at the plot's centre at any
+    /// turn and tilt; zoom scales about that point and <paramref name="pan"/> then moves the picture. Depth grows towards
+    /// the viewer.
     /// </summary>
     public static (Point Point, double Depth) Project(double u, double w, double h, double yaw, double pitch, Size size, double zoom = 1, Vector pan = default)
     {
-        double x = u - 0.5, y = w - 0.5, z = h * 0.5;
+        double x = u - 0.5, y = w - 0.5, z = h * 0.5 - 0.25;
         double cy = Math.Cos(yaw), sy = Math.Sin(yaw), cp = Math.Cos(pitch), sp = Math.Sin(pitch);
         var xr = x * cy - y * sy;
         var yr = x * sy + y * cy;
-        var scale = Math.Min(size.Width * 0.86, size.Height * 1.18) * zoom;
+        var scale = Scale(size) * zoom;
         var centre = Centre(size);
         return (new Point(centre.X + xr * scale + pan.X, centre.Y + (yr * cp - z * sp) * scale * 0.78 + pan.Y), yr * sp + z * cp);
     }
 
-    /// <summary>Where the floor's centre sits, unzoomed and unmoved.</summary>
-    public static Point Centre(Size size) => new(size.Width / 2, size.Height * 0.58);
+    /// <summary>The volume's centre on screen, unzoomed and unmoved: the plot's centre.</summary>
+    public static Point Centre(Size size) => new(size.Width / 2, size.Height / 2);
+
+    // Sized for the widest the volume ever gets: its floor diagonal (√2) across, and (√2·cos + ½·sin) × 0.78 of the tilt
+    // at most 1.17 down, so turning or tilting never changes its size or pushes it out of the plot.
+    private static double Scale(Size size) => Math.Max(1, Math.Min((size.Width - 2 * MarginX(size)) / Math.Sqrt(2), (size.Height - 2 * MarginY(size)) / 1.17));
 }
 
 /// <summary>
@@ -291,8 +304,7 @@ public sealed class Surface3D : Control
 
         var font = new Typeface(ThemeBrushes.Font(this, "UiFont"));
         var ink3 = ThemeBrushes.Get(this, "Ink3Brush");
-        Label(context, values.Y.Units.Length > 0 ? values.Y.Units : "rows", font, ink3, P(-0.14, 0.5, 0).Point);
-        Label(context, values.X.Units.Length > 0 ? values.X.Units : "columns", font, ink3, P(0.5, 1.13, 0).Point);
+        DrawScales(context, editor, values, range, font, ink3, P);
 
         if (editor.Live is { } live)
         {
@@ -314,12 +326,123 @@ public sealed class Surface3D : Control
         }
     }
 
+    /// <summary>The scale texts drawn last: breakpoint values, height values and units.</summary>
+    public IReadOnlyList<string> ScaleLabels => _scaleLabels;
+
+    private readonly List<string> _scaleLabels = new();
+
+    // Breakpoint values along the two floor edges nearest the viewer, with their units further out, and a height scale
+    // (bottom, middle and top of the colour range, then the units) up the corner furthest back. Labels thin out to what
+    // fits: at least 40 px between two values along an edge.
+    private void DrawScales(DrawingContext context, TableEditorViewModel editor, TableValues values, MapColourRange range, Typeface font, IBrush brush,
+        Func<double, double, double, (Point Point, double Depth)> P)
+    {
+        _scaleLabels.Clear();
+        _labelBoxes.Clear();
+        var compact = Bounds.Height < SurfaceMath.CompactHeight;
+        var near = values.Rows > 1 && P(0.5, 1, 0).Depth > P(0.5, 0, 0).Depth ? 1.0 : 0.0;
+        var side = P(1, 0.5, 0).Depth > P(0, 0.5, 0).Depth ? 1.0 : 0.0;
+        double Out(double edge, double by) => edge == 1 ? 1 + by : -by;
+
+        // Units first, then the height scale, then the axis values: a label that would overlap one already drawn is left out.
+        Label(context, values.X.Units.Length > 0 ? values.X.Units : "columns", font, 12, brush, P(0.5, Out(near, compact ? 0.24 : 0.2), 0).Point);
+        Label(context, values.Y.Units.Length > 0 ? values.Y.Units : "rows", font, 12, brush, P(Out(side, compact ? 0.28 : 0.24), 0.5, 0).Point);
+
+        // The height scale on the corner furthest back, with its labels on the outside of that corner.
+        (double U, double W)[] corners = [(0, 0), (1, 0), (0, 1), (1, 1)];
+        var back = corners.MinBy(corner => P(corner.U, corner.W, 0).Depth);
+        var foot = P(back.U, back.W, 0).Point;
+        var head = P(back.U, back.W, 1).Point;
+        context.DrawLine(new Pen(brush, 1), foot, head);
+        var units = values.Table.Z.Units is { Length: > 0 } z && z != "-" ? " " + z : string.Empty;
+
+        // Beside the corner, on its outer side; in the small plot always on the left, clear of the zoom buttons on the right.
+        var outwards = compact || foot.X < Bounds.Width / 2 ? -1 : 1;
+        var decimals = values.Table.Z.DecimalPlaces ?? 1;
+        string Number(double value) => value.ToString("F" + Math.Clamp(decimals, 0, 6), CultureInfo.InvariantCulture);
+        var heights = range.IsConstant ? new[] { (0.5, range.Min) }
+            : compact ? new[] { (1.0, range.Max), (0.0, range.Min) }
+            : new[] { (1.0, range.Max), (0.0, range.Min), (0.5, (range.Min + range.Max) / 2) };
+        // The top value carries the height's units ("39.0 °CRK"): above the plot there may be no room for them.
+        foreach (var (h, value) in heights)
+        {
+            var at = P(back.U, back.W, h).Point;
+            if (Label(context, Number(value) + (h == heights[0].Item1 ? units : string.Empty), font, 11, brush, at + new Vector(outwards * 6, 0), outwards))
+            {
+                context.DrawLine(new Pen(brush, 1), at, at + new Vector(outwards * 4, 0));
+            }
+        }
+
+        var rows = Ticks(values.Rows, compact ? 0 : Point.Distance(P(side, 0, 0).Point, P(side, 1, 0).Point));
+        foreach (var r in rows)
+        {
+            Label(context, editor.RowLabel(r), font, 11, brush, P(Out(side, 0.08), values.Rows > 1 ? (double)r / (values.Rows - 1) : 0.5, 0).Point);
+        }
+
+        var columns = Ticks(values.Cols, compact ? 0 : Point.Distance(P(0, near, 0).Point, P(1, near, 0).Point));
+        foreach (var c in columns)
+        {
+            var text = c < values.X.Labels.Count ? values.X.Labels[c] : string.Empty;
+            Label(context, text, font, 11, brush, P(values.Cols > 1 ? (double)c / (values.Cols - 1) : 0.5, Out(near, 0.07), 0).Point);
+        }
+    }
+
+    private readonly List<Rect> _labelBoxes = new();
+
+    // Indices of the breakpoints to label: every step-th from the first, at least 40 px apart, and always the last; a label
+    // that would crowd the last one gives way to it.
+    public static IReadOnlyList<int> Ticks(int count, double length)
+    {
+        if (count <= 1)
+        {
+            return count == 1 ? new[] { 0 } : Array.Empty<int>();
+        }
+
+        var fits = Math.Clamp((int)(length / 40) + 1, 2, count);
+        var step = (int)Math.Ceiling((count - 1) / (double)(fits - 1));
+        var ticks = Enumerable.Range(0, (count - 1) / step + 1).Select(i => i * step).ToList();
+        if (ticks[^1] != count - 1)
+        {
+            if (count - 1 - ticks[^1] <= step / 2.0 && ticks.Count > 1)
+            {
+                ticks.RemoveAt(ticks.Count - 1);
+            }
+
+            ticks.Add(count - 1);
+        }
+
+        return ticks;
+    }
+
     private static byte Shade(byte value, double factor) => (byte)Math.Clamp(Math.Round(value * factor), 0, 255);
 
-    private static void Label(DrawingContext context, string text, Typeface font, IBrush brush, Point at)
+    // A label centred on its point, or beside it: align -1 ends the text at the point, +1 starts it there. One that would
+    // overlap a label already drawn is left out; returns whether it was drawn.
+    private bool Label(DrawingContext context, string text, Typeface font, double size, IBrush brush, Point at, int align = 0)
     {
-        var formatted = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, font, 12, brush);
-        context.DrawText(formatted, new Point(at.X - formatted.Width / 2, at.Y - formatted.Height / 2));
+        if (text.Length == 0)
+        {
+            return false;
+        }
+
+        var formatted = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, font, size, brush);
+        formatted.SetFontFeatures(MS43Logger.AvaloniaApp.Theme.Typography.Tabular);
+        var x = align switch
+        {
+            < 0 => at.X - formatted.Width,
+            > 0 => at.X,
+            _ => at.X - formatted.Width / 2,
+        };
+        var box = new Rect(x, at.Y - formatted.Height / 2, formatted.Width, formatted.Height);
+        if (_labelBoxes.Any(drawn => drawn.Inflate(2).Intersects(box)))
+        {
+            return false;
+        }
+
+        _labelBoxes.Add(box);
+        context.DrawText(formatted, box.TopLeft);
+        _scaleLabels.Add(text);
+        return true;
     }
 
     private void OnEditorChanged(object? sender, PropertyChangedEventArgs e) => InvalidateVisual();
