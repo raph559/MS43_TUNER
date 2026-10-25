@@ -5,7 +5,8 @@ namespace MS43Logger.Core.LiveTuning;
 /// ratios in 142). Each group is 8 bytes, its flashed defaults after pops' at 0C:FF88. V10's state takes pool A's bytes
 /// from 668, so allocations end there and the status reports 896 free. V10.1 (header minor 1) adds 139/4, the rise
 /// allowed once stabbing, and 141/6, the blip lead, and takes the pops AFR target down to 7.4. V10.2 (minor 2) makes the
-/// pops AFR target the real AFR × 10 in petrol AFR (5.0..14.7) and adds 141/7, the blip's spark above its target.
+/// pops AFR target the real AFR × 10 in petrol AFR (5.0..14.7) and adds 141/7, the blip's spark above its target. V10.3
+/// (minor 3) removes the stabs: a pops window keeps its own opening and ends at a 160 rpm rise, and 139 is reserved.
 /// </summary>
 public static class OverlayV10
 {
@@ -16,6 +17,9 @@ public static class OverlayV10
 
     /// <summary>The header minor of V10.2: the real pops AFR (138/3) and the blip's spark above its target (141/7).</summary>
     public const int V102Minor = 2;
+
+    /// <summary>The header minor of V10.3: V10.2 without the pops stabs; group 139 is reserved.</summary>
+    public const int V103Minor = 3;
     public const string BlipCategory = "Downshift blip";
 
     private const int PopsAfr = 3, PopsThrottle = 6, BlipOpening = 5, HoldOpening = 6, StabsRise = 4, BlipLead = 6, CapSpark = 7;
@@ -48,9 +52,13 @@ public static class OverlayV10
     public static IReadOnlyList<(byte Low, byte High)> PopsLimitsV102 { get; } =
         Array.AsReadOnly(PopsLimitsV101.Select((limit, i) => i == PopsAfr ? ((byte)50, (byte)147) : limit).ToArray());
 
-    /// <summary>The limits of groups 139..142 for an overlay of this minor: V10.2's from minor 2, V10.1's from minor 1.</summary>
+    /// <summary>V10.3's limits: V10.2's, with group 139 reserved, every byte 0.</summary>
+    public static IReadOnlyDictionary<int, IReadOnlyList<(byte Low, byte High)>> LimitsV103 { get; } = LimitsV102.ToDictionary(
+        pair => pair.Key, pair => pair.Key == Stabs ? (IReadOnlyList<(byte Low, byte High)>)Array.AsReadOnly(new (byte, byte)[8]) : pair.Value);
+
+    /// <summary>The limits of groups 139..142 for an overlay of this minor: V10.3's from minor 3, V10.2's from 2, V10.1's from 1.</summary>
     public static IReadOnlyDictionary<int, IReadOnlyList<(byte Low, byte High)>> LimitsFor(int minor) =>
-        minor >= V102Minor ? LimitsV102 : minor >= V101Minor ? LimitsV101 : Limits;
+        minor >= V103Minor ? LimitsV103 : minor >= V102Minor ? LimitsV102 : minor >= V101Minor ? LimitsV101 : Limits;
 
     /// <summary>V9's pops group, with the opening's hover warning that the stabs need 4.0 °TPS or more.</summary>
     public static OverlayScalarGroup PopsGroup { get; } = OverlayV9.PopsGroup with
@@ -211,8 +219,24 @@ public static class OverlayV10
         _ => map,
     }).ToArray());
 
-    /// <summary>The catalogue of an overlay 10 of this header minor: V10.2's from minor 2, V10.1's from minor 1, V10's below.</summary>
-    public static IReadOnlyList<OverlayMap> MapsFor(int minor) => minor >= V102Minor ? MapsV102 : minor >= V101Minor ? MapsV101 : Maps;
+    /// <summary>V10.3's pops group: V10.2's, with V9's opening text (160 rpm, no stabs).</summary>
+    public static OverlayScalarGroup PopsGroupV103 { get; } = PopsGroupV102 with
+    {
+        Fields = PopsGroupV102.Fields.Select(field => field.Offset != PopsThrottle ? field
+            : OverlayV9.PopsGroup.Fields.Single(v9 => v9.Offset == PopsThrottle)).ToArray(),
+    };
+
+    /// <summary>V10.3's catalogue: V10.2's without the stabs. Group 139 stays as a reserved entry, never shown or sent.</summary>
+    public static IReadOnlyList<OverlayMap> MapsV103 { get; } = Array.AsReadOnly(MapsV102.Select(map => map.Index switch
+    {
+        OverlayV8.Pops => map with { ScalarGroup = PopsGroupV103 },
+        Stabs => new OverlayMap(Stabs, "reserved_139", "Reserved", 0xCFF88, 8, false, Reserved: true),
+        _ => map,
+    }).ToArray());
+
+    /// <summary>The catalogue of an overlay 10 of this header minor: V10.3's from minor 3, V10.2's from 2, V10.1's from 1, V10's below.</summary>
+    public static IReadOnlyList<OverlayMap> MapsFor(int minor) =>
+        minor >= V103Minor ? MapsV103 : minor >= V102Minor ? MapsV102 : minor >= V101Minor ? MapsV101 : Maps;
 
     /// <summary>
     /// V10's rule for a copy of a settings group: in groups 139..142 every byte within its limits (140's switch may also be

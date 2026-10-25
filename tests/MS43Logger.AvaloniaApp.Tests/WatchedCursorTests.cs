@@ -30,7 +30,7 @@ public sealed class WatchedCursorTests
         public uint? Watched => Sent.LastOrDefault();
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task WatchedMapDrawsTheRecordsCellNotTheLoggedOne()
     {
         Assert.True(TuneScreen.Available);
@@ -43,7 +43,7 @@ public sealed class WatchedCursorTests
         Assert.StartsWith("Live exact cell", shell.Tune.LiveCursor.Readout);
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task MovingCounterSaysInUseWhereTheRulesSayNotInUse()
     {
         Assert.True(TuneScreen.Available);
@@ -54,7 +54,7 @@ public sealed class WatchedCursorTests
         Assert.False(shell.Tune.LiveCursor.UseIsDim);
     }
 
-    [AvaloniaFact] // the car's flex-fuel substitutes are 0 %: the ECU reads its E85 maps but counts them for nothing
+    [CarAvaloniaFact] // the car's flex-fuel substitutes are 0 %: the ECU reads its E85 maps but counts them for nothing
     public async Task MovingCounterKeepsNotInUseForAMapAtAZeroShare()
     {
         Assert.True(TuneScreen.Available);
@@ -67,7 +67,7 @@ public sealed class WatchedCursorTests
         Assert.Equal(3.5, shell.Tune.Editor.Live.Fix.Row!.Value.Position);
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task StoppedCounterSaysNotReadNowWithTheTimeSinceTheLastRead()
     {
         Assert.True(TuneScreen.Available);
@@ -83,7 +83,7 @@ public sealed class WatchedCursorTests
         Assert.Equal(3.5, shell.Tune.Editor.Live.Fix.Row!.Value.Position);
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task NeverReadSaysNotReadSinceConnect()
     {
         Assert.True(TuneScreen.Available);
@@ -94,7 +94,7 @@ public sealed class WatchedCursorTests
         Assert.Null(shell.Tune.Editor!.Live);
     }
 
-    [AvaloniaFact] // RF4
+    [CarAvaloniaFact]
     public async Task SwitchingMapsSendsOneWatchAndShowsNoOldCell()
     {
         Assert.True(TuneScreen.Available);
@@ -113,7 +113,7 @@ public sealed class WatchedCursorTests
         Assert.NotEqual(3.5, shell.Tune.Editor!.Live?.Fix.Row?.Position);
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task TheFocusedMapWindowIsTheWatchedOne()
     {
         Assert.True(TuneScreen.Available);
@@ -130,7 +130,7 @@ public sealed class WatchedCursorTests
         Assert.Equal(PartLoad, target.Sent[^1]);
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task AV8EcuKeepsTheLoggedInputCursor()
     {
         Assert.True(TuneScreen.Available);

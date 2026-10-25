@@ -69,7 +69,7 @@ public sealed class DiagnosticLogTests : IDisposable
         return null;
     };
 
-    /// <summary>The MS43X001 fault memory with P1567 stored, queue 2 overflowed, FDF8 as given, and pops' state: 4,000 rpm, 2 stabs.</summary>
+    /// <summary>The MS43X001 fault memory with P1567 stored, queue 2 overflowed, FDF8 as given, and pops' state: 4,000 rpm.</summary>
     private static Dictionary<int, byte> Memory(ushort fdf8)
     {
         var memory = new Dictionary<int, byte>();
@@ -77,7 +77,7 @@ public sealed class DiagnosticLogTests : IDisposable
         memory[FaultMemory.StoredCountAddress] = 1; memory[FaultMemory.StoredListAddress] = 124; memory[FaultMemory.RecordsAddress + 12 * 124] = 0x28;
         memory[FaultMemory.QueueFlagsAddress] = 1 << 7;
         memory[0xFDF8] = (byte)fdf8; memory[0xFDF9] = (byte)(fdf8 >> 8);
-        memory[DiagnosticPayloadSource.PopsAddress + 2] = 125; memory[DiagnosticPayloadSource.PopsAddress + 3] = 2;
+        memory[DiagnosticPayloadSource.PopsAddress + 2] = 125;
         return memory;
     }
 
@@ -115,14 +115,14 @@ public sealed class DiagnosticLogTests : IDisposable
     public async Task AV10LogCarriesTheFaultsThePayloadBitsAndThePopsAndBlipState()
     {
         var lines = await Log(Ecu(Memory(fdf8: 0x4000 | 1 << 3 | 1 << 7 | 1 << 8 | 1 << 12), overlay: true, byte0: 0x20 | 0x80));
-        Assert.Contains(",PUSTATE,PUCSTATE,BTSSTATE,BLSSTATE,CSSTATE,faults,queues,fdf8,pops_window,pops_stabs,pops_low_rpm,pops_used,blip,guard",
+        Assert.Contains(",PUSTATE,PUCSTATE,BTSSTATE,BLSSTATE,CSSTATE,faults,queues,fdf8,pops_window,pops_low_rpm,pops_used,blip,guard",
             lines[0]);
         var width = lines[0].Split(',').Length;
         Assert.All(lines.Skip(1), line => Assert.Equal(width, line.Split(',').Length));
         var last = Columns(lines[0], lines[^1]);
         Assert.Equal(("0", "0", "1", "0", "1"), (last["PUSTATE"], last["PUCSTATE"], last["BTSSTATE"], last["BLSSTATE"], last["CSSTATE"]));
         Assert.Equal(("P1567", "2", "5188"), (last["faults"], last["queues"], last["fdf8"]));
-        Assert.Equal(("1", "2", "4000"), (last["pops_window"], last["pops_stabs"], last["pops_low_rpm"]));
+        Assert.Equal(("1", "4000"), (last["pops_window"], last["pops_low_rpm"]));
         Assert.Equal(("0", "2", "0"), (last["pops_used"], last["blip"], last["guard"]));
     }
 
@@ -132,7 +132,7 @@ public sealed class DiagnosticLogTests : IDisposable
         var lines = await Log(Ecu(Memory(fdf8: 0x4000), overlay: false));
         var last = Columns(lines[0], lines[^1]);
         Assert.Equal(("P1567", "2", "0"), (last["faults"], last["queues"], last["CSSTATE"]));
-        Assert.All(new[] { "fdf8", "pops_window", "pops_stabs", "pops_low_rpm", "pops_used", "blip", "guard" },
+        Assert.All(new[] { "fdf8", "pops_window", "pops_low_rpm", "pops_used", "blip", "guard" },
             column => Assert.Equal("", last[column]));
     }
 

@@ -28,7 +28,7 @@ public sealed class LiveTuningV8Tests
 
     private static LiveMapRow Pops(LiveTuningViewModel page) => page.Maps.Single(row => row.Map.Index == OverlayV8.Pops);
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task PopsGroupIsListedWithItsCategoryAndDescriptions()
     {
         Assert.True(TuneScreen.Available);
@@ -57,7 +57,7 @@ public sealed class LiveTuningV8Tests
         finally { page.Dispose(); window.Close(); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task TheSwitchNamesEachTrigger_AndTheButtonBitsAreNotRead()
     {
         var (window, _, page, ecu, _) = await V8();
@@ -75,7 +75,7 @@ public sealed class LiveTuningV8Tests
         finally { page.Dispose(); window.Close(); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task SearchFindsPopsByCruiseAndByAfr()
     {
         var (window, _, page, _, _) = await V8();
@@ -89,7 +89,7 @@ public sealed class LiveTuningV8Tests
         finally { page.Dispose(); window.Close(); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task PopsSettingsEditSendAndReadBack()
     {
         var (window, _, page, ecu, _) = await V8();
@@ -113,7 +113,7 @@ public sealed class LiveTuningV8Tests
         finally { page.Dispose(); window.Close(); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task OutOfRangePopsValueIsRefusedNotWarned()
     {
         var (window, _, page, ecu, _) = await V8();
@@ -130,7 +130,7 @@ public sealed class LiveTuningV8Tests
         finally { page.Dispose(); window.Close(); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task CopyToTuneWritesTheEightBytesIntoTheOverlayArea()
     {
         var (window, shell, page, _, before) = await V8();

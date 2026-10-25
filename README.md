@@ -140,9 +140,9 @@ MS43 Tuner is developed in [MS43_EMULATOR](https://github.com/raph559/MS43_EMULA
 
 ## Install
 
-Nothing has been released yet. Releases will appear on the [Releases](https://github.com/raph559/MS43_TUNER/releases) page, each with two zips for win-x64: `MS43Tuner-<version>-win-x64.zip` with the desktop app and `MS43Tuner-CLI-<version>-win-x64.zip` with the command-line tool. Both will be self-contained single-file builds, so you will not need to install .NET: unzip and run `MS43Logger.AvaloniaApp.exe`. The builds are not code-signed, so Windows SmartScreen may ask before the first start.
+Download the latest release from the [Releases](https://github.com/raph559/MS43_TUNER/releases) page. Each release has two zips for win-x64: `MS43Tuner-<version>-win-x64.zip` with the desktop app and `MS43Tuner-CLI-<version>-win-x64.zip` with the command-line tool. Both are self-contained single-file builds, so you do not need to install .NET: unzip and run `MS43Logger.AvaloniaApp.exe`. The builds are not code-signed, so Windows SmartScreen may ask before the first start.
 
-Until then, build it from source:
+Or build it from source:
 
 ```powershell
 git clone https://github.com/raph559/MS43_TUNER.git
@@ -297,6 +297,13 @@ The app is built with [Avalonia](https://avaloniaui.net/) and tested with [xUnit
 
 - More performance tests: coast-down, part-throttle cell sweep, throttle response, idle quality, rev-limiter check, 0 to 400 m, braking, warm-up log, repeatability sets, and export.
 - Log replay from CSV with time spent per map cell.
+
+## Related projects
+
+This project is one of three that work together:
+
+- [MS43 Emulator](https://github.com/raph559/MS43_EMULATOR): runs an MS43 bin from power-on on your PC, with an engine and a car around it, to test a bin before you flash it.
+- [MS43X001 Custom](https://github.com/raph559/MS43X001_CUSTOM): MS43X001 with the live-tuning overlay that MS43 Tuner talks to, plus pops & bangs and a downshift blip.
 
 ## Contributing
 

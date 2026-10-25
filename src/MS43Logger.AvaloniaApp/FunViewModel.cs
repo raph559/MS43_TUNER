@@ -109,7 +109,7 @@ public sealed class FunViewModel : ViewModelBase, IDisposable
 
     /// <summary>The live rows of the chosen feature's groups, its main group first.</summary>
     private IReadOnlyList<LiveMapRow> LiveRows => Selected?.Key is { } key
-        ? FunFeatures.MapIndicesOf(key).Select(index => LiveTuning.Maps.FirstOrDefault(m => m.Map.Index == index)).OfType<LiveMapRow>().ToArray()
+        ? FunFeatures.MapIndicesOf(key).Select(index => LiveTuning.Maps.FirstOrDefault(m => m.Map.Index == index && !m.Map.Reserved)).OfType<LiveMapRow>().ToArray()
         : [];
 
     /// <summary>
@@ -236,7 +236,7 @@ public sealed class FunViewModel : ViewModelBase, IDisposable
         {
             foreach (var index in FunFeatures.MapIndicesOf(key))
             {
-                var map = EditedMaps.FirstOrDefault(m => m.Index == index);
+                var map = EditedMaps.FirstOrDefault(m => m.Index == index && !m.Reserved);
                 IReadOnlyList<LiveScalarRow>? rows = null;
                 if (map is not null && Mode == FunMode.Live) rows = LiveTuning.BuildScalarRows(map);
                 else if (map is not null && Mode == FunMode.Bin && _tune.Document is { } bin && _tune.History is { } history

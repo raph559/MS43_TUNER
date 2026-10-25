@@ -26,7 +26,7 @@ public sealed class V10GroupsTests
     {
         var (window, shell) = await TuneScreen.OpenAsync(select: null, time: new ManualTicker());
         Put(shell, 0x4B544, [(byte)'L', (byte)'T', (byte)'O', (byte)'V', (byte)binVersion, (byte)minor]);
-        var groups = minor >= 2 ? V10Groups.DefaultsV102 : minor >= OverlayV10.V101Minor ? V10Groups.DefaultsV101 : V10Groups.Defaults;
+        var groups = minor >= OverlayV10.V103Minor ? V10Groups.DefaultsV103 : minor >= 2 ? V10Groups.DefaultsV102 : minor >= OverlayV10.V101Minor ? V10Groups.DefaultsV101 : V10Groups.Defaults;
         Put(shell, 0x4FF80, binVersion >= 10 ? groups : groups.AsSpan(0, 8));
         shell.SelectedTab = tab;
         var before = shell.Tune.Document!.Image.ToArray();
@@ -60,7 +60,7 @@ public sealed class V10GroupsTests
 
     private static readonly string[] RatioLabels = ["rpm per km/h, 1st", "rpm per km/h, 2nd", "rpm per km/h, 3rd", "rpm per km/h, 4th"];
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task PopsStabsShowsWithPops()
     {
         Assert.True(TuneScreen.Available);
@@ -86,7 +86,7 @@ public sealed class V10GroupsTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task TheBlipGroupsShowTogether()
     {
         var (window, shell, _, _) = await Open(10, ShellViewModel.LiveTuningTab);
@@ -110,7 +110,7 @@ public sealed class V10GroupsTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task TheBlipsChoicesAreNamed()
     {
         var (window, shell, _, _) = await Open(10, ShellViewModel.LiveTuningTab);
@@ -129,7 +129,7 @@ public sealed class V10GroupsTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task AValueOutsideItsLimitIsRefusedBeforeSending()
     {
         var (window, shell, ecu, _) = await Open(10, ShellViewModel.LiveTuningTab);
@@ -146,7 +146,7 @@ public sealed class V10GroupsTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task AHoldAboveTheBlipOpeningIsRefusedBeforeSending()
     {
         var (window, shell, ecu, _) = await Open(10, ShellViewModel.LiveTuningTab);
@@ -163,7 +163,7 @@ public sealed class V10GroupsTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task TheFunTabListsTheBlipWithItsSwitch()
     {
         var (window, shell, _, _) = await Open(null, ShellViewModel.FunTab);
@@ -182,7 +182,7 @@ public sealed class V10GroupsTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact] // spec 7.2 and 7.9: the stabs show inside "Pops & bangs", and the blip's page has a switch per downshift
+    [CarAvaloniaFact] // spec 7.2 and 7.9: the stabs show inside "Pops & bangs", and the blip's page has a switch per downshift
     public async Task TheFunPagesHoldEveryGroupOfTheirFeature()
     {
         var (window, shell, _, _) = await Open(10, ShellViewModel.FunTab);
@@ -198,7 +198,7 @@ public sealed class V10GroupsTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task SendingTheBlipPagePutsItsThreeGroupsLive()
     {
         var (window, shell, ecu, _) = await Open(10, ShellViewModel.FunTab);
@@ -219,7 +219,7 @@ public sealed class V10GroupsTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task AHoldAboveTheOpeningIsRefusedInFunAsOnThePage()
     {
         var (window, shell, ecu, _) = await Open(10, ShellViewModel.FunTab);
@@ -236,7 +236,7 @@ public sealed class V10GroupsTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact] // final review: a refusal must never leave the feature switched on with stale settings
+    [CarAvaloniaFact] // final review: a refusal must never leave the feature switched on with stale settings
     public async Task AnInvalidGearsGroupSendsNothingFromTheBlipPage()
     {
         var (window, shell, ecu, _) = await Open(10, ShellViewModel.FunTab);
@@ -255,7 +255,7 @@ public sealed class V10GroupsTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact] // final review: the group holding the feature's switch goes last
+    [CarAvaloniaFact] // final review: the group holding the feature's switch goes last
     public async Task TheBlipPageSendsItsSwitchGroupLast()
     {
         var (window, shell, ecu, _) = await Open(10, ShellViewModel.FunTab);
@@ -273,7 +273,7 @@ public sealed class V10GroupsTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact] // final review: after a refusal the page says what went live, and the feature's switch stays as it was
+    [CarAvaloniaFact] // final review: after a refusal the page says what went live, and the feature's switch stays as it was
     public async Task ARefusedGroupSaysWhatWentLiveAndKeepsTheSwitchOff()
     {
         var (window, shell, ecu, _) = await Open(10, ShellViewModel.FunTab);
@@ -293,7 +293,7 @@ public sealed class V10GroupsTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact] // final review: the Fun switch follows the group that holds the feature's switch
+    [CarAvaloniaFact] // final review: the Fun switch follows the group that holds the feature's switch
     public async Task TheFunSwitchFollowsTheBlipsSwitchGroup()
     {
         var (window, shell, ecu, _) = await Open(10, ShellViewModel.FunTab);
@@ -317,7 +317,7 @@ public sealed class V10GroupsTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task OfflineAHoldAboveTheOpeningIsUndone()
     {
         var (window, shell, _, before) = await Open(null, ShellViewModel.FunTab);
@@ -333,7 +333,7 @@ public sealed class V10GroupsTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task TheOpeningHoverWarnsUnder4TpsOnV10Only()
     {
         foreach (var (version, warns) in new[] { (10, true), (9, false) })
@@ -350,7 +350,7 @@ public sealed class V10GroupsTests
         }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task AV9EcuShowsNoneOfTheNewGroups()
     {
         var (window, shell, _, _) = await Open(9, ShellViewModel.FunTab, binVersion: 9);
@@ -367,7 +367,7 @@ public sealed class V10GroupsTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task AV9BinOfflineShowsNoBlip()
     {
         var (window, shell, _, _) = await Open(null, ShellViewModel.FunTab, binVersion: 9);
@@ -382,7 +382,7 @@ public sealed class V10GroupsTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task EditsOfTheNewGroupsGoIntoTheBin()
     {
         var (window, shell, _, before) = await Open(10, ShellViewModel.LiveTuningTab);
@@ -410,7 +410,7 @@ public sealed class V10GroupsTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact] // V10.1: the rise allowed once stabbing and the blip lead show after V10's settings, with V10.1's limits
+    [CarAvaloniaFact] // V10.1: the rise allowed once stabbing and the blip lead show after V10's settings, with V10.1's limits
     public async Task AV101EcuShowsTheRiseAndTheLead()
     {
         var (window, shell, _, _) = await Open(10, ShellViewModel.LiveTuningTab, minor: 1);
@@ -432,7 +432,7 @@ public sealed class V10GroupsTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task TheRiseAndTheLeadGoLiveOnAV101Ecu()
     {
         var (window, shell, ecu, _) = await Open(10, ShellViewModel.LiveTuningTab, minor: 1);
@@ -451,7 +451,7 @@ public sealed class V10GroupsTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact] // V10.2: the pops AFR is the real AFR in petrol AFR, and the blip's gears page ends with the cap angle
+    [CarAvaloniaFact] // V10.2: the pops AFR is the real AFR in petrol AFR, and the blip's gears page ends with the cap angle
     public async Task AV102EcuShowsTheRealAfrAndTheCap()
     {
         var (window, shell, _, _) = await Open(10, ShellViewModel.LiveTuningTab, minor: 2);
@@ -472,7 +472,7 @@ public sealed class V10GroupsTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task TheRealAfrAndTheCapGoLiveOnAV102Ecu()
     {
         var (window, shell, ecu, _) = await Open(10, ShellViewModel.LiveTuningTab, minor: 2);
@@ -491,7 +491,7 @@ public sealed class V10GroupsTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact] // RF3: AFR 7.4 goes live on V10.1; a V10 ECU refuses it before anything is sent
+    [CarAvaloniaFact] // RF3: AFR 7.4 goes live on V10.1; a V10 ECU refuses it before anything is sent
     public async Task TheRicherAfrGoesLiveOnV101Only()
     {
         foreach (var (minor, sent) in new[] { (1, true), (0, false) })
@@ -516,7 +516,7 @@ public sealed class V10GroupsTests
         }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task AV101BinOfflineShowsTheNewSettingsInFun()
     {
         var (window, shell, _, _) = await Open(null, ShellViewModel.FunTab, minor: 1);
@@ -528,6 +528,41 @@ public sealed class V10GroupsTests
                 fun.ScalarRows.Select(r => r.Label));
             Choose(fun, FunFeatures.Blip);
             Assert.Equal(BlipLabels.Concat(GearLabels).Append("Blip lead").Concat(RatioLabels), fun.ScalarRows.Select(r => r.Label));
+        }
+        finally { Close(window, shell); }
+    }
+
+    [CarAvaloniaFact] // V10.3: no stabs anywhere. Group 139 is in the verified catalogue but never listed, and pops shows alone.
+    public async Task AV103EcuShowsNoStabs()
+    {
+        var (window, shell, _, _) = await Open(10, ShellViewModel.LiveTuningTab, minor: OverlayV10.V103Minor);
+        var page = shell.LiveTuning;
+        try
+        {
+            Assert.True(page.HasVerifiedCatalogue);
+            Assert.True(Row(page, OverlayV10.Stabs).Map.Reserved);
+            Assert.DoesNotContain(page.FilteredMaps, row => row.Map.Index == OverlayV10.Stabs);
+            Assert.DoesNotContain(page.FilteredMaps, row => row.Title.Contains("stab", StringComparison.OrdinalIgnoreCase));
+            page.Selected = Row(page, OverlayV8.Pops);
+            Assert.DoesNotContain(page.ScalarFields, f => f.Description.Contains("stab", StringComparison.OrdinalIgnoreCase));
+            shell.SelectedTab = ShellViewModel.FunTab;
+            Choose(shell.Fun, FunFeatures.Pops);
+            Assert.NotEmpty(shell.Fun.ScalarRows);
+            Assert.DoesNotContain(shell.Fun.ScalarRows, r => r.Label is "Load time" or "Stab size" or "Stab length" or "Gap" or "Rise allowed during stabs");
+        }
+        finally { Close(window, shell); }
+    }
+
+    [CarAvaloniaFact]
+    public async Task AV103BinOfflineShowsNoStabsInFun()
+    {
+        var (window, shell, _, _) = await Open(null, ShellViewModel.FunTab, minor: OverlayV10.V103Minor);
+        var fun = shell.Fun;
+        try
+        {
+            Choose(fun, FunFeatures.Pops);
+            Assert.Equal(8, fun.ScalarRows.Count);
+            Assert.DoesNotContain(fun.ScalarRows, r => r.Label is "Load time" or "Stab size" or "Stab length" or "Gap" or "Rise allowed during stabs");
         }
         finally { Close(window, shell); }
     }

@@ -22,7 +22,7 @@ public sealed class LiveTuningSearchTests
 
     private static XdfItem ItemOf(XdfCatalog catalog, LiveMapRow row) => catalog.All.First(item => item.Title == row.Title);
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task EachMap_CarriesItsXdfCategoryAndDescription()
     {
         Assert.True(TuneScreen.Available);
@@ -38,7 +38,7 @@ public sealed class LiveTuningSearchTests
         finally { page.Dispose(); window.Close(); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task TheSearch_FindsAMapByAWordOfItsDescription()
     {
         Assert.True(TuneScreen.Available);
@@ -60,7 +60,7 @@ public sealed class LiveTuningSearchTests
                 && !row.Title.Contains(word, StringComparison.OrdinalIgnoreCase) && !row.Map.Key.Contains(word, StringComparison.OrdinalIgnoreCase));
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task TheSearch_FindsTheMapsOfACategory_AndEveryWordMustMatch()
     {
         Assert.True(TuneScreen.Available);
@@ -76,7 +76,7 @@ public sealed class LiveTuningSearchTests
         finally { page.Dispose(); window.Close(); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task WithoutASearch_TheListIsGroupedByCategory_AndACategoryOpensAndCloses()
     {
         Assert.True(TuneScreen.Available);
@@ -101,7 +101,7 @@ public sealed class LiveTuningSearchTests
         finally { page.Dispose(); window.Close(); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task SelectingAMap_OpensItsCategory_SoTheListShowsIt()
     {
         Assert.True(TuneScreen.Available);

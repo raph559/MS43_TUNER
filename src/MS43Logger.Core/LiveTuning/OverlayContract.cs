@@ -41,7 +41,6 @@ public sealed record OverlayEntry(OverlayState State, int Offset, uint ContentCr
 public sealed record OverlayStatus(int Version, bool Running, bool RicherOnly, IReadOnlyList<OverlayEntry> Tables, int FreeBytes,
     uint Session = 0, uint Revision = 0, LimiterSettings? Limiter = null);
 
-/// <summary>A live map: its index in the overlay, its key, its group on the page, its address in the flash and its size.</summary>
 /// <summary>A setting with no XDF entry carries its own definition: how the app shows, scales and limits it.</summary>
 public sealed record OverlayScalarDefinition(string Title, string Description, string Units, string Equation,
     double RangeLow, double RangeHigh, int Decimals, string Category);
@@ -50,10 +49,15 @@ public sealed record OverlayScalar(string Key, string Label, int Offset, Overlay
 
 public sealed record OverlayScalarGroup(string Title, IReadOnlyList<OverlayScalar> Fields, string? Note = null);
 
+/// <summary>
+/// A live map: its index in the overlay, its key, its group on the page, its address in the flash and its size. A reserved
+/// entry (V10.3's group 139) keeps its place in the catalogue so the IDs after it hold; the app never shows or sends it.
+/// </summary>
 public sealed record OverlayMap(int Index, string Key, string Group, int Address, int Bytes, bool RicherOnly,
-    OverlayScalarGroup? ScalarGroup = null, int ElementBits = 8)
+    OverlayScalarGroup? ScalarGroup = null, int ElementBits = 8, bool Reserved = false)
 {
-    public int Flags => ScalarGroup is not null ? 2 : ElementBits == 16 ? 4 : 0;
+    /// <summary>The catalogue's flags: 2 for a settings group (a reserved one too), 4 for 16-bit cells.</summary>
+    public int Flags => ScalarGroup is not null || Reserved ? 2 : ElementBits == 16 ? 4 : 0;
 }
 
 /// <summary>

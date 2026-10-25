@@ -103,7 +103,7 @@ public sealed class LiveTuningTests : IDisposable
         Assert.Equal(OverlayState.Free, ecu.Peek().Tables[1].State);
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task Version3_AllFiveMapsAndFullMapEditsRemainLive()
     {
         Assert.True(TuneScreen.Available, "This test needs the local car bin and XDF.");
@@ -127,7 +127,7 @@ public sealed class LiveTuningTests : IDisposable
         Assert.All(page.Maps, map => Assert.False(map.HasUnsent));
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task Version3_InterruptedEditStaysMarkedUnsentUntilTheRemainingGroupsAreSent()
     {
         Assert.True(TuneScreen.Available, "This test needs the local car bin and XDF.");

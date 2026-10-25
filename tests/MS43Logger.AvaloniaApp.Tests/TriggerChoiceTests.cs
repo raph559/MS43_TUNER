@@ -49,7 +49,7 @@ public sealed class TriggerChoiceTests : IDisposable
         shell.LiveTuning.Dispose(); shell.Fun.Dispose(); window.Close();
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task V9ListsTheTriggersByName()
     {
         Assert.True(TuneScreen.Available);
@@ -66,7 +66,7 @@ public sealed class TriggerChoiceTests : IDisposable
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact] // RF7
+    [CarAvaloniaFact] // RF7
     public async Task V8KeepsTheStockChoices()
     {
         Assert.True(TuneScreen.Available);
@@ -79,7 +79,7 @@ public sealed class TriggerChoiceTests : IDisposable
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task TheFunListShowsTheTriggersShortName()
     {
         Assert.True(TuneScreen.Available);
@@ -106,7 +106,7 @@ public sealed class TriggerChoiceTests : IDisposable
         return path;
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task TheTuneTabNamesTheTriggerInAV9Bin()
     {
         Assert.True(TuneScreen.Available);
@@ -124,7 +124,7 @@ public sealed class TriggerChoiceTests : IDisposable
         finally { Close(window, shell); }
     }
 
-    [Fact]
+    [CarFact]
     public void CompareNamesTheTriggerOnTheV9Side()
     {
         Assert.True(TuneScreen.Available);
