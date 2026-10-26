@@ -17,7 +17,7 @@ namespace MS43Logger.AvaloniaApp.Controls;
 
 /// <summary>
 /// The table editor (system 2.4): cells coloured on the map ramp over the working range, axis headers that stay in
-/// place while the grid scrolls, mouse and keyboard selection, typing to set values, + and - to step by one raw count,
+/// place while the grid scrolls, mouse and keyboard selection, typing to set values, + and - to step the shown value up or down by one stored step,
 /// copy and paste, and the live cursor.
 /// </summary>
 public sealed class MapGrid : Control
@@ -165,7 +165,7 @@ public sealed class MapGrid : Control
         var values = editor.Values;
         var z = values.Table.Z;
         var physical = values.Physical[row, col];
-        return editor.IsDelta ? BinComparer.FormatDelta(physical, values.Raw[row, col], z, editor.ShowRaw)
+        return editor.IsDelta ? BinComparer.FormatDelta(physical, values.Raw[row, col], z, editor.ShowRaw ? DeltaMode.Raw : editor.DeltaMode)
             : editor.ShowRaw ? values.Raw[row, col].ToString(CultureInfo.InvariantCulture)
             : ValueCodec.Format(physical, values.Raw[row, col], z.DecimalPlaces, z.OutputType, z.Data.ElementBits);
     }
@@ -220,11 +220,22 @@ public sealed class MapGrid : Control
         _cellWidth = values.Cols == 1
             ? Math.Max(CurveCell, narrowest)
             : Math.Max(narrowest, Math.Min(MaxCell, (width - RowHeaderWidth - Gap) / values.Cols - Gap));
+        var gridWidth = RowHeaderWidth + values.Cols * (_cellWidth + Gap);
+
+        // A grid wider than its viewport scrolls sideways, and the horizontal bar floats over the bottom of the content:
+        // it gets its own room under the last row, so it never covers cells.
+        BarRoom = _viewport is not null && double.IsFinite(width) && width > 0 && gridWidth > width + 0.5 ? ScrollBarRoom : 0;
         _rowHeight = double.IsFinite(height) && height > 0
-            ? Math.Clamp((height - HeaderHeight - Gap) / values.Rows - Gap, MinRow, MaxRow)
+            ? Math.Clamp((height - BarRoom - HeaderHeight - Gap) / values.Rows - Gap, MinRow, MaxRow)
             : MaxRow;
-        return new Size(RowHeaderWidth + values.Cols * (_cellWidth + Gap), HeaderHeight + values.Rows * (_rowHeight + Gap));
+        return new Size(gridWidth, HeaderHeight + values.Rows * (_rowHeight + Gap) + BarRoom);
     }
+
+    /// <summary>The room for the horizontal scroll bar (10 px) under the last row, with a 2 px gap.</summary>
+    public const double ScrollBarRoom = 12;
+
+    /// <summary>The empty space under the last row: <see cref="ScrollBarRoom"/> while the grid scrolls sideways, else 0.</summary>
+    public double BarRoom { get; private set; }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
@@ -361,6 +372,13 @@ public sealed class MapGrid : Control
                 if (editor.ChangedCells.Contains((r, c)))
                 {
                     Mark(context, editor.Mark, bounds, text);
+                }
+
+                // Differs from B (Tune's compare mode): the ring in the top-left corner, so a cell both changed and differing
+                // shows both.
+                if (editor.DiffersCells.Contains((r, c)))
+                {
+                    context.DrawEllipse(null, new Pen(new SolidColorBrush(text), 1.5), new Point(bounds.Left + 5, bounds.Top + 5), 2.25, 2.25);
                 }
             }
         }

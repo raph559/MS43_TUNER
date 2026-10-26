@@ -17,19 +17,6 @@
         <Style Selector="Border#RailHost.collapsed">
             <Setter Property="Padding" Value="8,12,8,8" />
         </Style>
-        <!-- The rail's right edge: drag it, use the arrow keys on it, or double-click it for the default width. A 2 px line
-             shows where it is under the pointer or the keyboard. -->
-        <Style Selector="Border#RailResizeHandle">
-            <Setter Property="Width" Value="8" />
-            <Setter Property="Margin" Value="0,0,-4,0" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Cursor" Value="SizeWestEast" />
-            <Setter Property="Focusable" Value="True" />
-            <Setter Property="FocusAdorner" Value="{StaticResource FocusRing}" />
-        </Style>
-        <Style Selector="Border#RailResizeHandle:pointerover > Border, Border#RailResizeHandle:focus-visible > Border">
-            <Setter Property="Background" Value="{DynamicResource Ink3Brush}" />
-        </Style>
         <!-- Rows draw their own state from the rail's data: the list's selection only lasts until the rail rebuilds. -->
         <Style Selector="ListBox#RailList ListBoxItem">
             <Setter Property="Padding" Value="0" />
@@ -105,6 +92,15 @@
         </Style>
         <Style Selector="Border.banner">
             <Setter Property="Margin" Value="0,16,0,0" />
+        </Style>
+        <!-- The compare strip: a Hairline box under the edit tools, so A / B / B − A and Copy from B read as their own group. -->
+        <Style Selector="Border.comparestrip">
+            <Setter Property="Margin" Value="0,12,0,0" />
+            <Setter Property="Padding" Value="12,6,6,6" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource HairlineBrush}" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
         </Style>
         <!-- A one-column table sits centred with its key line (system 8, owner); a map keeps the cells' left edge. -->
         <Style Selector="controls|MapGrid#MapGrid">
@@ -329,10 +325,8 @@
             </DockPanel>
             </Panel>
         </Border>
-        <Border Name="RailResizeHandle" Grid.Column="0" HorizontalAlignment="Right" ZIndex="1"
-                AutomationProperties.Name="Resize items panel" ToolTip.Tip="Drag to resize. Double-click for the default width."
-                PointerPressed="RailResize_PointerPressed" PointerMoved="RailResize_PointerMoved" PointerReleased="RailResize_PointerReleased"
-                KeyDown="RailResize_KeyDown">
+        <Border Name="RailResizeHandle" Classes="railhandle" Grid.Column="0" HorizontalAlignment="Right" ZIndex="1"
+                AutomationProperties.Name="Resize items panel" ToolTip.Tip="Drag to resize. Double-click for the default width.">
             <Border.IsVisible>
                 <MultiBinding Converter="{x:Static BoolConverters.And}">
                     <Binding Path="HasDocument" />
@@ -414,14 +408,27 @@
                             <Button Name="ScaleTool" Content="Scale %" Tag="Scale" Click="Tool_Click" ToolTip.Tip="Change the selected cells by that many percent" />
                         </StackPanel>
                     </Border>
-                    <Border Classes="toolgroup" IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}">
-                        <StackPanel Orientation="Horizontal">
-                            <Button Name="InterpolateTool" Content="Interpolate" Tag="Interpolate" Click="Tool_Click"
-                                    IsEnabled="{Binding Editor.CanInterpolate, FallbackValue=False}"
-                                    ToolTip.Tip="{Binding Editor.InterpolateTip, FallbackValue=''}" ToolTip.ShowOnDisabled="True" />
-                            <Button Name="SmoothTool" Content="Smooth" Tag="Smooth" Click="Tool_Click" ToolTip.Tip="Average each cell with its neighbours" />
-                        </StackPanel>
-                    </Border>
+                    <!-- Interpolate and Smooth, then which way they work on a map (TunerPro's X, Y and XY). -->
+                    <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <Border Classes="toolgroup">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Name="InterpolateTool" Content="Interpolate" Tag="Interpolate" Click="Tool_Click"
+                                        IsEnabled="{Binding Editor.CanInterpolate, FallbackValue=False}"
+                                        ToolTip.Tip="{Binding Editor.InterpolateTip, FallbackValue=''}" ToolTip.ShowOnDisabled="True" />
+                                <Button Name="SmoothTool" Content="Smooth" Tag="Smooth" Click="Tool_Click" ToolTip.Tip="{Binding Editor.SmoothTip, FallbackValue=''}" />
+                            </StackPanel>
+                        </Border>
+                        <Border Name="EditAxisSeg" Classes="seg" IsVisible="{Binding ShowsEditAxis}" AutomationProperties.Name="Interpolate and Smooth direction">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <ToggleButton Name="EditAxisX" Classes="seg" Content="X" IsChecked="{Binding IsEditAxisX}"
+                                              ToolTip.Tip="Along each row: across the columns" AutomationProperties.Name="Along X" />
+                                <ToggleButton Name="EditAxisY" Classes="seg" Content="Y" IsChecked="{Binding IsEditAxisY}"
+                                              ToolTip.Tip="Along each column: across the rows" AutomationProperties.Name="Along Y" />
+                                <ToggleButton Name="EditAxisXY" Classes="seg" Content="XY" IsChecked="{Binding IsEditAxisXY}"
+                                              ToolTip.Tip="Both ways at once" AutomationProperties.Name="Along X and Y" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
                     <!-- A value's exact entry (system 5.13): the Value field with its unit, then Set, secondary since Save is the primary. -->
                     <TextBox Name="ValueInput" Width="120" Height="32" Classes="data13 commits" Watermark="Value" Text="{Binding Value.Input, FallbackValue=''}"
                              KeyDown="ValueInput_KeyDown" AutomationProperties.Name="Value" IsVisible="{Binding Value.IsValue, FallbackValue=False}">
@@ -439,6 +446,33 @@
                     </Border>
                 </WrapPanel>
 
+                <!-- Compare inside Tune (a B open on Compare), apart from the edit tools: what is shown (A, B or B − A), how
+                     B − A reads (Units, Raw, %; one setting with Compare), and B's values copied into A. -->
+                <Border Name="CompareStrip" DockPanel.Dock="Top" Classes="comparestrip" IsVisible="{Binding ShowsCompare}">
+                    <WrapPanel ItemSpacing="12" LineSpacing="8">
+                        <TextBlock Name="CompareStripLabel" Classes="label" Text="{Binding CompareStripText}" ToolTip.Tip="{Binding CompareStripText}"
+                                   MaxWidth="260" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                        <Border Name="TuneCompareSeg" Classes="seg" IsVisible="{Binding ShowsCompareGrid}" AutomationProperties.Name="Show">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <ToggleButton Name="TuneViewA" Classes="seg" Content="A" IsChecked="{Binding IsGridA}" ToolTip.Tip="This bin, the one you edit" />
+                                <ToggleButton Name="TuneViewB" Classes="seg" Content="B" IsChecked="{Binding IsGridB}" ToolTip.Tip="{Binding CompareFileB, StringFormat='B: {0} (read-only)'}" />
+                                <ToggleButton Name="TuneViewDelta" Classes="seg" Content="B − A" IsChecked="{Binding IsGridDelta}" ToolTip.Tip="B − A (read-only)" />
+                            </StackPanel>
+                        </Border>
+                        <Border Name="TuneDeltaSeg" Classes="seg" IsVisible="{Binding ShowsDeltaMode}" AutomationProperties.Name="B − A as">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <ToggleButton Name="TuneDeltaUnits" Classes="seg" Content="Units" IsChecked="{Binding IsDeltaUnits}" ToolTip.Tip="B − A in the map's units" />
+                                <ToggleButton Name="TuneDeltaRaw" Classes="seg" Content="Raw" IsChecked="{Binding IsDeltaRaw}" ToolTip.Tip="B − A in stored counts" />
+                                <ToggleButton Name="TuneDeltaPercent" Classes="seg" Content="%" IsChecked="{Binding IsDeltaPercent}" ToolTip.Tip="B − A as a percentage of A" />
+                            </StackPanel>
+                        </Border>
+                        <Button Name="CopyFromBTool" Content="Copy from B" Click="CopyFromB_Click" IsVisible="{Binding ShowsCompareGrid}"
+                                ToolTip.Tip="Write B's values into the selected cells (Ctrl Shift B)" />
+                        <Button Name="UseBValueButton" Content="Use B's value" Click="CopyFromB_Click" IsVisible="{Binding ShowsUseB}"
+                                ToolTip.Tip="Write B's value into this bin (Ctrl Shift B)" />
+                    </WrapPanel>
+                </Border>
+
                 <Panel>
                     <!-- A table: the grid, then the key line -->
                     <controls:TableLayout Name="TableArea" Classes.centred="{Binding CentreGrid}" IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}">
@@ -450,13 +484,18 @@
                                        VerticalAlignment="Center" />
                         </StackPanel>
                         <ScrollViewer HorizontalScrollBarVisibility="Auto">
-                            <controls:MapGrid Name="MapGrid" Editor="{Binding Editor}" VerticalAlignment="Top" MaxWidth="1240" />
+                            <controls:MapGrid Name="MapGrid" Editor="{Binding ShownEditor}" VerticalAlignment="Top" MaxWidth="1240" />
                         </ScrollViewer>
                         <StackPanel Name="KeyArea" Spacing="4">
                             <DockPanel IsVisible="{Binding Editor.Message, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False}">
                                 <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource WarnBrush}" Width="14" Height="14"
                                                      Margin="0,1,8,0" VerticalAlignment="Top" />
                                 <TextBlock Name="EditMessage" Classes="body" Text="{Binding Editor.Message, FallbackValue=''}" TextWrapping="Wrap" />
+                            </DockPanel>
+                            <DockPanel IsVisible="{Binding CompareAxisNote, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Info}" Foreground="{DynamicResource Ink2Brush}" Width="14" Height="14"
+                                                     Margin="0,1,8,0" VerticalAlignment="Top" />
+                                <controls:NumberText Name="CompareAxisNoteText" Classes="body" Value="{Binding CompareAxisNote}" TextWrapping="Wrap" />
                             </DockPanel>
                             <WrapPanel Name="KeyLine" ItemSpacing="24" LineSpacing="4">
                                 <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding !Editor.IsTyping, FallbackValue=True}">
@@ -477,6 +516,7 @@
                                                ToolTip.Tip="{Binding LiveCursor.UseDetail}"
                                                IsVisible="{Binding LiveCursor.Use, Converter={x:Static ObjectConverters.IsNotNull}}" />
                                 </StackPanel>
+                                <controls:NumberText Name="KeyCompare" Value="{Binding CompareText}" IsVisible="{Binding CompareText, Converter={x:Static ObjectConverters.IsNotNull}}" />
                                 <controls:NumberText Name="KeyUndo" Value="{Binding UndoTip}" IsVisible="{Binding CanUndo}" />
                             </WrapPanel>
                         </StackPanel>
@@ -554,6 +594,7 @@
                             <WrapPanel Name="ValueKeyLine" ItemSpacing="24" LineSpacing="4">
                                 <controls:NumberText Name="ValueDragText" Value="{Binding Value.DragText, FallbackValue=''}"
                                                      IsVisible="{Binding Value.DragText, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False}" />
+                                <controls:NumberText Name="ValueKeyCompare" Value="{Binding CompareText}" IsVisible="{Binding CompareText, Converter={x:Static ObjectConverters.IsNotNull}}" />
                                 <controls:NumberText Name="ValueKeyUndo" Value="{Binding UndoTip}" IsVisible="{Binding CanUndo}" />
                             </WrapPanel>
                         </StackPanel>
@@ -622,11 +663,11 @@
                                 <Border Classes="toolgroup" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6">
                                     <StackPanel Orientation="Horizontal">
                                         <Button Name="SurfaceZoomOutButton" Classes="icon surfacetool" Click="SurfaceZoomOut_Click"
-                                                ToolTip.Tip="Zoom out (-)" AutomationProperties.Name="Zoom out">
+                                                ToolTip.Tip="Zoom out (Ctrl -)" AutomationProperties.Name="Zoom out">
                                             <controls:StrokeIcon Data="{StaticResource Icon.Minus}" />
                                         </Button>
                                         <Button Name="SurfaceZoomInButton" Classes="icon surfacetool" Click="SurfaceZoomIn_Click"
-                                                ToolTip.Tip="Zoom in (+)" AutomationProperties.Name="Zoom in">
+                                                ToolTip.Tip="Zoom in (Ctrl +)" AutomationProperties.Name="Zoom in">
                                             <controls:StrokeIcon Data="{StaticResource Icon.Plus}" />
                                         </Button>
                                         <Button Name="SurfaceEnlargeButton" Classes="icon surfacetool" Click="SurfaceEnlarge_Click"
@@ -636,6 +677,14 @@
                                     </StackPanel>
                                 </Border>
                             </Panel>
+                            <controls:NumberText Name="SurfaceInfo" Classes="body" Value="{Binding #Surface.InfoText}" TextWrapping="Wrap">
+                                <controls:NumberText.IsVisible>
+                                    <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                        <Binding Path="ShowsSurface" />
+                                        <Binding Path="#Surface.InfoText" Converter="{x:Static ObjectConverters.IsNotNull}" />
+                                    </MultiBinding>
+                                </controls:NumberText.IsVisible>
+                            </controls:NumberText>
                             <TextBlock Classes="label" Text="{Binding SurfaceHint}" TextWrapping="Wrap" IsVisible="{Binding ShowsSurface}" />
                             <controls:CurveChart Name="Curve" Height="176" Editor="{Binding Editor}" IsVisible="{Binding ShowsCurve}" />
                             <TextBlock Classes="label" Text="Points take the colour of their cells; the selected one is framed." TextWrapping="Wrap"

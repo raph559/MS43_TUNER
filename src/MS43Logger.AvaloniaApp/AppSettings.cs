@@ -40,7 +40,7 @@ public sealed class AppSettings
     private static readonly JsonSerializerOptions Json = new()
     {
         WriteIndented = true,
-        Converters = { new LenientEnum<ThemeMode>(), new LenientEnum<ReadoutsMode>(), new LenientEnum<TrailMode>(), new LenientEnum<ItemSort>() },
+        Converters = { new LenientEnum<ThemeMode>(), new LenientEnum<ReadoutsMode>(), new LenientEnum<TrailMode>(), new LenientEnum<ItemSort>(), new LenientEnum<DeltaMode>(), new LenientEnum<EditAxis>() },
     };
 
     public static string DefaultFolder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MS43Tuner");
@@ -101,6 +101,17 @@ public sealed class AppSettings
     public ItemSort RailSort { get; set; } = ItemSort.Name;
 
     public bool RailSortDescending { get; set; }
+
+    /// <summary>The Compare list's width as dragged (null for the default) and whether it is folded to its strip.</summary>
+    public double? CompareRailWidth { get; set; }
+
+    public bool CompareRailCollapsed { get; set; }
+
+    /// <summary>How Compare's B − A reads: in the map's units, in stored counts, or as a percentage of A.</summary>
+    public DeltaMode CompareDeltaMode { get; set; } = DeltaMode.Units;
+
+    /// <summary>Which way Tune's Interpolate and Smooth work on a map: X, Y or both (TunerPro's choice).</summary>
+    public EditAxis EditAxis { get; set; } = EditAxis.XY;
 
     /// <summary>Why the last <see cref="Save"/> failed, or null after a successful one.</summary>
     [JsonIgnore]

@@ -13,6 +13,10 @@
         <Style Selector="Window.compact Border#CompareList">
             <Setter Property="Width" Value="224" />
         </Style>
+        <!-- Collapsed (Ctrl B): a 48 px strip with Show and Search, as the Tune rail; RailSizer sets the width. -->
+        <Style Selector="Border#CompareList.collapsed">
+            <Setter Property="Padding" Value="8,12,8,8" />
+        </Style>
         <Style Selector="Border#ComparePane">
             <Setter Property="Padding" Value="24" />
         </Style>
@@ -195,17 +199,36 @@
         <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding HasB}">
             <!-- The differing items -->
             <Border Name="CompareList" Background="{DynamicResource FrameBrush}" BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="0,0,1,0"
-                    Padding="12,12,8,8">
-                <DockPanel>
+                    Padding="12,12,8,8" Classes.collapsed="{Binding RailCollapsed}">
+                <Panel>
+                <StackPanel Name="CompareStrip" Spacing="8" IsVisible="{Binding RailCollapsed}">
+                    <Button Name="CompareExpandButton" Classes="quiet icon" Click="RailExpand_Click"
+                            ToolTip.Tip="Show the list (Ctrl B)" AutomationProperties.Name="Show the list">
+                        <controls:StrokeIcon Data="{StaticResource Icon.PanelLeft}" />
+                    </Button>
+                    <Button Name="CompareSearchButton" Classes="quiet icon" Click="RailSearch_Click"
+                            ToolTip.Tip="Search items (Ctrl K)" AutomationProperties.Name="Search items">
+                        <controls:StrokeIcon Data="{StaticResource Icon.Search}" />
+                    </Button>
+                </StackPanel>
+                <DockPanel IsVisible="{Binding !RailCollapsed}">
                     <StackPanel DockPanel.Dock="Top" Margin="0,0,4,0">
                         <DockPanel Height="32">
+                            <Button Name="CompareCollapseButton" DockPanel.Dock="Right" Classes="quiet icon" Click="RailCollapse_Click" Margin="8,0,-6,0"
+                                    ToolTip.Tip="Hide the list (Ctrl B)" AutomationProperties.Name="Hide the list">
+                                <controls:StrokeIcon Data="{StaticResource Icon.PanelLeft}" />
+                            </Button>
                             <TextBlock Classes="ab" Text="A" Margin="0,0,8,0" />
                             <TextBlock Name="FileAText" Classes="fname" Text="{Binding FileA}" ToolTip.Tip="{Binding FileA}" />
                         </DockPanel>
                         <DockPanel Height="32">
                             <TextBlock Classes="ab" Text="B" Margin="0,0,8,0" />
-                            <Button Name="ChangeBButton" DockPanel.Dock="Right" Classes="quiet" Content="Change…" Click="OpenB_Click" Margin="8,0,-6,0"
+                            <Button Name="ChangeBButton" DockPanel.Dock="Right" Classes="quiet" Content="Change…" Click="OpenB_Click" Margin="4,0,-6,0"
                                     ToolTip.Tip="Compare with another bin" />
+                            <Button Name="SwapButton" DockPanel.Dock="Right" Classes="quiet icon" Click="Swap_Click" Margin="8,0,0,0"
+                                    ToolTip.Tip="Swap A and B: edit B, compare with A" AutomationProperties.Name="Swap A and B">
+                                <controls:StrokeIcon Name="SwapIcon" Data="{StaticResource Icon.Swap}" />
+                            </Button>
                             <TextBlock Name="FileBText" Classes="fname" Text="{Binding FileB}" ToolTip.Tip="{Binding FileB}" />
                         </DockPanel>
                     </StackPanel>
@@ -269,11 +292,19 @@
                             </DataTemplate>
                             <DataTemplate DataType="local:CompareRow">
                                 <Border Classes="crow" Classes.current="{Binding IsCurrent}">
+                                    <!-- The same hover card as the Tune rail: name, description, facts. -->
+                                    <ToolTip.Tip>
+                                        <StackPanel Spacing="4" MaxWidth="360">
+                                            <TextBlock Classes="id" Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
+                                            <TextBlock Classes="label" Text="{Binding Detail}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </ToolTip.Tip>
                                     <Panel>
                                         <Border Width="2" HorizontalAlignment="Left" Margin="-8,0,0,0" Background="{DynamicResource Ink1Brush}" IsVisible="{Binding IsCurrent}" />
                                         <Grid ColumnDefinitions="16,*,Auto" RowDefinitions="16,16" ColumnSpacing="6">
                                             <controls:ItemGlyph Kind="{Binding Difference.Kind}" Foreground="{DynamicResource Ink2Brush}" VerticalAlignment="Center" />
-                                            <TextBlock Grid.Column="1" Grid.ColumnSpan="2" Classes="crow-id" Text="{Binding Title}" VerticalAlignment="Center" ToolTip.Tip="{Binding Title}" />
+                                            <TextBlock Grid.Column="1" Grid.ColumnSpan="2" Classes="crow-id" Text="{Binding Title}" VerticalAlignment="Center" />
                                             <controls:NumberText Grid.Row="1" Grid.Column="1" Classes="crow-sum" Value="{Binding Summary}" VerticalAlignment="Center" />
                                             <TextBlock Grid.Row="1" Grid.Column="2" Classes="crow-unit" Text="{Binding Units}" VerticalAlignment="Center" />
                                         </Grid>
@@ -291,6 +322,12 @@
                         </ListBox.DataTemplates>
                     </ListBox>
                 </DockPanel>
+                </Panel>
+            </Border>
+            <Border Name="CompareResizeHandle" Classes="railhandle" Grid.Column="0" HorizontalAlignment="Right" ZIndex="1"
+                    IsVisible="{Binding !RailCollapsed}"
+                    AutomationProperties.Name="Resize the list" ToolTip.Tip="Drag to resize. Double-click for the default width.">
+                <Border Width="2" HorizontalAlignment="Center" />
             </Border>
 
             <!-- The selected difference -->
@@ -319,6 +356,23 @@
                                 <ToggleButton Name="ViewDelta" Classes="seg" Content="B − A" IsChecked="{Binding IsDeltaView}" />
                                 <ToggleButton Name="ViewA" Classes="seg" Content="A" IsChecked="{Binding IsAView}" />
                                 <ToggleButton Name="ViewB" Classes="seg" Content="B" IsChecked="{Binding IsBView}" />
+                            </StackPanel>
+                        </Border>
+                        <!-- How B − A reads, as TunerPro's compare offers: in units, in stored counts, or as a percentage of A. -->
+                        <Border Classes="seg" AutomationProperties.Name="Difference as">
+                            <Border.IsVisible>
+                                <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                    <Binding Path="ShowsTable" />
+                                    <Binding Path="IsDeltaView" />
+                                </MultiBinding>
+                            </Border.IsVisible>
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <ToggleButton Name="DeltaUnits" Classes="seg" Content="Units" IsChecked="{Binding IsDeltaUnits}"
+                                              ToolTip.Tip="B − A in the map's units" />
+                                <ToggleButton Name="DeltaRaw" Classes="seg" Content="Raw" IsChecked="{Binding IsDeltaRaw}"
+                                              ToolTip.Tip="B − A in stored counts" />
+                                <ToggleButton Name="DeltaPercent" Classes="seg" Content="%" IsChecked="{Binding IsDeltaPercent}"
+                                              ToolTip.Tip="B − A as a percentage of A" AutomationProperties.Name="Percent of A" />
                             </StackPanel>
                         </Border>
                         <Button Name="CopyFromB" Content="Copy B into A" Click="Copy_Click" ToolTip.Tip="Write B's value of this item into A. Undo with Ctrl Z." />

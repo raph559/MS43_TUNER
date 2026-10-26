@@ -3,6 +3,7 @@ using Avalonia.Headless;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
+using Avalonia.LogicalTree;
 using Avalonia.VisualTree;
 using MS43Logger.AvaloniaApp.Views;
 using MS43Logger.Core.Tuning;
@@ -40,6 +41,90 @@ public sealed class CompareTests : IDisposable
 
     private static IEnumerable<string> Rows(CompareViewModel compare) =>
         compare.Entries.OfType<CompareRow>().Select(row => row.Difference.Item.Title);
+
+    // As on the Tune rail: hovering a differing item shows its name, description and facts.
+    [AvaloniaFact]
+    public async Task HoveringADifferingItemShowsItsDescription()
+    {
+        if (!Available)
+        {
+            return;
+        }
+
+        var (window, _, compare) = await Open();
+        var entry = compare.Entries.OfType<CompareRow>().Single(row => row.Title == "ip_iga_ron98_pl__n__maf");
+        Assert.Equal("Target ignition angle for RON98 during part and full load", entry.Description);
+        Assert.Equal("Map, 20 × 16, °CRK, at 0x77315", entry.Detail);
+
+        Find.Named<ListBox>(window, "DiffList").ScrollIntoView(entry);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        var row = window.GetVisualDescendants().OfType<Border>().First(border => border.Classes.Contains("crow") && border.DataContext is CompareRow { Title: "ip_iga_ron98_pl__n__maf" });
+        ToolTip.SetIsOpen(row, true);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        var texts = ((Control)ToolTip.GetTip(row)!).GetLogicalDescendants().OfType<TextBlock>().Select(block => block.Text).ToList();
+
+        Assert.Contains("ip_iga_ron98_pl__n__maf", texts);
+        Assert.Contains(entry.Description, texts);
+        Assert.Contains(entry.Detail, texts);
+    }
+
+    [AvaloniaFact]
+    public async Task TheDifferenceReadsInUnitsCountsOrPercent()
+    {
+        if (!Available)
+        {
+            return;
+        }
+
+        var (window, _, compare) = await Open();
+        compare.Selected = Item(compare, "ip_iga_ron98_pl__n__maf");
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        var grid = Find.Named<Controls.MapGrid>(window, "CompareGrid");
+        Assert.Equal(DeltaMode.Units, compare.DeltaMode);
+        Assert.Equal("B − A: -21.0 to +61.1 °CRK, 293 of 320 cells differ", compare.ScaleCaption);
+        Assert.True(Find.Named<ToggleButton>(window, "DeltaRaw").IsEffectivelyVisible);
+
+        compare.DeltaMode = DeltaMode.Raw;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        var raw = compare.Grid!.Values.Raw;
+        var (row, col) = Changed(compare);
+        Assert.Equal((double)raw[row, col], compare.Grid.Values.Physical[row, col]);
+        Assert.Equal((raw[row, col] > 0 ? "+" : "-") + Math.Abs(raw[row, col]), grid.CellText(row, col));
+        Assert.StartsWith("B − A in counts: ", compare.ScaleCaption);
+        Assert.StartsWith("largest change ", compare.LargestText);
+        Assert.DoesNotContain("°CRK", compare.LargestText);
+
+        compare.DeltaMode = DeltaMode.Percent;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.EndsWith(" %", grid.CellText(row, col));
+        Assert.StartsWith("B − A as % of A: ", compare.ScaleCaption);
+        Assert.EndsWith(" %", compare.LargestText);
+        Assert.Equal(DeltaMode.Percent, compare.Settings.CompareDeltaMode);
+        Screens.Save(window, "compare-percent");
+
+        // The choice is about B − A only: on A or B it steps aside.
+        compare.View = "a";
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.False(Find.Named<ToggleButton>(window, "DeltaRaw").IsEffectivelyVisible);
+    }
+
+    private static (int Row, int Col) Changed(CompareViewModel compare)
+    {
+        var values = compare.Grid!.Values;
+        for (var r = 0; r < values.Rows; r++)
+        {
+            for (var c = 0; c < values.Cols; c++)
+            {
+                if (values.Raw[r, c] != 0)
+                {
+                    return (r, c);
+                }
+            }
+        }
+
+        throw new InvalidOperationException("no cell differs");
+    }
 
     [AvaloniaFact]
     public async Task CompareSearchLooksEverywhereLikeTheRail()

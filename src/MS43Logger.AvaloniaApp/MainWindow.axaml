@@ -11,6 +11,7 @@
         x:Class="MS43Logger.AvaloniaApp.MainWindow"
         x:DataType="local:ShellViewModel"
         Title="MS43 Tuner"
+        Icon="avares://MS43Logger.AvaloniaApp/Assets/ms43-tuner.ico"
         Width="1440" Height="900"
         MinWidth="1024" MinHeight="680"
         ExtendClientAreaToDecorationsHint="True" ExtendClientAreaChromeHints="NoChrome" ExtendClientAreaTitleBarHeightHint="-1">
@@ -67,7 +68,7 @@
     </Window.Styles>
 
     <!-- A maximized window without the system frame reaches past the screen edge by the frame's width; the margin pulls it back. -->
-    <Grid RowDefinitions="48,*,28" Margin="{Binding $parent[Window].OffScreenMargin}">
+    <Grid Name="RootGrid" RowDefinitions="48,*,28" Margin="{Binding $parent[Window].OffScreenMargin}">
         <!-- Header (system 5.1). It is also the window's title bar: drag it to move, double-click it to maximize or restore.
              The right padding leaves room for the window buttons, which sit above the dialog layer at the end of this grid. -->
         <Border Name="TitleBar" Grid.Row="0" Background="{DynamicResource FrameBrush}" BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="0,0,0,1"
@@ -249,8 +250,15 @@
                 </StackPanel>
                 <Border Grid.Column="3" Classes="seg small" AutomationProperties.Name="Theme" VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal" Spacing="2">
-                        <ToggleButton Name="NightButton" Classes="seg small" Content="Night" IsChecked="{Binding IsNight}" />
-                        <ToggleButton Name="DayButton" Classes="seg small" Content="Day" IsChecked="{Binding IsDay}" />
+                        <!-- A moon and a sun: the words are the tooltips and what a screen reader says. -->
+                        <ToggleButton Name="NightButton" Classes="seg small" IsChecked="{Binding IsNight}" Padding="8,0"
+                                      ToolTip.Tip="Night" AutomationProperties.Name="Night">
+                            <controls:StrokeIcon Data="{StaticResource Icon.Moon}" Width="14" Height="14" />
+                        </ToggleButton>
+                        <ToggleButton Name="DayButton" Classes="seg small" IsChecked="{Binding IsDay}" Padding="8,0"
+                                      ToolTip.Tip="Day" AutomationProperties.Name="Day">
+                            <controls:StrokeIcon Data="{StaticResource Icon.Sun}" Width="14" Height="14" />
+                        </ToggleButton>
                     </StackPanel>
                 </Border>
             </Grid>
@@ -258,6 +266,9 @@
 
         <!-- Last, so a dialog and its scrim cover the header, the screens and the status bar. -->
         <shell:DialogHost Name="Dialogs" Grid.RowSpan="3" />
+
+        <!-- The theme cross-fade (system 10.3): a picture of the old theme over the new one, fading out. Above everything, never hit. -->
+        <Image Name="ThemeFade" Grid.RowSpan="3" Stretch="Fill" IsVisible="False" IsHitTestVisible="False" ZIndex="100" />
 
         <!-- Window buttons, after the dialog layer so the window can still be minimized or closed while a dialog is open. -->
         <StackPanel Name="WindowButtons" Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Height="47">

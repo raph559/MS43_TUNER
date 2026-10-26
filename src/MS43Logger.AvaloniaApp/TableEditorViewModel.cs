@@ -35,6 +35,7 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
     private TableValues _values;
     private CellRange? _selection;
     private bool _showRaw;
+    private EditAxis _axis = EditAxis.XY;
     private string? _message;
     private LiveCursorState? _live;
     private (int Row, int Col) _active;
@@ -53,8 +54,9 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
         _document.Changed += OnDocumentChanged;
     }
 
-    private TableEditorViewModel(TableValues values, IReadOnlySet<(int Row, int Col)> marked, bool isDelta, CellMark mark)
+    private TableEditorViewModel(TableValues values, IReadOnlySet<(int Row, int Col)> marked, bool isDelta, CellMark mark, DeltaMode deltaMode)
     {
+        DeltaMode = deltaMode;
         Table = values.Table;
         _values = values;
         _colourRange = MapColourRange.Compute(values);
@@ -64,8 +66,17 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>A read-only grid of fixed values (a comparison's A, B or B − A); <paramref name="marked"/> get the changed-cell dot.</summary>
-    public static TableEditorViewModel Snapshot(TableValues values, IReadOnlySet<(int Row, int Col)> marked, bool isDelta = false, CellMark mark = CellMark.Changed) =>
-        new(values ?? throw new ArgumentNullException(nameof(values)), marked ?? throw new ArgumentNullException(nameof(marked)), isDelta, mark);
+    public static TableEditorViewModel Snapshot(TableValues values, IReadOnlySet<(int Row, int Col)> marked, bool isDelta = false, CellMark mark = CellMark.Changed,
+        DeltaMode deltaMode = DeltaMode.Units) =>
+        new(values ?? throw new ArgumentNullException(nameof(values)), marked ?? throw new ArgumentNullException(nameof(marked)), isDelta, mark, deltaMode);
+
+    /// <summary>How a B − A grid's cells read (its values are already in that measure): units, counts or percent.</summary>
+    public DeltaMode DeltaMode { get; }
+
+    /// <summary>Cells that differ from the compare bin B, ringed in their top-left corner on Tune's A view.</summary>
+    public IReadOnlySet<(int Row, int Col)> DiffersCells { get => _differsCells; set => SetField(ref _differsCells, value ?? new HashSet<(int Row, int Col)>()); }
+
+    private IReadOnlySet<(int Row, int Col)> _differsCells = new HashSet<(int Row, int Col)>();
 
     /// <summary>What the marked cells wear: the changed triangle, or the differs ring on Compare's A and B (system 2.4).</summary>
     public CellMark Mark { get; } = CellMark.Changed;
@@ -222,12 +233,52 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
         var count => $"{count} cells changed since the last save",
     };
 
-    /// <summary>Interpolate fills between the corners of a range, so it needs more than one cell.</summary>
-    public bool CanInterpolate => !IsReadOnly && Selection is CellRange range && (range.Rows > 1 || range.Cols > 1);
+    /// <summary>Which way Interpolate and Smooth work on a map (X, Y or both); a curve always works along itself.</summary>
+    public EditAxis Axis
+    {
+        get => _axis;
+        set
+        {
+            if (SetField(ref _axis, value))
+            {
+                OnPropertyChanged(nameof(ToolAxis));
+                OnPropertyChanged(nameof(CanInterpolate));
+                OnPropertyChanged(nameof(InterpolateTip));
+                OnPropertyChanged(nameof(SmoothTip));
+            }
+        }
+    }
 
-    public string InterpolateTip => CanInterpolate
-        ? "Fill between the corners of the selection"
-        : "Select a range first: Interpolate fills between its corners.";
+    /// <summary>A map has rows and columns; a curve or an axis is one line, where X, Y and XY mean the same.</summary>
+    public bool IsMap => Values.Rows > 1 && Values.Cols > 1;
+
+    /// <summary>The direction the tools use: <see cref="Axis"/> on a map, XY (along the line) on a curve.</summary>
+    public EditAxis ToolAxis => IsMap ? Axis : EditAxis.XY;
+
+    /// <summary>Interpolate fills between the ends of a range, so it needs two cells or more in the chosen direction.</summary>
+    public bool CanInterpolate => !IsReadOnly && Selection is CellRange range && ToolAxis switch
+    {
+        EditAxis.X => range.Cols > 1,
+        EditAxis.Y => range.Rows > 1,
+        _ => range.Rows > 1 || range.Cols > 1,
+    };
+
+    public string InterpolateTip => (ToolAxis, CanInterpolate) switch
+    {
+        (EditAxis.X, true) => "Fill each row between its first and last cell",
+        (EditAxis.X, false) => "Select more than one column: Interpolate X fills each row between its first and last cell.",
+        (EditAxis.Y, true) => "Fill each column between its top and bottom cell",
+        (EditAxis.Y, false) => "Select more than one row: Interpolate Y fills each column between its top and bottom cell.",
+        (_, true) => "Fill between the corners of the selection",
+        _ => "Select a range first: Interpolate fills between its corners.",
+    };
+
+    public string SmoothTip => ToolAxis switch
+    {
+        EditAxis.X => "Average each cell with the cells left and right of it",
+        EditAxis.Y => "Average each cell with the cells above and below it",
+        _ => "Average each cell with its neighbours",
+    };
 
     /// <summary>Where a cell sits on the table's axes: "4000 rpm × 165.0 mg/stk", "Breakpoint 3" on an axis; empty for a single value.</summary>
     public string Position(int row, int col)
@@ -247,6 +298,87 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>A cell's value as the grid writes it, then its raw value: "33.4 °CRK, raw 152 (0x98)".</summary>
+    /// <summary>A value as this map's cells print it ("27.4"), without units.</summary>
+    public string CellTextOf(double physical)
+    {
+        var z = Table.Z;
+        return ValueCodec.Format(physical, (long)Math.Round(physical), z.DecimalPlaces, z.OutputType, z.Data.ElementBits);
+    }
+
+    /// <summary>For a selection of several cells, the range of their values: "values 21.0 to 30.0 °CRK"; null for one cell.</summary>
+    public string? SelectionValuesText
+    {
+        get
+        {
+            if (Selection is not CellRange range || range.Rows * range.Cols < 2)
+            {
+                return null;
+            }
+
+            var values = new List<double>();
+            for (var r = range.Row0; r <= range.Row1; r++)
+            {
+                for (var c = range.Col0; c <= range.Col1; c++)
+                {
+                    if (double.IsFinite(Values.Physical[r, c]))
+                    {
+                        values.Add(Values.Physical[r, c]);
+                    }
+                }
+            }
+
+            return values.Count == 0 ? null : WithUnits($"values {CellTextOf(values.Min())} to {CellTextOf(values.Max())}", Units);
+        }
+    }
+
+    /// <summary>
+    /// What stepping the selection by <paramref name="steps"/> would do, before it is done (the surface's Ctrl-drag):
+    /// "+5 steps: +1.9 °CRK, 19.5 → 21.4 °CRK", or for several cells how much they move and the range they end in.
+    /// </summary>
+    public string? PreviewStep(int steps)
+    {
+        if (_document is not { } document || Selection is not CellRange range || steps == 0)
+        {
+            return null;
+        }
+
+        var count = $"{(steps > 0 ? "+" : "")}{steps} {(Math.Abs(steps) == 1 ? "step" : "steps")}";
+        EditPlan plan;
+        try
+        {
+            plan = TableEdits.Step(document, Table, range, steps);
+        }
+        catch (EditRefusedException error)
+        {
+            return $"{count}: {error.Message}";
+        }
+
+        if (plan.Changes.Count == 0)
+        {
+            return $"{count}: no change, the cells are at their limit";
+        }
+
+        var z = Table.Z;
+        var codec = document.Reader.Codec;
+        var moves = plan.Changes.Select(change =>
+        {
+            var before = Values.Physical[change.Row, change.Col];
+            var after = codec.ToPhysical(z.Math, change.NewRaw);
+            return (Before: before, After: after, Delta: after - before, Raw: change.NewRaw - change.OldRaw);
+        }).ToList();
+        string Delta((double Before, double After, double Delta, long Raw) move) => BinComparer.FormatDelta(move.Delta, move.Raw, z, DeltaMode.Units);
+        if (moves.Count == 1)
+        {
+            var move = moves[0];
+            return $"{count}: {WithUnits(Delta(move), Units)}, {CellTextOf(move.Before)} → {WithUnits(CellTextOf(move.After), Units)}";
+        }
+
+        var least = moves.MinBy(move => move.Delta);
+        var most = moves.MaxBy(move => move.Delta);
+        var by = Delta(least) == Delta(most) ? Delta(least) : $"{Delta(least)} to {Delta(most)}";
+        return $"{count}: {WithUnits(by, Units)} on {moves.Count} cells, ending {CellTextOf(moves.Min(move => move.After))} to {WithUnits(CellTextOf(moves.Max(move => move.After)), Units)}";
+    }
+
     public string CellText(int row, int col)
     {
         var z = Table.Z;
@@ -289,8 +421,8 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
                 EditKind.Set => TableEdits.Set(document, Table, range, request.Value),
                 EditKind.Add => TableEdits.Add(document, Table, range, request.Value),
                 EditKind.Scale => TableEdits.Scale(document, Table, range, request.Value),
-                EditKind.Interpolate => TableEdits.Interpolate(document, Table, range),
-                EditKind.Smooth => TableEdits.Smooth(document, Table, range),
+                EditKind.Interpolate => TableEdits.Interpolate(document, Table, range, ToolAxis),
+                EditKind.Smooth => TableEdits.Smooth(document, Table, range, ToolAxis),
                 EditKind.Step => TableEdits.Step(document, Table, range, (int)request.Value),
                 EditKind.Paste => TableEdits.Paste(document, Table, range.Row0, range.Col0, TableClipboard.Parse(request.Text ?? string.Empty)),
                 _ => throw new ArgumentOutOfRangeException(nameof(request)),
@@ -360,7 +492,8 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
             EditKind.Set => $"Set {cells} to {value} {Units}".TrimEnd(),
             EditKind.Add => $"Add {value} {Units} to {cells}",
             EditKind.Scale => $"Scale {cells} by {value} %",
-            EditKind.Step => $"Step {cells} by {value} raw",
+            EditKind.Step => $"Step {cells} {(request.Value > 0 ? "up" : "down")}",
+            EditKind.Interpolate or EditKind.Smooth when ToolAxis != EditAxis.XY => $"{request.Kind} {cells} along {ToolAxis}",
             _ => $"{request.Kind} {cells}",
         };
     }

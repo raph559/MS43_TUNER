@@ -21,9 +21,10 @@ public partial class SurfaceDialog : UserControl
     /// <param name="title">The map's id, under the dialog title.</param>
     /// <param name="from">The inspector's plot: the large one opens on its turn, zoom and position.</param>
     /// <param name="window">The window's client size; the plot takes most of it.</param>
-    public SurfaceDialog(TableEditorViewModel editor, string title, Surface3D from, Size window)
+    public SurfaceDialog(TuneViewModel tune, TableEditorViewModel editor, string title, Surface3D from, Size window)
         : this()
     {
+        DataContext = tune;
         ArgumentNullException.ThrowIfNull(from);
         MapTitle.Text = title;
         Width = Math.Clamp(window.Width - 160, 640, 1280);
@@ -38,6 +39,10 @@ public partial class SurfaceDialog : UserControl
     private void ZoomOut_Click(object? sender, RoutedEventArgs e) => LargeSurface.ZoomBy(1 / ZoomStep);
 
     private void Reset_Click(object? sender, RoutedEventArgs e) => LargeSurface.ResetView();
+
+    private void Undo_Click(object? sender, RoutedEventArgs e) => (DataContext as TuneViewModel)?.Undo();
+
+    private void Redo_Click(object? sender, RoutedEventArgs e) => (DataContext as TuneViewModel)?.Redo();
 
     private void Close_Click(object? sender, RoutedEventArgs e) => DialogHost.CloseFrom(this);
 }

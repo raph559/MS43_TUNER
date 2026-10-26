@@ -147,6 +147,59 @@ public class BinComparerTests
         Assert.Equal(7.0, table.B.Physical[0, 1]);
     }
 
+    // The difference can be read three ways, as in TunerPro's compare: in the map's units, in stored counts, or as a
+    // percentage of A.
+    [Fact]
+    public void DifferencesInUnitsRawCountsOrPercentOfA()
+    {
+        var xdf = Synthetic();
+        var a = Base();
+        var b = With(a, (0x70101, 14), (0x70105, 10));
+        var table = BinComparer.CompareTable(xdf, a, b, (XdfTable)Assert.Single(BinComparer.Compare(xdf, a, b).Items).Item);
+
+        Assert.Same(table.Delta, BinComparer.Difference(table, DeltaMode.Units));
+
+        var raw = BinComparer.Difference(table, DeltaMode.Raw);
+        Assert.Equal(4.0, raw.Physical[0, 1]);
+        Assert.Equal(0.0, raw.Physical[0, 0]);
+
+        // Cell (0, 1): A 5.0, B 7.0, so +40 %.
+        var percent = BinComparer.Difference(table, DeltaMode.Percent);
+        Assert.Equal(40.0, percent.Physical[0, 1], 9);
+        Assert.Equal(0.0, percent.Physical[0, 0]);
+
+        var z = table.A.Table.Z;
+        Assert.Equal("+2.00", BinComparer.FormatDelta(2.0, 4, z, DeltaMode.Units));
+        Assert.Equal("+4", BinComparer.FormatDelta(4.0, 4, z, DeltaMode.Raw));
+        Assert.Equal("+40.0 %", BinComparer.FormatDelta(40.0, 4, z, DeltaMode.Percent));
+        Assert.Equal("-12.5 %", BinComparer.FormatDelta(-12.5, -1, z, DeltaMode.Percent));
+        Assert.Equal("n/a", BinComparer.FormatDelta(double.NaN, 3, z, DeltaMode.Percent));
+    }
+
+    [Fact]
+    public void PercentOfAZeroIsUndefinedUnlessBIsZeroToo()
+    {
+        Assert.Equal(0.0, BinComparer.PercentOf(0, 0));
+        Assert.True(double.IsNaN(BinComparer.PercentOf(0, 3)));
+        Assert.Equal(-50.0, BinComparer.PercentOf(-4, -6));
+    }
+
+    // Tune's Copy from B: only the selected cells take B's raw values.
+    [Fact]
+    public void CopyingSelectedCellsFromBLeavesTheRest()
+    {
+        var xdf = Synthetic();
+        var a = Base();
+        var b = With(a, (0x70101, 14), (0x70105, 10));
+        var document = CalibrationDocument.FromParts(xdf, a, null);
+        var table = (XdfTable)xdf.FindByTitle("fuel_map")!;
+
+        var plan = TableEdits.CopyFrom(document, table, new CellRange(0, 0, 0, 1), b);
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Equal((0, 1, 14L), (change.Row, change.Col, change.NewRaw));
+    }
+
     [Fact]
     public void ValuesAndSwitchesShowAToB()
     {

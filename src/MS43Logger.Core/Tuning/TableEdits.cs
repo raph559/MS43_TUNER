@@ -28,6 +28,17 @@ public readonly record struct CellRange
     public bool Contains(int row, int col) => row >= Row0 && row <= Row1 && col >= Col0 && col <= Col1;
 }
 
+/// <summary>
+/// Which way Interpolate and Smooth work, as in TunerPro: X along each row (across the columns), Y along each column (across
+/// the rows), XY both at once.
+/// </summary>
+public enum EditAxis
+{
+    XY,
+    X,
+    Y,
+}
+
 public sealed record CellChange(int Row, int Col, long OldRaw, long NewRaw);
 
 /// <summary>Raw changes for one item, computed but not yet applied.</summary>
@@ -49,28 +60,48 @@ public static class TableEdits
     public static EditPlan Scale(CalibrationDocument d, XdfTable t, CellRange r, double percent) =>
         Map(d, t, r, (v, _, _) => v * (1 + percent / 100));
 
-    public static EditPlan Interpolate(CalibrationDocument d, XdfTable t, CellRange r)
+    /// <summary>
+    /// Fills the selection linearly by cell position, keeping its ends: XY blends the four corners; X fills each row between
+    /// its first and last cell; Y fills each column between its top and bottom cell.
+    /// </summary>
+    public static EditPlan Interpolate(CalibrationDocument d, XdfTable t, CellRange r, EditAxis axis = EditAxis.XY)
     {
         var values = Read(d, t);
         double P(int row, int col) => values.Physical[row, col];
-        return Map(d, t, r, (_, row, col) =>
+        double U(int col) => r.Cols > 1 ? (double)(col - r.Col0) / (r.Cols - 1) : 0;
+        double W(int row) => r.Rows > 1 ? (double)(row - r.Row0) / (r.Rows - 1) : 0;
+        return axis switch
         {
-            var u = r.Cols > 1 ? (double)(col - r.Col0) / (r.Cols - 1) : 0;
-            var w = r.Rows > 1 ? (double)(row - r.Row0) / (r.Rows - 1) : 0;
-            return (P(r.Row0, r.Col0) * (1 - u) + P(r.Row0, r.Col1) * u) * (1 - w) + (P(r.Row1, r.Col0) * (1 - u) + P(r.Row1, r.Col1) * u) * w;
-        }, keepCorners: true);
+            EditAxis.X => Map(d, t, r, (_, row, col) => P(row, r.Col0) * (1 - U(col)) + P(row, r.Col1) * U(col),
+                keep: (_, col) => col == r.Col0 || col == r.Col1),
+            EditAxis.Y => Map(d, t, r, (_, row, col) => P(r.Row0, col) * (1 - W(row)) + P(r.Row1, col) * W(row),
+                keep: (row, _) => row == r.Row0 || row == r.Row1),
+            _ => Map(d, t, r, (_, row, col) =>
+                {
+                    var u = U(col);
+                    var w = W(row);
+                    return (P(r.Row0, r.Col0) * (1 - u) + P(r.Row0, r.Col1) * u) * (1 - w) + (P(r.Row1, r.Col0) * (1 - u) + P(r.Row1, r.Col1) * u) * w;
+                },
+                keep: (row, col) => (row == r.Row0 || row == r.Row1) && (col == r.Col0 || col == r.Col1)),
+        };
     }
 
-    public static EditPlan Smooth(CalibrationDocument d, XdfTable t, CellRange r)
+    /// <summary>
+    /// Averages each selected cell with its neighbours as they were before the edit (cells outside the selection count too):
+    /// XY the 3 × 3 block, X the cells left and right, Y the cells above and below.
+    /// </summary>
+    public static EditPlan Smooth(CalibrationDocument d, XdfTable t, CellRange r, EditAxis axis = EditAxis.XY)
     {
         var values = Read(d, t);
+        var rows = axis == EditAxis.X ? 0 : 1;
+        var cols = axis == EditAxis.Y ? 0 : 1;
         return Map(d, t, r, (_, row, col) =>
         {
             double sum = 0;
             var count = 0;
-            for (var i = row - 1; i <= row + 1; i++)
+            for (var i = row - rows; i <= row + rows; i++)
             {
-                for (var j = col - 1; j <= col + 1; j++)
+                for (var j = col - cols; j <= col + cols; j++)
                 {
                     if (i >= 0 && i < values.Rows && j >= 0 && j < values.Cols && double.IsFinite(values.Physical[i, j]))
                     {
@@ -102,10 +133,18 @@ public static class TableEdits
         var values = Read(d, t);
         var (min, max) = RawRange(t.Z.Data);
         var changes = new List<CellChange>();
+        var codec = d.Reader.Codec;
+
+        // A step moves the value as it is shown: + raises it. Where the equation falls as the raw count rises (the AFR
+        // target's (1 - (k X - 0.5)) Y), that is a step down in raw.
+        bool Rises(long raw) => raw < max
+            ? codec.ToPhysical(t.Z.Math, raw + 1) >= codec.ToPhysical(t.Z.Math, raw)
+            : codec.ToPhysical(t.Z.Math, raw - 1) <= codec.ToPhysical(t.Z.Math, raw);
+
         ForEach(values, r, (row, col) =>
         {
             var old = values.Raw[row, col];
-            var raw = Math.Clamp(old + rawSteps, min, max);
+            var raw = Math.Clamp(old + (Rises(old) ? rawSteps : -rawSteps), min, max);
             if (raw != old)
             {
                 changes.Add(new CellChange(row, col, old, raw));
@@ -157,6 +196,34 @@ public static class TableEdits
     /// Writes <paramref name="source"/>'s raw values for <paramref name="item"/> into the document: every differing cell of a
     /// table (an axis copy that would make the axis go down is refused), a value, or a flag's own bit.
     /// </summary>
+    /// <summary>Writes <paramref name="source"/>'s raw values into the cells of <paramref name="range"/> only (Tune's Copy from B).</summary>
+    public static EditPlan CopyFrom(CalibrationDocument d, XdfTable table, CellRange range, BinImage source)
+    {
+        ArgumentNullException.ThrowIfNull(d);
+        ArgumentNullException.ThrowIfNull(table);
+        ArgumentNullException.ThrowIfNull(source);
+        var values = Read(d, table);
+        var changes = new List<CellChange>();
+        ForEach(values, range, (row, col) =>
+        {
+            var raw = source.ReadElement(table.Z.Data, row * values.Cols + col);
+            if (raw != values.Raw[row, col])
+            {
+                changes.Add(new CellChange(row, col, values.Raw[row, col], raw));
+            }
+        });
+        var plan = Finish(d, table, values, changes);
+        if (changes.Count == 0)
+        {
+            return plan;
+        }
+
+        // Cells copied onto other breakpoints mean something else: say so.
+        var moved = BinComparer.CompareTable(d.Xdf, d.Image, source, table).Axes
+            .Select(axis => $"'{table.Title}': its {axis.Direction} axis{(axis.A.Name is { } name ? $" ({name})" : string.Empty)} still differs from the source, so the copied cells now sit on A's breakpoints.");
+        return plan with { Warnings = plan.Warnings.Concat(moved).ToList() };
+    }
+
     public static EditPlan CopyFrom(CalibrationDocument d, XdfItem item, BinImage source)
     {
         ArgumentNullException.ThrowIfNull(d);
@@ -165,26 +232,8 @@ public static class TableEdits
         switch (item)
         {
             case XdfTable table:
-                var values = Read(d, table);
-                var changes = new List<CellChange>();
-                ForEach(values, new CellRange(0, 0, values.Rows - 1, values.Cols - 1), (row, col) =>
-                {
-                    var raw = source.ReadElement(table.Z.Data, row * values.Cols + col);
-                    if (raw != values.Raw[row, col])
-                    {
-                        changes.Add(new CellChange(row, col, values.Raw[row, col], raw));
-                    }
-                });
-                var plan = Finish(d, table, values, changes);
-                if (changes.Count == 0)
-                {
-                    return plan;
-                }
-
-                // Cells copied onto other breakpoints mean something else: say so.
-                var moved = BinComparer.CompareTable(d.Xdf, d.Image, source, table).Axes
-                    .Select(axis => $"'{table.Title}': its {axis.Direction} axis{(axis.A.Name is { } name ? $" ({name})" : string.Empty)} still differs from the source, so the copied cells now sit on A's breakpoints.");
-                return plan with { Warnings = plan.Warnings.Concat(moved).ToList() };
+                var size = Read(d, table);
+                return CopyFrom(d, table, new CellRange(0, 0, size.Rows - 1, size.Cols - 1), source);
             case XdfConstant constant:
                 EnsureEditable(constant.Title, constant.Data);
                 return SetConstantRaw(d, constant, source.ReadElement(constant.Data, 0));
@@ -207,7 +256,7 @@ public static class TableEdits
                table.CategoryIds.Any(id => xdf.Categories.TryGetValue(id, out var name) && name == "Axis");
     }
 
-    private static EditPlan Map(CalibrationDocument d, XdfTable t, CellRange r, Func<double, int, int, double> target, bool keepCorners = false)
+    private static EditPlan Map(CalibrationDocument d, XdfTable t, CellRange r, Func<double, int, int, double> target, Func<int, int, bool>? keep = null)
     {
         var values = Read(d, t);
         if (r.Row0 < 0 || r.Col0 < 0 || r.Row1 >= values.Rows || r.Col1 >= values.Cols)
@@ -219,7 +268,7 @@ public static class TableEdits
         var limits = new List<string>();
         ForEach(values, r, (row, col) =>
         {
-            if (keepCorners && (row == r.Row0 || row == r.Row1) && (col == r.Col0 || col == r.Col1))
+            if (keep?.Invoke(row, col) == true)
             {
                 return;
             }

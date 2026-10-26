@@ -101,4 +101,62 @@ public class ShellTests
             Assert.Equal("Segoe UI", Family("UiFont"));
         }
     }
+
+    // The theme switch shows a moon and a sun; the words stay as tooltips and accessible names.
+    [AvaloniaFact]
+    public void TheThemeSwitchIsAMoonAndASun()
+    {
+        var (window, _) = Show();
+        foreach (var (name, icon, label) in new[] { ("NightButton", "Icon.Moon", "Night"), ("DayButton", "Icon.Sun", "Day") })
+        {
+            var button = window.FindControl<ToggleButton>(name)!;
+            var glyph = Assert.IsType<MS43Logger.AvaloniaApp.Controls.StrokeIcon>(button.Content);
+            Assert.Same(window.FindResource(icon), glyph.Data);
+            Assert.Equal(label, ToolTip.GetTip(button));
+            Assert.Equal(label, Avalonia.Automation.AutomationProperties.GetName(button));
+        }
+
+        Screens.Save(window, "theme-switch");
+    }
+
+    // Switching Night and Day cross-fades: a picture of the old theme lies over the new one and fades out.
+    [AvaloniaFact]
+    public void SwitchingTheThemeCrossFades()
+    {
+        var animations = MotionSettings.AnimationsEnabled;
+        MotionSettings.AnimationsEnabled = true;
+        try
+        {
+            var (window, shell) = Show();
+            var fade = window.FindControl<Image>("ThemeFade")!;
+            Assert.False(fade.IsVisible);
+
+            shell.IsDay = true;
+            Assert.True(fade.IsVisible);
+            Assert.NotNull(fade.Source);
+
+            for (var i = 0; i < 40; i++)
+            {
+                Thread.Sleep(10);
+                Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            }
+
+            Assert.False(fade.IsVisible);
+            Assert.Null(fade.Source);
+        }
+        finally
+        {
+            MotionSettings.AnimationsEnabled = animations;
+        }
+    }
+
+    [AvaloniaFact]
+    public void WithAnimationsOffTheThemeJustSwitches()
+    {
+        var (window, shell) = Show();
+        shell.IsDay = true;
+
+        Assert.False(window.FindControl<Image>("ThemeFade")!.IsVisible);
+    }
 }
