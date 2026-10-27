@@ -37,7 +37,7 @@ public enum OverlayReason : byte
 /// <summary>One map's state, place in the copy area, and CRC-32 of its last verified complete content.</summary>
 public sealed record OverlayEntry(OverlayState State, int Offset, uint ContentCrc32, int DirectorySlot = -1);
 
-/// <summary>The status reply's fields: the version, whether the engine runs, the richer-only rule, the five entries, the free bytes.</summary>
+/// <summary>The status reply's fields: the version, whether the engine runs, the richer-only rule, the entries, the free bytes.</summary>
 public sealed record OverlayStatus(int Version, bool Running, bool RicherOnly, IReadOnlyList<OverlayEntry> Tables, int FreeBytes,
     uint Session = 0, uint Revision = 0, LimiterSettings? Limiter = null);
 
@@ -50,8 +50,8 @@ public sealed record OverlayScalar(string Key, string Label, int Offset, Overlay
 public sealed record OverlayScalarGroup(string Title, IReadOnlyList<OverlayScalar> Fields, string? Note = null);
 
 /// <summary>
-/// A live map: its index in the overlay, its key, its group on the page, its address in the flash and its size. A reserved
-/// entry (V10.3's group 139) keeps its place in the catalogue so the IDs after it hold; the app never shows or sends it.
+/// A live map's index, key, group, flash address and size. Reserved entry 139 preserves catalogue IDs;
+/// the app never shows or sends it.
 /// </summary>
 public sealed record OverlayMap(int Index, string Key, string Group, int Address, int Bytes, bool RicherOnly,
     OverlayScalarGroup? ScalarGroup = null, int ElementBits = 8, bool Reserved = false)
@@ -61,9 +61,8 @@ public sealed record OverlayMap(int Index, string Key, string Group, int Address
 }
 
 /// <summary>
-/// The live-tuning overlay's DS2 command 0x6D, as the overlay bin implements it (MS43LAB plan 6 record, "The contract as
-/// built"): the requests as payloads from the command byte on, and readers for the replies. Request arguments and status
-/// fields are big-endian.
+/// DS2 command 0x6D: request payloads begin with the command byte; reply readers consume complete frames.
+/// Request arguments and status fields are big-endian.
 /// </summary>
 public static class OverlayContract
 {
@@ -89,7 +88,7 @@ public static class OverlayContract
 
     private enum Sub : byte { Status, Load, Write, On, Off, AllOn, AllOff, Free, Revert }
 
-    /// <summary>The five live maps, in the overlay's order.</summary>
+    /// <summary>The first five live maps, in the overlay's order.</summary>
     public static IReadOnlyList<OverlayMap> Maps { get; } = new[]
     {
         new OverlayMap(0, "ign98_pl", "Timing", 0x77315, 320, false),

@@ -1,8 +1,8 @@
 namespace MS43Logger.Core.LiveTuning;
 
 /// <summary>
-/// What detection found: the header, the supported maps' bytes as the ECU's flash holds them, and the
-/// problem when the overlay is not there ("not found") or is not the one this app knows ("not understood").
+/// What detection found: the header, the supported maps' bytes as the ECU's flash holds them, and the problem when the
+/// overlay is not there ("not found"), is another version than V10.4, or is not the one this app knows ("not understood").
 /// </summary>
 public sealed record OverlayDetection(OverlayHeader? Header, IReadOnlyList<byte[]> Flash, string? Problem,
     IReadOnlyList<OverlayMap>? Catalogue = null, LimiterSettings? LimiterFlash = null);
@@ -11,8 +11,8 @@ public sealed record OverlayDetection(OverlayHeader? Header, IReadOnlyList<byte[
 public sealed record SendResult(OverlayReason? Refused, int? FreeFirst);
 
 /// <summary>
-/// Talks to the live-tuning overlay over a DS2 line. Detection reads only (DS2 command 06); every other call sends 0x6D, so
-/// it is for an ECU whose detection found the overlay.
+/// Talks to the live-tuning overlay V10.4 over a DS2 line. Detection reads only (DS2 command 06); every other call sends
+/// 0x6D, so it is for an ECU whose detection found the overlay. Any other version is refused at detection.
 /// </summary>
 public sealed class OverlayClient(IDs2Line line)
 {
@@ -71,6 +71,11 @@ public sealed class OverlayClient(IDs2Line line)
         }
         return new OverlayDetection(header, _flash.Select(bytes => (byte[])bytes.Clone()).ToArray(), null, _maps, limiter);
     }
+
+    /// <summary>The refusal for an overlay of another version than V10.4: the app sends it nothing.</summary>
+    public static string Outdated(OverlayHeader header) =>
+        $"The ECU runs live-tuning overlay V{header.Label}; this app works with V{OverlayProtocol.Label} only. "
+        + $"Flash the V{OverlayProtocol.Label} bin to tune live. No live commands will be sent.";
 
     public OverlayStatus Status()
     {

@@ -9,7 +9,7 @@ public enum MapIntent
 }
 
 /// <summary>
-/// The app's side of a live-tuning session on one connection (live tuning spec 5.4): it detects the overlay, keeps it alive
+/// The app's side of a live-tuning session on one connection: it detects the overlay, keeps it alive
 /// with a status on every <see cref="TickAsync"/>, remembers what was sent and what was live, and puts it back after a key
 /// cycle or a stall once the engine runs. Maps it finds in the ECU that it did not send are read back and adopted. Requests
 /// run one at a time, off the caller's thread. A timeout is not fatal (the link may be reconnecting); any other error stops
@@ -51,6 +51,20 @@ public sealed class LiveTuningSession(IDs2Line line)
         Detection = null;
         Last = null;
         _adopted = false;
+    }
+
+    /// <summary>As <see cref="Rebind"/>, after any request in flight on the old line has finished.</summary>
+    public async Task RebindAsync(IDs2Line line)
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            Rebind(line);
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     public MapIntent Intent(int table) => _intent[table];
@@ -122,7 +136,7 @@ public sealed class LiveTuningSession(IDs2Line line)
         }
     }
 
-    /// <summary>Puts <paramref name="copy"/> live (spec 5.2); on success the map's intent is Live.</summary>
+    /// <summary>Puts <paramref name="copy"/> live; on success the map's intent is Live.</summary>
     public Task<SendResult> SendAsync(int table, byte[] copy)
     {
         var snapshot = (byte[])copy.Clone();
@@ -134,8 +148,7 @@ public sealed class LiveTuningSession(IDs2Line line)
             {
                 result = _client.Send(table, snapshot, Flash(table), _client.Status());
             }
-            catch (Exception error) when (Detection?.Header?.Version is 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10
-                && error is TimeoutException or InvalidDataException)
+            catch (Exception error) when (error is TimeoutException or InvalidDataException)
             {
                 Problem = "The update was interrupted. Completed groups remain applied; reconnecting will read back the active map.";
                 throw;
@@ -268,7 +281,7 @@ public sealed class LiveTuningSession(IDs2Line line)
     /// </summary>
     private OverlayStatus Restore(OverlayStatus status)
     {
-        ReconcileV3(status);
+        Reconcile(status);
         if (!status.Running)
         {
             return status;
@@ -339,14 +352,13 @@ public sealed class LiveTuningSession(IDs2Line line)
 
     private void Publish(OverlayStatus status)
     {
-        ReconcileV3(status);
+        Reconcile(status);
         Last = status;
         StatusChanged?.Invoke(this, status);
     }
 
-    private void ReconcileV3(OverlayStatus status)
+    private void Reconcile(OverlayStatus status)
     {
-        if (status.Version is not (3 or 4 or 5 or 6 or 7 or 8 or 9 or 10)) return;
         for (var table = 0; table < _intent.Length; table++)
         {
             var entry = status.Tables[table];

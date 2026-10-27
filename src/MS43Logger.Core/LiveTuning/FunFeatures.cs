@@ -74,4 +74,11 @@ public static class FunFeatures
     /// <summary>The overlay version in the bin's header, or 0 when the bin has no live overlay.</summary>
     public static int OverlayVersionOf(CalibrationDocument bin) =>
         OverlayHeader.Parse(bin.Image.Bytes.Slice(OverlayContract.HeaderAddress & 0x7FFFF, 16).ToArray())?.Version ?? 0;
+
+    /// <summary>The overlay header in the bin, or null when the bin has no live overlay.</summary>
+    public static OverlayHeader? OverlayOf(CalibrationDocument bin) =>
+        OverlayHeader.Parse(bin.Image.Bytes.Slice(OverlayContract.HeaderAddress & 0x7FFFF, 16).ToArray());
+
+    /// <summary>Whether the bin carries the current overlay, V10.4.</summary>
+    public static bool HasCurrentOverlay(CalibrationDocument bin) => OverlayProtocol.IsCurrent(OverlayOf(bin));
 }

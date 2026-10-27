@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace MS43Logger.Core.LiveTuning;
 
 /// <summary>
-/// The live page's edits, kept between sessions (live tuning spec 5.6) in one JSON file: per set of flashed maps (keyed by
+/// The live page's edits, kept between sessions in one JSON file: per set of flashed maps (keyed by
 /// their hash), per map, the edited copy. Edits made against other flashed bytes are kept apart, to be offered, never
 /// applied. A file that cannot be read loads as empty and is left as it is until the next save.
 /// </summary>
@@ -52,7 +52,12 @@ public sealed class LiveEditStore(string path)
         var directory = Path.GetDirectoryName(Path.GetFullPath(path))!;
         Directory.CreateDirectory(directory);
         var temporary = path + ".tmp";
-        File.WriteAllText(temporary, JsonSerializer.Serialize(all, Options));
+        using (var stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            stream.Write(System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(all, Options)));
+            stream.Flush(flushToDisk: true);
+        }
+
         File.Move(temporary, path, overwrite: true);
     }
 
