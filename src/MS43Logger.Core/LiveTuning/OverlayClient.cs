@@ -22,6 +22,7 @@ public sealed class OverlayClient(IDs2Line line)
     private OverlayV4Client? _v4;
     private int _version;
     private int _minor;
+    private OverlaySessionClient? _client;
     private IReadOnlyList<OverlayMap> _maps = OverlayContract.Maps;
 
     /// <summary>Reads the header, verified catalogue and flashed maps. Sends no 0x6D.</summary>
@@ -216,4 +217,7 @@ public sealed class OverlayClient(IDs2Line line)
             throw new InvalidOperationException($"A matching version {OverlayContract.SupportedVersion} overlay must be detected before sending live commands.");
         }
     }
+
+    private OverlaySessionClient Client() => _client
+        ?? throw new InvalidOperationException($"Overlay V{OverlayProtocol.Label} must be detected before sending live commands.");
 }

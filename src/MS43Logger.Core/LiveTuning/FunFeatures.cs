@@ -9,37 +9,35 @@ public static class FunFeatures
 
     public static IReadOnlyList<string> Order { get; } = [LaunchControl, NoLiftShift, RollingAntiLag, Hardcut, Pops, Blip];
 
-    /// <summary>The feature a settings group belongs to: V10's stabs to pops, its gears and ratios to the blip.</summary>
+    /// <summary>The feature a settings group belongs to: the blip's gears and ratios to the blip.</summary>
     public static string? KeyOf(int mapIndex) => mapIndex switch
     {
-        OverlayV6.LaunchControl => LaunchControl,
-        OverlayV6.NoLiftShift => NoLiftShift,
-        OverlayV6.RollingAntiLag => RollingAntiLag,
-        OverlayV8.Pops or OverlayV10.Stabs => Pops,
-        OverlayV10.Blip or OverlayV10.BlipGears or OverlayV10.BlipRatios => Blip,
+        OverlaySettings.LaunchControl => LaunchControl,
+        OverlaySettings.NoLiftShift => NoLiftShift,
+        OverlaySettings.RollingAntiLag => RollingAntiLag,
+        OverlaySettings.Pops => Pops,
+        OverlaySettings.Blip or OverlaySettings.BlipGears or OverlaySettings.BlipRatios => Blip,
         _ => null,
     };
 
     /// <summary>The feature's main group, whose byte 0 is its switch.</summary>
     public static int? MapIndexOf(string key) => key switch
     {
-        LaunchControl => OverlayV6.LaunchControl,
-        NoLiftShift => OverlayV6.NoLiftShift,
-        RollingAntiLag => OverlayV6.RollingAntiLag,
-        Pops => OverlayV8.Pops,
-        Blip => OverlayV10.Blip,
+        LaunchControl => OverlaySettings.LaunchControl,
+        NoLiftShift => OverlaySettings.NoLiftShift,
+        RollingAntiLag => OverlaySettings.RollingAntiLag,
+        Pops => OverlaySettings.Pops,
+        Blip => OverlaySettings.Blip,
         _ => null,
     };
 
     /// <summary>
-    /// Every group the feature's page shows, its main group first: pops with V10's stabs (spec 7.2: shown inside "Pops &amp;
-    /// bangs"), the blip with its gears and ratios (spec 7.9: a switch per downshift on the blip's page). A group the ECU or
-    /// the bin lacks is left out by the caller.
+    /// Every group the feature's page shows, its main group first: the blip with its gears and ratios (a switch per downshift on the blip's page).
+    /// A group the ECU or the bin lacks is left out by the caller.
     /// </summary>
     public static IReadOnlyList<int> MapIndicesOf(string key) => key switch
     {
-        Pops => [OverlayV8.Pops, OverlayV10.Stabs],
-        Blip => [OverlayV10.Blip, OverlayV10.BlipGears, OverlayV10.BlipRatios],
+        Blip => [OverlaySettings.Blip, OverlaySettings.BlipGears, OverlaySettings.BlipRatios],
         _ => MapIndexOf(key) is { } index ? [index] : [],
     };
 
