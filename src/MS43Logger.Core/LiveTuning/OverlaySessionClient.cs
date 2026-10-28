@@ -163,7 +163,39 @@ internal sealed class OverlayV4Client(IDs2Line line, int version = 4)
 internal sealed class OverlaySessionClient(IDs2Line line)
 {
     private uint _session, _revision;
+    private readonly byte[]?[] _copies = new byte[OverlayCatalogue.Maps.Count][];
     private long? _lastPatchEnded;
+
+    public OverlayStatus Status()
+    {
+        var status = OverlayMemory.ReadStatus(line);
+        if (status.Session == 0 && status.Tables.All(t => t.State == OverlayState.Free))
+        {
+            _session = 0; Array.Clear(_copies);
+        }
+        if (_session != 0 && status.Session != _session) throw new InvalidDataException("The ECU's live session changed. Reconnect before editing.");
+        _revision = status.Revision; return status;
+    }
+
+    public OverlayReason? Run(byte[] command)
+    {
+        EnsureSession();
+        if (_revision == uint.MaxValue) throw new InvalidOperationException("Live revision exhausted; reconnect before editing.");
+        var session = _session; var revision = _revision;
+        var packet = OverlayProtocol.Mutation(command, session, revision);
+        try { return Accept(OverlayProtocol.Response(line.Request(packet))); }
+        catch (Exception error) when (error is TimeoutException or InvalidDataException)
+        {
+            // A missing reply can mean either a lost request or a completed command. Read the
+            // revision and the command's result before deciding whether it is safe to repeat.
+            var status = Status();
+            if (status.Session != session) throw new InvalidDataException("The ECU's live session changed during the command.");
+            if (status.Revision == revision)
+                return Accept(OverlayProtocol.Response(line.Request(packet)));
+            if (status.Revision == revision + 1 && HasResult(command, status)) return null;
+            throw new InvalidDataException("The interrupted live command could not be confirmed. Reconnect to read the ECU's state.");
+        }
+    }
 
     private bool HasResult(byte[] command, OverlayStatus status)
     {
@@ -183,6 +215,80 @@ internal sealed class OverlaySessionClient(IDs2Line line)
             8 => status.Tables.All(e => e.State == OverlayState.Free) && status.Limiter is not { Confirmed: true },
             _ => false,
         };
+    }
+
+    public SendResult Send(int table, byte[] desired, byte[] flash, OverlayStatus status)
+    {
+        EnsureSession();
+        var entry = status.Tables[table];
+        if (entry.State == OverlayState.On)
+        {
+            var current = _copies[table];
+            if (current is null || OverlayContract.Crc32(current) != entry.ContentCrc32)
+            {
+                current = line.Read(OverlayMemory.Physical(entry.Offset), desired.Length);
+                if (OverlayContract.Crc32(current) != entry.ContentCrc32) throw new InvalidDataException("The active map differs from its confirmed CRC.");
+            }
+            foreach (var at in OverlayProtocol.ChangedWindows(current, desired).ToArray())
+            {
+                var next = current.ToArray(); desired.AsSpan(at, 8).CopyTo(next.AsSpan(at));
+                try
+                {
+                    var crc = OverlayContract.Crc32(next);
+                    if (Patch(OverlayProtocol.Patch(table, at, _session, _revision, next.AsSpan(at, 8), OverlayCatalogue.Maps),
+                            status => status.Tables[table].State == OverlayState.On && status.Tables[table].ContentCrc32 == crc) is { } reason)
+                    {
+                        _copies[table] = null; return new(reason, null);
+                    }
+                }
+                catch { _copies[table] = null; throw; }
+                current = next; _copies[table] = current;
+            }
+            return new(null, null);
+        }
+        if (OverlayMemory.Place(table, status) is not { } placement) return new(OverlayReason.Overlap, OverlayMemory.FreeFirst(table, status));
+        var offset = placement.Offset;
+        if (Run(OverlayMemory.Load(table, placement)) is { } load) return new(load, null);
+        // The firmware takes an inactive write to a settings group only as the whole group.
+        var wholeGroup = OverlayCatalogue.Maps[table].ScalarGroup is not null;
+        if (wholeGroup && Run(OverlayContract.Write(table, 0, desired)) is { } group) return new(group, null);
+        for (var at = 0; !wholeGroup && at < desired.Length;)
+        {
+            if (desired[at] == flash[at]) { at++; continue; }
+            var end = at;
+            while (end < desired.Length && desired[end] != flash[end] && end - at < OverlayProtocol.MostWrite) end++;
+            if (Run(OverlayContract.Write(table, at, desired.AsSpan(at, end - at))) is { } write) return new(write, null);
+            at = end;
+        }
+        if (!line.Read(OverlayMemory.Physical(offset), desired.Length).AsSpan().SequenceEqual(desired)) return new(OverlayReason.Integrity, null);
+        var on = Run(OverlayContract.On(table, OverlayContract.Crc32(desired)));
+        if (on is null) _copies[table] = desired.ToArray();
+        return new(on, null);
+    }
+
+    public OverlayReason? SendLimiter(LimiterSettings settings)
+    {
+        var bytes = settings.Payload(); EnsureSession();
+        var result = Patch(OverlayProtocol.Patch(255, 0, _session, _revision, bytes));
+        if (result is not null) return result;
+        var actual = line.Read(OverlayMemory.LimiterAddress, 8); actual[7] &= 0x81;
+        return actual.AsSpan().SequenceEqual(bytes) ? null : OverlayReason.Integrity;
+    }
+
+    // As Run: a missing reply can mean a lost request or a patch that landed, so the revision decides before any resend.
+    // A patch that landed is confirmed by <paramref name="landed"/>; without it the caller reads the bytes back itself.
+    private OverlayReason? Patch(byte[] packet, Func<OverlayStatus, bool>? landed = null)
+    {
+        var session = _session; var revision = _revision;
+        try { return Accept(OverlayProtocol.Response(RequestPatch(packet))); }
+        catch (Exception error) when (error is TimeoutException or InvalidDataException)
+        {
+            var status = Status();
+            if (status.Session != session) throw new InvalidDataException("The ECU's live session changed during the patch.");
+            if (status.Revision == revision) return Accept(OverlayProtocol.Response(RequestPatch(packet)));
+            if (status.Revision == revision + 1 && (landed?.Invoke(status) ?? true)) return null;
+            throw new InvalidDataException("The interrupted live patch could not be confirmed. Reconnect to read the ECU's state.");
+        }
     }
 
     private OverlayReason? Accept((OverlayReason? Reason, uint Revision) reply)

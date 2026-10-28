@@ -50,19 +50,18 @@ public static class FunFeatures
     }
 
     /// <summary>
-    /// Offline: LC, NLS and RAL when every field has its XDF constant; the hardcut when its three XDF items exist; pops when
-    /// the bin's overlay header reads version 8 or later; the blip from version 10.
+    /// Offline: LC, NLS and RAL when every field has its XDF constant; the hardcut when its three XDF items exist; pops and
+    /// the blip when the bin carries the current overlay (V10.4).
     /// </summary>
     public static IReadOnlyList<string> Offline(CalibrationDocument bin, IReadOnlyList<OverlayMap>? groups = null)
     {
         ArgumentNullException.ThrowIfNull(bin);
         var present = new HashSet<string>();
-        var version = OverlayVersionOf(bin);
-        foreach (var map in groups ?? OverlayV9.MapsFor(version, OverlayHeader.MinorIn(bin.Image.Bytes)).Where(m => m.ScalarGroup is not null).ToArray())
+        var current = HasCurrentOverlay(bin);
+        foreach (var map in groups ?? OverlayCatalogue.Maps.Where(m => m.ScalarGroup is not null).ToArray())
         {
             if (KeyOf(map.Index) is not { } key) continue;
-            if (key == Pops && version < OverlayV8.Version) continue;
-            if (key == Blip && version < OverlayV10.Version) continue;
+            if (key is Pops or Blip && !current) continue;
             if (LiveScalarDefinitions.ConstantsFor(map, bin.Xdf) is not null) present.Add(key);
         }
         if (LimiterInBin.Find(bin.Xdf) is not null) present.Add(Hardcut);

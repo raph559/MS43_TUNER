@@ -22,6 +22,16 @@ public static class OverlayCatalogue
         Word(137, "ip_tps_sp_pvs_add_low_n__n_dif__", "Pedal / throttle", 0x7E5FC, 32),
     });
 
+    public static IReadOnlyList<OverlayMap> Maps { get; } = Array.AsReadOnly(BaseMaps
+        .Concat(OverlaySettings.LaunchMaps)
+        .Concat(WordMaps)
+        .Append(new OverlayMap(OverlaySettings.Pops, "pops", "Pops & bangs", OverlaySettings.DefaultsAddress, 8, false, OverlaySettings.PopsGroup))
+        .Append(new OverlayMap(OverlaySettings.Reserved, "reserved_139", "Reserved", 0xCFF88, 8, false, Reserved: true))
+        .Append(new OverlayMap(OverlaySettings.Blip, "blip", "Downshift blip", 0xCFF90, 8, false, OverlaySettings.BlipGroup))
+        .Append(new OverlayMap(OverlaySettings.BlipGears, "blip_gears", "Downshift blip: gears and tap", 0xCFF98, 8, false, OverlaySettings.BlipGearsGroup))
+        .Append(new OverlayMap(OverlaySettings.BlipRatios, "blip_ratios", "Downshift blip: gear ratios", 0xCFFA0, 8, false, OverlaySettings.BlipRatiosGroup))
+        .ToArray());
+
     private static IReadOnlyList<OverlayMap> LoadCatalogue()
     {
         var assembly = typeof(OverlayCatalogue).Assembly;
