@@ -572,6 +572,11 @@
         <Setter Property="BorderBrush" Value="{DynamicResource WarnBrush}" />
         <Setter Property="BorderThickness" Value="3,0,0,0" />
     </Style>
+    <!-- Amber for a condition short of danger, such as cold oil (performance spec 5); the text stays Ink1. -->
+    <Style Selector="Border.banner.caution">
+        <Setter Property="BorderBrush" Value="{DynamicResource CautionBrush}" />
+        <Setter Property="BorderThickness" Value="3,0,0,0" />
+    </Style>
 
     <!-- Dialogs (system 5.9, 4.3): the one Day elevation; at Night an Edge instead of a shadow nobody could see. -->
     <Style Selector="Border.dialog">

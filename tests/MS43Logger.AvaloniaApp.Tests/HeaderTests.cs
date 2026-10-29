@@ -157,7 +157,7 @@ public sealed class HeaderTests : IDisposable
                 foreach (var logging in new[] { false, true })
                 {
                     Log(shell.Live, logging);
-                    foreach (var tab in new[] { ShellViewModel.TuneTab, ShellViewModel.LiveTab })
+                    foreach (var tab in new[] { ShellViewModel.TuneTab, ShellViewModel.LiveTab, ShellViewModel.PerformanceTab })
                     {
                         shell.SelectedTab = tab;
                         foreach (var (width, height) in new[] { (1024, 680), (1280, 800), (1366, 768), (1440, 900) })
@@ -358,8 +358,9 @@ public sealed class HeaderTests : IDisposable
         Assert.False(Find.Named<Control>(window, "ReadoutsSeg").IsEffectivelyVisible);
     }
 
+    // A test needs the link, so Connect is also the primary action on Performance (performance spec 9.1).
     [AvaloniaFact]
-    public void ConnectIsPrimaryOnlyOnLive()
+    public void ConnectIsPrimaryOnlyOnLiveAndPerformance()
     {
         var (window, shell) = Show();
         var connect = Find.Named<Button>(window, "ConnectButton");
@@ -367,6 +368,16 @@ public sealed class HeaderTests : IDisposable
         Assert.Contains("primary", connect.Classes);
 
         shell.SelectedTab = ShellViewModel.TuneTab;
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.DoesNotContain("primary", connect.Classes);
+
+        shell.SelectedTab = ShellViewModel.PerformanceTab;
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Contains("primary", connect.Classes);
+
+        shell.SelectedTab = ShellViewModel.CompareTab;
         Dispatcher.UIThread.RunJobs();
 
         Assert.DoesNotContain("primary", connect.Classes);

@@ -34,11 +34,18 @@ public partial class MainWindow : Window
         // The save prompt reads the Saving settings as it opens; Esc, or another dialog taking its place, cancels.
         shell.Compare.AskToSwap = async message => await Dialogs.ShowAsync(new ConfirmActionDialog(message,
             "Tune's undo history starts again with the new A. Unsaved changes to A are asked about first.", "Swap")) is true;
+        shell.Performance.AskToDelete = async message => await Dialogs.ShowAsync(new ConfirmActionDialog(message,
+            "The result's file is deleted from the results folder. This cannot be undone.", "Delete")) is true;
 
         shell.Tune.AskToSave = async message =>
         {
             var settings = shell.Tune.Settings;
             var answer = await Dialogs.ShowAsync(new ConfirmDialog(message, ConfirmDialog.SaveDetail(settings.KeepBackup, settings.AppendEditLog)));
+            return answer is SaveChoice choice ? choice : SaveChoice.Cancel;
+        };
+        shell.Performance.Run.AskToSaveResult = async message =>
+        {
+            var answer = await Dialogs.ShowAsync(new ConfirmDialog(message, "Don't save drops the run and its samples."));
             return answer is SaveChoice choice ? choice : SaveChoice.Cancel;
         };
 
@@ -218,13 +225,13 @@ public partial class MainWindow : Window
 
     private void OnClosing(object? sender, WindowClosingEventArgs e)
     {
-        if (!_closeConfirmed && Shell.Tune.Document is { IsModified: true })
+        if (!_closeConfirmed && (Shell.Tune.Document is { IsModified: true } || Shell.Performance.Run.HasUnsavedResult))
         {
-            // Ask first; close again once the edits are saved or knowingly dropped.
+            // Ask first; close again once the edits and a finished run are saved or knowingly dropped (performance spec 2).
             e.Cancel = true;
             Dispatcher.UIThread.Post(async () =>
             {
-                if (await Shell.Tune.ConfirmDiscardAsync())
+                if (await Shell.Tune.ConfirmDiscardAsync() && await Shell.Performance.Run.ConfirmCloseAsync())
                 {
                     _closeConfirmed = true;
                     Close();
@@ -258,6 +265,13 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Performance has no undo history: Ctrl Z and Ctrl Y there never reach another screen's (performance spec 9.1), and a
+        // field keeps them for its own text.
+        if (Shell.IsPerformance && e.Key is Key.Z or Key.Y)
+        {
+            return;
+        }
+
         // A field keeps Ctrl Z for its own text, except the number fields that commit edits (class "commits"): they
         // empty or keep the number once it is applied, so Ctrl Z there means the edit, not the typing.
         var typing = FocusManager?.GetFocusedElement() is TextBox box && !box.Classes.Contains("commits");
@@ -267,6 +281,15 @@ public partial class MainWindow : Window
             case Key.S when e.KeyModifiers.HasFlag(KeyModifiers.Shift):
                 e.Handled = true;
                 await SaveAsAsync();
+                break;
+            // Performance's Save is the result's, never the bin's (minor review, finding 31).
+            case Key.S when Shell.IsPerformance:
+                e.Handled = true;
+                if (Shell.Performance.Run.CanSave)
+                {
+                    Shell.Performance.Run.Save();
+                }
+
                 break;
             case Key.S:
                 e.Handled = true;
@@ -288,6 +311,10 @@ public partial class MainWindow : Window
                 e.Handled = true;
                 Shell.Compare.SetRailCollapsed(!Shell.Compare.RailCollapsed);
                 break;
+            case Key.B when Shell.IsPerformance:
+                e.Handled = true;
+                Shell.Performance.SetRailCollapsed(!Shell.Performance.RailCollapsed);
+                break;
             case Key.OemComma:
                 e.Handled = true;
                 OpenSettings(NavigationMethod.Tab);
@@ -304,6 +331,13 @@ public partial class MainWindow : Window
                 if (Shell.IsCompare && this.GetVisualDescendants().OfType<CompareView>().FirstOrDefault() is { } compareView && Shell.Compare.HasB)
                 {
                     compareView.OpenRailOnSearch();
+                    break;
+                }
+
+                // The tab's one search is the results' (performance spec 9.1): Run gives way to it.
+                if (Shell.IsPerformance && this.GetVisualDescendants().OfType<PerformanceView>().FirstOrDefault() is { } performanceView)
+                {
+                    performanceView.OpenResultsOnSearch();
                     break;
                 }
 

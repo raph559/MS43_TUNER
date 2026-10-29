@@ -18,6 +18,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\MS43Logger.Core.Tests\LivePayloads.cs" Link="LivePayloads.cs" />
+    <Compile Include="..\MS43Logger.Core.Tests\SyntheticRuns.cs" Link="SyntheticRuns.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\MS43Logger.AvaloniaApp\MS43Logger.AvaloniaApp.csproj" />

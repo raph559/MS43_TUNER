@@ -49,8 +49,22 @@
         <Style Selector="Window.compactheader Button#ConnectionButton">
             <Setter Property="IsVisible" Value="True" />
         </Style>
+        <!-- The fourth tab's room (performance spec 9.1): narrower tabs, tighter margins after the mark and the tabs, and the
+             words "slow link" step aside while the rate and its warning icon stay. -->
+        <Style Selector="StackPanel#Brand, StackPanel#Tabs">
+            <Setter Property="Margin" Value="0,0,24,0" />
+        </Style>
         <Style Selector="Window.compactheader StackPanel#Brand, Window.compactheader StackPanel#Tabs">
-            <Setter Property="Margin" Value="0,0,16,0" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+        </Style>
+        <Style Selector="Window.compactheader ToggleButton.tab">
+            <Setter Property="Padding" Value="8,0" />
+        </Style>
+        <Style Selector="Window.compactheader ToggleButton.tab /template/ Border#Indicator">
+            <Setter Property="Margin" Value="8,0" />
+        </Style>
+        <Style Selector="Window.compactheader Panel#SlowLinkWords">
+            <Setter Property="IsVisible" Value="False" />
         </Style>
         <!-- Sizes live in styles, not on the elements, so the compact rules below can change them. -->
         <Style Selector="Button#FileMenuButton">
@@ -74,15 +88,16 @@
         <Border Name="TitleBar" Grid.Row="0" Background="{DynamicResource FrameBrush}" BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="0,0,0,1"
                 Padding="16,0,146,0" PointerPressed="TitleBar_PointerPressed">
             <Grid ColumnDefinitions="Auto,Auto,*,Auto">
-                <StackPanel Name="Brand" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="0,0,24,0">
+                <StackPanel Name="Brand" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <shell:AppMark Name="AppMark" IsLive="{Binding Live.IsConnected}" Level="{Binding Live.EngineSpeedLevel}" />
                     <TextBlock Name="Wordmark" Classes="title" Text="MS43 Tuner" VerticalAlignment="Center" />
                 </StackPanel>
 
-                <StackPanel Name="Tabs" Grid.Column="1" Orientation="Horizontal" Margin="0,0,24,0">
+                <StackPanel Name="Tabs" Grid.Column="1" Orientation="Horizontal">
                     <ToggleButton Name="TabLive" Classes="tab" Content="Live" IsChecked="{Binding IsLive}" />
                     <ToggleButton Name="TabTune" Classes="tab" Content="Tune" IsChecked="{Binding IsTune}" />
                     <ToggleButton Name="TabCompare" Classes="tab" Content="Compare" IsChecked="{Binding IsCompare}" />
+                    <ToggleButton Name="TabPerformance" Classes="tab" Content="Performance" IsChecked="{Binding IsPerformance}" />
                 </StackPanel>
 
                 <!-- The file button gives way when the header is short: first the XDF line steps aside (it is in the
@@ -139,7 +154,9 @@
                             <TextBlock Classes="label" Text="samples/s" VerticalAlignment="Center" />
                             <controls:StrokeIcon Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource WarnBrush}" Width="14" Height="14"
                                                  VerticalAlignment="Center" IsVisible="{Binding Live.IsSlowLink}" />
-                            <TextBlock Classes="label" Text="slow link" VerticalAlignment="Center" IsVisible="{Binding Live.IsSlowLink}" />
+                            <Panel Name="SlowLinkWords" VerticalAlignment="Center">
+                                <TextBlock Name="SlowLinkText" Classes="label" Text="slow link" VerticalAlignment="Center" IsVisible="{Binding Live.IsSlowLink}" />
+                            </Panel>
                         </StackPanel>
                     </StackPanel>
 
@@ -224,6 +241,7 @@
             <views:LiveView DataContext="{Binding Live}" IsVisible="{Binding $parent[Window].((local:ShellViewModel)DataContext).IsLive}" />
             <views:TuneView DataContext="{Binding Tune}" IsVisible="{Binding $parent[Window].((local:ShellViewModel)DataContext).IsTune}" />
             <views:CompareView DataContext="{Binding Compare}" IsVisible="{Binding $parent[Window].((local:ShellViewModel)DataContext).IsCompare}" />
+            <views:PerformanceView DataContext="{Binding Performance}" IsVisible="{Binding $parent[Window].((local:ShellViewModel)DataContext).IsPerformance}" />
         </Panel>
 
         <!-- Opening another bin: the open one stays and a 2 px bar runs under the header (system 7.1). -->

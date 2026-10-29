@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using MS43Logger.Core.Performance;
 using MS43Logger.Core.Tuning;
 
 namespace MS43Logger.AvaloniaApp;
@@ -40,6 +41,8 @@ public sealed class AppSettings
     private static readonly JsonSerializerOptions Json = new()
     {
         WriteIndented = true,
+        // A NaN or an infinity (a division by a zero reading) is written as such and replaced on load, never failing the save.
+        NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals,
         Converters = { new LenientEnum<ThemeMode>(), new LenientEnum<ReadoutsMode>(), new LenientEnum<TrailMode>(), new LenientEnum<ItemSort>(), new LenientEnum<DeltaMode>(), new LenientEnum<EditAxis>() },
     };
 
@@ -113,6 +116,48 @@ public sealed class AppSettings
     /// <summary>Which way Tune's Interpolate and Smooth work on a map: X, Y or both (TunerPro's choice).</summary>
     public EditAxis EditAxis { get; set; } = EditAxis.XY;
 
+    /// <summary>
+    /// The pedal reading (°PVS) with the pedal floored, from the Pedal step; null until calibrated. Full throttle and
+    /// every pedal percentage are relative to it (performance spec 4.4).
+    /// </summary>
+    public double? FullPedal { get; set; }
+
+    /// <summary>Speed per engine speed in each gear (km/h per rpm), from the speed calibration (performance spec 6.5).</summary>
+    public Dictionary<int, double> KmhPerRpm { get; set; } = new();
+
+    /// <summary>
+    /// What the speedometer (VS) read per rpm in each gear as captured, before a GPS correction: the slip check compares VS
+    /// with it, since <see cref="KmhPerRpm"/> holds true speed once corrected (performance spec 4.5, 6.5).
+    /// </summary>
+    public Dictionary<int, double> SpeedometerKmhPerRpm { get; set; } = new();
+
+    /// <summary>
+    /// Whether each calibrated gear was corrected against a GPS speed, not only the speedometer; a gear is saved with its own
+    /// capture, so each keeps its own (performance spec 6.5).
+    /// </summary>
+    public Dictionary<int, bool> GpsChecked { get; set; } = new();
+
+    /// <summary>Read once from older files, where one flag stood for every saved gear; never written again.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? SpeedGpsChecked { get; set; }
+
+    /// <summary>The car with its driver, for the power estimate (performance spec 7).</summary>
+    public double TestMassKg { get; set; } = 1480;
+
+    /// <summary>A size such as "205/55 R16": its rolling circumference turns rpm into speed.</summary>
+    public string TyreSize { get; set; } = "205/55 R16";
+
+    /// <summary>An automatic gearbox (a converter), not the manual.</summary>
+    public bool Automatic { get; set; }
+
+    /// <summary>The Performance rail's width as dragged (null for the default) and whether it is folded to its strip.</summary>
+    public double? PerformanceRailWidth { get; set; }
+
+    public bool PerformanceRailCollapsed { get; set; }
+
+    /// <summary>The last rpm band (start, end) of each pull preset, so before and after runs compare (performance spec 9.2).</summary>
+    public Dictionary<string, double[]> PerformanceBands { get; set; } = new();
+
     /// <summary>Why the last <see cref="Save"/> failed, or null after a successful one.</summary>
     [JsonIgnore]
     public string? SaveError { get; private set; }
@@ -173,6 +218,26 @@ public sealed class AppSettings
         CursorTrail = Enum.IsDefined(CursorTrail) ? CursorTrail : Defaults.CursorTrail;
         TrendSeconds = TrendSeconds is 10 or 30 or 60 ? TrendSeconds : Defaults.TrendSeconds;
         LogFolder = string.IsNullOrWhiteSpace(LogFolder) ? Defaults.LogFolder : LogFolder;
+
+        // Performance values (performance spec 4.4, 6.5, 7): each impossible one goes alone, so a bad entry never costs the rest.
+        FullPedal = FullPedal is >= 10 and <= 130 ? FullPedal : null;
+        TestMassKg = TestMassKg is >= 500 and <= 3500 ? TestMassKg : Defaults.TestMassKg;
+        // The power estimate reads the size; one it cannot read would leave every run without power.
+        TyreSize = RunMath.TyreCircumference(TyreSize ?? "") is null ? Defaults.TyreSize : TyreSize!;
+        KmhPerRpm = (KmhPerRpm ?? new()).Where(pair => pair.Key is >= 1 and <= 6 && double.IsFinite(pair.Value) && pair.Value > 0)
+            .ToDictionary(pair => pair.Key, pair => pair.Value);
+        SpeedometerKmhPerRpm = (SpeedometerKmhPerRpm ?? new()).Where(pair => pair.Key is >= 1 and <= 6 && double.IsFinite(pair.Value) && pair.Value > 0)
+            .ToDictionary(pair => pair.Key, pair => pair.Value);
+        // An older file's one flag holds for the gears it had saved; a gear's check goes with its calibration.
+        if (SpeedGpsChecked is { } legacy && (GpsChecked is null || GpsChecked.Count == 0))
+        {
+            GpsChecked = KmhPerRpm.Keys.ToDictionary(gear => gear, _ => legacy);
+        }
+
+        SpeedGpsChecked = null;
+        GpsChecked = (GpsChecked ?? new()).Where(pair => KmhPerRpm.ContainsKey(pair.Key)).ToDictionary(pair => pair.Key, pair => pair.Value);
+        PerformanceBands = (PerformanceBands ?? new()).Where(pair => pair.Value is [var start, var end] && double.IsFinite(start) && double.IsFinite(end) && start < end)
+            .ToDictionary(pair => pair.Key, pair => pair.Value);
     }
 
     /// <summary>Reads an enum by name; anything else reads as an undefined value, which <see cref="Normalize"/> replaces.</summary>

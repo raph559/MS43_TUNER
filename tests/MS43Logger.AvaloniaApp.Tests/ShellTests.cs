@@ -36,6 +36,24 @@ public class ShellTests
         Screens.Save(window, "shell-night");
     }
 
+    // Performance is the fourth tab, after Compare, with no shortcut of its own (performance spec 9.1).
+    [AvaloniaFact]
+    public void TabsAreLiveTuneCompareAndPerformance()
+    {
+        var (window, shell) = Show();
+        var tabs = window.FindControl<StackPanel>("Tabs")!.Children.OfType<ToggleButton>().ToList();
+
+        Assert.Equal(["Live", "Tune", "Compare", "Performance"], tabs.Select(tab => tab.Content as string));
+        Assert.Equal("TabPerformance", tabs[^1].Name);
+
+        tabs[^1].IsChecked = true;
+
+        Assert.Equal(ShellViewModel.PerformanceTab, shell.SelectedTab);
+        Assert.True(window.GetVisualDescendants().OfType<PerformanceView>().Single().IsVisible);
+        Assert.False(window.GetVisualDescendants().OfType<LiveView>().Single().IsVisible);
+        Assert.False(tabs[0].IsChecked);
+    }
+
     [AvaloniaFact]
     public void ThemeSwitchChangesPaneBrush()
     {

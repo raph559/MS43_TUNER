@@ -1,18 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Globalization;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
-using MS43Logger.AvaloniaApp.Theme;
 using MS43Logger.Core.Tuning;
 
 namespace MS43Logger.AvaloniaApp.Controls;
 
 /// <summary>
-/// A curve (or an axis) as a chart (system 5.13): square points filled with their cell's map colour and an Ink2 edge,
+/// A curve (or an axis) as a chart: square points filled with their cell's map colour and an Ink2 edge,
 /// the selected point framed in Ink1, an Ink2 line and axes, a hairline grid at round ticks. The round dot is kept for
 /// the live cursor.
 /// </summary>
@@ -37,7 +35,7 @@ public sealed class CurveChart : Control
             : default;
 
     /// <summary>The x axis's tick labels as drawn: breakpoint values, or "1", "5", "10" for an axis's numbered breakpoints.</summary>
-    public IReadOnlyList<string> XTickLabels => Layout() is { } chart ? chart.XTicks.Select(tick => Format(tick, chart.XStep)).ToList() : [];
+    public IReadOnlyList<string> XTickLabels => Layout() is { } chart ? chart.XTicks.Select(tick => ChartScale.Format(tick, chart.XStep)).ToList() : [];
 
     /// <summary>The unit at the x axis's end: the row axis's unit, or "breakpoint" for an axis.</summary>
     public string? XAxisUnits => Layout()?.AxisUnits;
@@ -83,20 +81,20 @@ public sealed class CurveChart : Control
         {
             var y = chart.Y(tick);
             context.DrawLine(hairline, new Point(plot.Left, y), new Point(plot.Right, y));
-            Text(context, Format(tick, chart.YStep), data, ink3, new Point(plot.Left - 6, y), 1, 0.5);
+            ChartScale.Text(context, ChartScale.Format(tick, chart.YStep), data, ink3, new Point(plot.Left - 6, y), 1, 0.5);
         }
 
         foreach (var tick in chart.XTicks)
         {
-            Text(context, Format(tick, chart.XStep), data, ink3, new Point(chart.X(tick), plot.Bottom + 4), 0.5, 0);
+            ChartScale.Text(context, ChartScale.Format(tick, chart.XStep), data, ink3, new Point(chart.X(tick), plot.Bottom + 4), 0.5, 0);
         }
 
         // The y axis rises 6 px above the top tick, and its unit sits over it with the baseline 10 px above that tick.
         var axes = new Pen(ink2, 1.5);
         context.DrawLine(axes, plot.BottomLeft, plot.TopLeft - new Point(0, 6));
         context.DrawLine(axes, plot.BottomLeft, plot.BottomRight);
-        Baseline(context, editor.Units, ui, ink3, new Point(plot.Left - 6, plot.Top - 10));
-        Text(context, chart.AxisUnits, ui, ink3, new Point(plot.Right, plot.Bottom + 18), 1, 0);
+        ChartScale.Baseline(context, editor.Units, ui, ink3, new Point(plot.Left - 6, plot.Top - 10));
+        ChartScale.Text(context, chart.AxisUnits, ui, ink3, new Point(plot.Right, plot.Bottom + 18), 1, 0);
 
         var line = new StreamGeometry();
         using (var g = line.Open())
@@ -179,7 +177,7 @@ public sealed class CurveChart : Control
         var ys = Enumerable.Range(0, count).Select(i => vertical ? values.Physical[i, 0] : values.Physical[0, i]).ToArray();
         var axis = vertical ? values.Y : values.X;
 
-        // An axis's breakpoints are numbered 1 to n (system 5.13), as its grid's rows are.
+        // An axis's breakpoints are numbered 1 to n, as its grid's rows are.
         var numbered = vertical && Editor?.NumberRows == true;
         var xs = numbered ? Enumerable.Range(1, count).Select(i => (double)i).ToArray()
             : axis.Values.Count == count && axis.Values.All(double.IsFinite) && axis.Values.Distinct().Count() == count
@@ -191,38 +189,16 @@ public sealed class CurveChart : Control
             return null;
         }
 
-        var (yMin, yMax, yStep, yTicks) = Ticks(finite.Min(), finite.Max());
-        var (xMin, xMax, xStep, xTicks) = numbered ? Breakpoints(count) : Ticks(xs.Min(), xs.Max());
+        var (yMin, yMax, yStep, yTicks) = ChartScale.Ticks(finite.Min(), finite.Max());
+        var (xMin, xMax, xStep, xTicks) = numbered ? Breakpoints(count) : ChartScale.Ticks(xs.Min(), xs.Max());
         var plot = new Rect(44, 22, Math.Max(10, Bounds.Width - 60), Math.Max(10, Bounds.Height - 62));
         return new Chart(plot, xs, ys, count, vertical, xMin, xMax, yMin, yMax, xStep, yStep, xTicks, yTicks, numbered ? "breakpoint" : axis.Units);
-    }
-
-    /// <summary>Round ticks over [min, max]: a step of 1, 2, 2.5, 3, 4 or 5 times a power of ten, about four steps across.</summary>
-    private static (double Min, double Max, double Step, IReadOnlyList<double> Ticks) Ticks(double min, double max)
-    {
-        if (max - min < 1e-9)
-        {
-            (min, max) = (min - 1, max + 1);
-        }
-
-        var rough = (max - min) / 4;
-        var magnitude = Math.Pow(10, Math.Floor(Math.Log10(rough)));
-        var step = new[] { 1, 2, 2.5, 3, 4, 5, 10 }.Select(factor => factor * magnitude).First(candidate => candidate >= rough * 0.999);
-        var low = Math.Floor(min / step + 1e-9) * step;
-        var high = Math.Ceiling(max / step - 1e-9) * step;
-        var ticks = new List<double>();
-        for (var tick = low; tick <= high + step * 1e-6; tick += step)
-        {
-            ticks.Add(Math.Round(tick / step) * step);
-        }
-
-        return (low, high, step, ticks);
     }
 
     // Numbered breakpoints run from 1 to n, ticked at 1 and then at round steps: 1, 5, 10, 15, 20.
     private static (double Min, double Max, double Step, IReadOnlyList<double> Ticks) Breakpoints(int count)
     {
-        var step = Ticks(1, Math.Max(2, count)).Step;
+        var step = ChartScale.Ticks(1, Math.Max(2, count)).Step;
         var ticks = new List<double> { 1 };
         for (var tick = step; tick <= count + 1e-9; tick += step)
         {
@@ -233,38 +209,6 @@ public sealed class CurveChart : Control
         }
 
         return (1, Math.Max(2, count), step, ticks);
-    }
-
-    // A tick value with no more decimals than its step needs, and an ASCII minus.
-    private static string Format(double value, double step)
-    {
-        var decimals = step >= 1 ? 0 : step >= 0.1 ? 1 : 2;
-        var text = value.ToString("F" + decimals, CultureInfo.InvariantCulture);
-        return text.StartsWith('-') && text.AsSpan(1).IndexOfAnyExcept("0.") < 0 ? text[1..] : text;
-    }
-
-    private static void Text(DrawingContext context, string text, Typeface face, IBrush brush, Point at, double alignX, double alignY)
-    {
-        if (string.IsNullOrEmpty(text))
-        {
-            return;
-        }
-
-        var formatted = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, face, 12, brush);
-        formatted.SetFontFeatures(Typography.Tabular);
-        context.DrawText(formatted, new Point(at.X - formatted.Width * alignX, at.Y - formatted.Height * alignY));
-    }
-
-    // Right-aligned text placed by its baseline.
-    private static void Baseline(DrawingContext context, string text, Typeface face, IBrush brush, Point at)
-    {
-        if (string.IsNullOrEmpty(text))
-        {
-            return;
-        }
-
-        var formatted = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, face, 12, brush);
-        context.DrawText(formatted, new Point(at.X - formatted.Width, at.Y - formatted.Baseline));
     }
 
     private void OnEditorChanged(object? sender, PropertyChangedEventArgs e) => InvalidateVisual();

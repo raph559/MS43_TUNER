@@ -46,6 +46,10 @@
             <SolidColorBrush x:Key="NowTextBrush" Color="#B4470A" />
             <Color x:Key="WarnColor">#B42318</Color>
             <SolidColorBrush x:Key="WarnBrush" Color="#B42318" />
+            <!-- Amber, only for the caution banner's stripe and icon (performance spec 5): 4.38:1 on Fill and 5.19:1 on Pane
+                 by Day, 7.33:1 and 9.13:1 at Night. -->
+            <Color x:Key="CautionColor">#A15C00</Color>
+            <SolidColorBrush x:Key="CautionBrush" Color="#A15C00" />
             <!-- Close-button hover: Day's warn red in both themes, so its white glyph stays at 6.6:1. -->
             <SolidColorBrush x:Key="CaptionCloseBrush" Color="#B42318" />
             <SolidColorBrush x:Key="CaptionClosePressedBrush" Color="#8F1C13" />
@@ -178,6 +182,8 @@
             <SolidColorBrush x:Key="NowTextBrush" Color="#FF7A1A" />
             <Color x:Key="WarnColor">#FF6259</Color>
             <SolidColorBrush x:Key="WarnBrush" Color="#FF6259" />
+            <Color x:Key="CautionColor">#E8A33D</Color>
+            <SolidColorBrush x:Key="CautionBrush" Color="#E8A33D" />
             <SolidColorBrush x:Key="CaptionCloseBrush" Color="#B42318" />
             <SolidColorBrush x:Key="CaptionClosePressedBrush" Color="#8F1C13" />
             <Color x:Key="Map1Color">#02423A</Color>

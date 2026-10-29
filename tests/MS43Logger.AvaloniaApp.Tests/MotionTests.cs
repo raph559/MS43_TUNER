@@ -104,6 +104,15 @@ public sealed class MotionTests
 
         Settle();
         Assert.Equal(1, tune.Opacity);
+
+        var performance = window.GetVisualDescendants().OfType<PerformanceView>().Single();
+        since = System.Diagnostics.Stopwatch.StartNew();
+        shell.SelectedTab = ShellViewModel.PerformanceTab;
+        Tick();
+        AssertMoving(performance.Opacity, since);
+
+        Settle();
+        Assert.Equal(1, performance.Opacity);
     }
 
     [AvaloniaFact]
