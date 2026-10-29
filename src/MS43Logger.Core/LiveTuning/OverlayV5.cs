@@ -1,9 +1,7 @@
 using System.Buffers.Binary;
-
 namespace MS43Logger.Core.LiveTuning;
 
-public sealed record OverlayPlacement(int Offset, int DirectorySlot);
-
+/// <summary>Compatibility entry points for allocation and directory status.</summary>
 public static class OverlayV5
 {
     public const int Version = 5, BaseSlots = 5, RecordBytes = 8, PoolBStart = 704, PoolBBytes = 228;
@@ -40,34 +38,9 @@ public static class OverlayV5
 
     public static bool Fits(int offset, int bytes, int version = Version) => (offset & 3) == 0 && (bytes & 3) == 0
         && OverlayV4.Fits(offset, bytes) && (offset >= PoolBStart || offset + bytes <= PoolAEnd(version));
-
-    public static int? RecordOffset(OverlayEntry entry) => entry.DirectorySlot >= BaseSlots
-        ? PoolBStart + 4 * (entry.DirectorySlot - BaseSlots) : null;
-
-    public static int TrackingBytes(OverlayStatus status)
-    {
-        var records = status.Tables.Count(e => e.State != OverlayState.Free && e.DirectorySlot >= BaseSlots);
-        return records == 0 ? 0 : records * RecordBytes + LookupBytes(status.Version);
-    }
-
-    public static byte[] Load(int table, OverlayPlacement placement) =>
-        [.. OverlayContract.Load(table, placement.Offset),
-            placement.DirectorySlot < BaseSlots ? (byte)255 : checked((byte)(placement.DirectorySlot - BaseSlots))];
-
-    public static OverlayStatus ReadStatus(IDs2Line line, int version = Version)
-    {
-        for (var attempt = 0; attempt < 3; attempt++)
-        {
-            var first = line.Request(OverlayContract.Status());
-            ValidateSummary(first, version);
-            if (first[44] == 255) return ParseStatus(first, [], version);
-            var pool = line.Read(PoolBAddress, PoolBBytes);
-            var last = line.Request(OverlayContract.Status());
-            ValidateSummary(last, version);
-            if (first.SequenceEqual(last)) return ParseStatus(last, pool, version);
-        }
-        throw new InvalidDataException("Live allocations changed while reading their status. Retry after the ECU state settles.");
-    }
+    public static int? RecordOffset(OverlayEntry entry) => OverlayMemory.RecordOffset(entry);
+    public static int TrackingBytes(OverlayStatus status) => OverlayMemory.TrackingBytes(status);
+    public static byte[] Load(int table, OverlayPlacement placement) => OverlayMemory.Load(table, placement);
 
     public static OverlayStatus ParseStatus(IReadOnlyList<byte> reply, ReadOnlySpan<byte> poolB, int version = Version)
     {
@@ -140,65 +113,8 @@ public static class OverlayV5
         if (reply.Count != 68 || reply[2] != 0xA0 || !reply.Skip(3).Take(5).SequenceEqual(new byte[] { 76, 84, 79, 86, checked((byte)version) })
             || (reply[8] & ~1) != 0) throw new InvalidDataException($"Invalid protocol {version} status.");
     }
-
-    public static OverlayPlacement? Place(int table, OverlayStatus status)
-    {
-        var maps = Catalogue(status.Version);
-        if (table < 0 || table >= maps.Count || status.Tables.Count != maps.Count) throw new ArgumentException("Invalid live allocation request.");
-        if (status.Tables[table].State != OverlayState.Free)
-            return new(status.Tables[table].Offset, status.Tables[table].DirectorySlot);
-        var baseSlot = Enumerable.Range(0, BaseSlots)
-            .Where(slot => !status.Tables.Any(e => e.State != OverlayState.Free && e.DirectorySlot == slot))
-            .Select(slot => (int?)slot).FirstOrDefault();
-        if (baseSlot is { } available)
-            return DataOffset(table, maps, Gaps(status), TrackingBytes(status) == 0) is { } offset ? new(offset, available) : null;
-
-        if (maps.Any(m => status.Tables[m.Index].State != OverlayState.Free
-            && status.Tables[m.Index].Offset + m.Bytes > LookupOffset(status.Version))) return null;
-        foreach (var gap in Gaps(status, includeIndex: true).Where(g => g.Start >= PoolBStart && g.Bytes >= RecordBytes).OrderBy(g => g.Bytes))
-        {
-            // Either edge preserves one contiguous data gap; examine both before refusing a fit.
-            foreach (var record in new[] { gap.Start + gap.Bytes - RecordBytes, gap.Start }.Distinct())
-                if (DataOffset(table, maps, Gaps(status, (record, record + RecordBytes), includeIndex: true), false) is { } offset)
-                    return new(offset, BaseSlots + (record - PoolBStart) / 4);
-        }
-        return null;
-    }
-
-    private static int? DataOffset(int table, IReadOnlyList<OverlayMap> maps, IEnumerable<(int Start, int Bytes)> gaps, bool originalPools)
-    {
-        var preferB = originalPools && table is 1 or 3;
-        return gaps.Where(g => g.Bytes >= maps[table].Bytes)
-            .OrderBy(g => (g.Start >= PoolBStart) == preferB ? 0 : 1).ThenBy(g => g.Bytes).ThenBy(g => g.Start)
-            .Select(g => (int?)g.Start).FirstOrDefault();
-    }
-
-    public static int LargestBlock(OverlayStatus status) => Gaps(status).Select(g => g.Bytes).DefaultIfEmpty().Max();
-
-    public static int? FreeFirst(int table, OverlayStatus status) => Catalogue(status.Version)
-        .Where(m => m.Index != table && status.Tables[m.Index].State != OverlayState.Free).OrderBy(m => m.Bytes)
-        .Where(m => Place(table, status with { Tables = status.Tables.Select((e, i) => i == m.Index
-            ? new OverlayEntry(OverlayState.Free, 0, 0) : e).ToArray() }) is not null)
-        .Select(m => (int?)m.Index).FirstOrDefault();
-
-    private static IEnumerable<(int Start, int Bytes)> Gaps(OverlayStatus status, (int Start, int End)? extra = null, bool includeIndex = false)
-    {
-        var ranges = Catalogue(status.Version).Where(m => status.Tables[m.Index].State != OverlayState.Free)
-            .Select(m => (Start: status.Tables[m.Index].Offset, End: status.Tables[m.Index].Offset + m.Bytes)).ToList();
-        ranges.AddRange(status.Tables.Where(e => e.State != OverlayState.Free).Select(RecordOffset).OfType<int>()
-            .Select(at => (at, at + RecordBytes)));
-        if (includeIndex || status.Tables.Any(e => e.State != OverlayState.Free && e.DirectorySlot >= BaseSlots))
-            ranges.Add((LookupOffset(status.Version), CopyBytes));
-        if (extra is { } record) ranges.Add(record);
-        foreach (var (start, end) in new[] { (0, PoolAEnd(status.Version)), (PoolBStart, CopyBytes) })
-        {
-            var cursor = start;
-            foreach (var range in ranges.Where(r => r.Start >= start && r.Start < end).OrderBy(r => r.Start))
-            {
-                if (range.Start > cursor) yield return (cursor, range.Start - cursor);
-                cursor = Math.Max(cursor, range.End);
-            }
-            if (cursor < end) yield return (cursor, end - cursor);
-        }
-    }
+    public static OverlayStatus ReadStatus(IDs2Line line) => OverlayMemory.ReadStatus(line);
+    public static OverlayPlacement? Place(int table, OverlayStatus status) => OverlayMemory.Place(table, status);
+    public static int LargestBlock(OverlayStatus status) => OverlayMemory.LargestBlock(status);
+    public static int? FreeFirst(int table, OverlayStatus status) => OverlayMemory.FreeFirst(table, status);
 }

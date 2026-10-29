@@ -1,13 +1,6 @@
 namespace MS43Logger.Core.LiveTuning;
 
-/// <summary>
-/// Protocol 10: V9 plus the pops stabs (group 139) and the downshift blip (140, with its gears and tap in 141 and its gear
-/// ratios in 142). Each group is 8 bytes, its flashed defaults after pops' at 0C:FF88. V10's state takes pool A's bytes
-/// from 668, so allocations end there and the status reports 896 free. V10.1 (header minor 1) adds 139/4, the rise
-/// allowed once stabbing, and 141/6, the blip lead, and takes the pops AFR target down to 7.4. V10.2 (minor 2) makes the
-/// pops AFR target the real AFR × 10 in petrol AFR (5.0..14.7) and adds 141/7, the blip's spark above its target. V10.3
-/// (minor 3) removes the stabs: a pops window keeps its own opening and ends at a 160 rpm rise, and 139 is reserved.
-/// </summary>
+/// <summary>Compatibility entry points for the current V10.4 overlay.</summary>
 public static class OverlayV10
 {
     public const int Version = 10, PoolABytes = 668, CopyBytes = 896, Stabs = 139, Blip = 140, BlipGears = 141, BlipRatios = 142;
@@ -23,16 +16,8 @@ public static class OverlayV10
     public const string BlipCategory = "Downshift blip";
 
     private const int PopsAfr = 3, PopsThrottle = 6, BlipOpening = 5, HoldOpening = 6, StabsRise = 4, BlipLead = 6, CapSpark = 7;
-    private const string Note = "A change takes effect at the next downshift at the latest. The live settings fall back to the flashed ones 3 s after the app goes quiet.";
 
-    /// <summary>Each byte's lowest and highest value in groups 139..142, as the firmware's <c>v10_limits</c> holds them; reserved bytes are 0.</summary>
-    public static IReadOnlyDictionary<int, IReadOnlyList<(byte Low, byte High)>> Limits { get; } = new Dictionary<int, IReadOnlyList<(byte Low, byte High)>>
-    {
-        [Stabs] = Array.AsReadOnly(new (byte, byte)[] { (0, 50), (0, 150), (5, 30), (10, 100), (0, 0), (0, 0), (0, 0), (0, 0) }),
-        [Blip] = Array.AsReadOnly(new (byte, byte)[] { (0, 2), (1, 3), (10, 255), (63, 187), (3, 30), (0, 150), (0, 150), (63, 143) }),
-        [BlipGears] = Array.AsReadOnly(new (byte, byte)[] { (0, 1), (0, 1), (0, 1), (0, 1), (11, 85), (10, 60), (0, 0), (0, 0) }),
-        [BlipRatios] = Array.AsReadOnly(new (byte, byte)[] { (180, 255), (100, 160), (70, 110), (50, 85), (0, 0), (0, 0), (0, 0), (0, 0) }),
-    };
+    public static IReadOnlyDictionary<int, IReadOnlyList<(byte Low, byte High)>> Limits => OverlaySettings.Limits;
 
     /// <summary>V10.1's limits: V10's, with 139/4 the rise allowed once stabbing (5..31) and 141/6 the blip lead (0..30).</summary>
     public static IReadOnlyDictionary<int, IReadOnlyList<(byte Low, byte High)>> LimitsV101 { get; } = Limits.ToDictionary(
@@ -59,18 +44,8 @@ public static class OverlayV10
     /// <summary>The limits of groups 139..142 for an overlay of this minor: V10.3's from minor 3, V10.2's from 2, V10.1's from 1.</summary>
     public static IReadOnlyDictionary<int, IReadOnlyList<(byte Low, byte High)>> LimitsFor(int minor) =>
         minor >= V103Minor ? LimitsV103 : minor >= V102Minor ? LimitsV102 : minor >= V101Minor ? LimitsV101 : Limits;
-
-    /// <summary>V9's pops group, with the opening's hover warning that the stabs need 4.0 °TPS or more.</summary>
-    public static OverlayScalarGroup PopsGroup { get; } = OverlayV9.PopsGroup with
-    {
-        Fields = OverlayV9.PopsGroup.Fields.Select(field => field.Offset != PopsThrottle ? field : field with
-        {
-            Definition = field.Definition! with
-            {
-                Description = field.Definition.Description + " Below 4.0 °TPS the stabs' gaps blur: the ECU closes the throttle slowly there.",
-            },
-        }).ToArray(),
-    };
+    public static IReadOnlyList<(byte Low, byte High)> PopsLimits => OverlaySettings.PopsLimits;
+    public static OverlayScalarGroup PopsGroup => OverlaySettings.PopsGroup;
 
     public static OverlayScalarGroup StabsGroup { get; } = new("Pops stabs", new OverlayScalar[]
     {
@@ -87,61 +62,10 @@ public static class OverlayV10
             "The time at the plain opening between two stabs, 100 ms to 1.0 s.",
             "ms", "10*X", 100, 1000, 0, OverlayV8.Category)),
     }, "A change takes effect at the next stab at the latest. The live settings fall back to the flashed ones 3 s after the app goes quiet.");
-
-    public static OverlayScalarGroup BlipGroup { get; } = new("Downshift blip", new OverlayScalar[]
-    {
-        new("blip_switch", "Switch", 0, new("Downshift blip switch", SwitchDescription(), "-", "X", 0, 0x9F, 0, BlipCategory)),
-        new("blip_signs", "Signs", 1, new("Downshift blip signs",
-            "What starts a blip once the clutch is in: braking (both brake switches pressed), or a short tap of the pedal. One blip per clutch press.\n"
-                + "1: While braking\n2: On a pedal tap\n3: Braking or tap",
-            "-", "X", 1, 3, 0, BlipCategory)),
-        new("blip_speed_min", "Minimum vehicle speed", 2, new("Downshift blip minimum vehicle speed",
-            "No blip below this road speed, and a blip ends when the car slows under it. Never below 10 km/h.",
-            "km/h", "X", 10, 255, 0, BlipCategory)),
-        new("blip_rpm_max", "Maximum engine speed", 3, new("Downshift blip maximum engine speed",
-            "The blip's target engine speed is capped here, and a blip ends when the engine reaches it. At most 5,984 rpm.",
-            "rpm", "32*X", 2016, 5984, 0, BlipCategory)),
-        new("blip_time_max", "Maximum time", 4, new("Downshift blip maximum time",
-            "A blip ends after this long, even with the clutch still in.",
-            "s", "0.1*X", 0.3, 3.0, 1, BlipCategory)),
-        new("blip_opening", "Blip opening", 5, new("Downshift blip opening",
-            "Added to the stock throttle setpoint while the engine speed rises to the target: the road speed times the lower gear's rpm per km/h. At most 30.0 °TPS.",
-            "°TPS", "0.2*X", 0, 30.0, 1, BlipCategory)),
-        new("blip_hold", "Hold opening", 6, new("Downshift blip hold opening",
-            "Added once the engine speed is near the target, while it is below it, to hold it there until the clutch comes up. At most the blip opening.",
-            "°TPS", "0.2*X", 0, 30.0, 1, BlipCategory)),
-        new("blip_spark", "Spark angle", 7, new("Downshift blip spark angle",
-            "The fixed spark angle during a blip, in place of the overrun's retarded spark. 0.0 to +30.0 °BTDC.",
-            "°BTDC", "0.375*X-23.625", 0.0, 30.0, 3, BlipCategory)),
-    }, Note);
-
-    public static OverlayScalarGroup BlipGearsGroup { get; } = new("Downshift blip: gears and tap", new OverlayScalar[]
-    {
-        new("blip_5_4", "5th → 4th", 0, Downshift("5th → 4th", "Whether a downshift from 5th to 4th blips.")),
-        new("blip_4_3", "4th → 3rd", 1, Downshift("4th → 3rd", "Whether a downshift from 4th to 3rd blips.")),
-        new("blip_3_2", "3rd → 2nd", 2, Downshift("3rd → 2nd", "Whether a downshift from 3rd to 2nd blips.")),
-        new("blip_2_1", "2nd → 1st", 3, Downshift("2nd → 1st",
-            "Whether a downshift from 2nd to 1st blips, on a pedal tap only: braking in 2nd is mostly a stop, so it never blips.")),
-        new("blip_tap_threshold", "Tap threshold", 4, new("Blip tap threshold",
-            "How far the pedal must rise for a tap. Pressed past this during a blip, the pedal ends the blip: the driver has it.",
-            "°PVS", "0.46875*X", 5.15625, 39.84375, 2, BlipCategory)),
-        new("blip_tap_length", "Tap length", 5, new("Blip tap length",
-            "A tap is the pedal up past the threshold and back below it within this time; the blip starts as it falls back. Held longer, as at the end of an upshift, the pedal is the driver's and nothing happens.",
-            "ms", "10*X", 100, 600, 0, BlipCategory)),
-    }, Note);
-
-    public static OverlayScalarGroup BlipRatiosGroup { get; } = new("Downshift blip: gear ratios", new OverlayScalar[]
-    {
-        Ratio(0, "1st", 90, 127.5), Ratio(1, "2nd", 50, 80), Ratio(2, "3rd", 35, 55), Ratio(3, "4th", 25, 42.5),
-    }, Note);
-
-    public static IReadOnlyList<OverlayMap> Maps { get; } = Array.AsReadOnly(OverlayV9.Maps
-        .Select(map => map.Index == OverlayV8.Pops ? map with { ScalarGroup = PopsGroup } : map)
-        .Append(new OverlayMap(Stabs, "pops_stabs", "Pops stabs", 0xCFF88, 8, false, StabsGroup))
-        .Append(new OverlayMap(Blip, "blip", "Downshift blip", 0xCFF90, 8, false, BlipGroup))
-        .Append(new OverlayMap(BlipGears, "blip_gears", "Downshift blip: gears and tap", 0xCFF98, 8, false, BlipGearsGroup))
-        .Append(new OverlayMap(BlipRatios, "blip_ratios", "Downshift blip: gear ratios", 0xCFFA0, 8, false, BlipRatiosGroup))
-        .ToArray());
+    public static OverlayScalarGroup BlipGroup => OverlaySettings.BlipGroup;
+    public static OverlayScalarGroup BlipGearsGroup => OverlaySettings.BlipGearsGroup;
+    public static OverlayScalarGroup BlipRatiosGroup => OverlaySettings.BlipRatiosGroup;
+    public static IReadOnlyList<OverlayMap> Maps => OverlayCatalogue.Maps;
 
     /// <summary>V10.1's pops group: the AFR target down to 7.4, and the opening's rule for the rise once the stabs have begun.</summary>
     public static OverlayScalarGroup PopsGroupV101 { get; } = PopsGroup with
@@ -250,20 +174,9 @@ public static class OverlayV10
         if (copy.Length != 8 || !WithinLimits(table, copy, LimitsFor(minor))) return OverlayReason.Range;
         return table == Blip && copy[HoldOpening] > copy[BlipOpening] ? OverlayReason.Range : null;
     }
-
-    /// <summary>
-    /// Why the app refuses a copy of a settings group, in the words it shows: the group's limits, naming 140's hold rule
-    /// when that alone is broken; null for LC, NLS and RAL, whose callers word their own refusal.
-    /// </summary>
-    public static string? Refusal(int table, ReadOnlySpan<byte> copy) => table switch
-    {
-        OverlayV8.Pops => "A pops setting is outside its limits",
-        Stabs => "A stab setting is outside its limits",
-        Blip when copy.Length == 8 && WithinLimits(table, copy, Limits) && copy[HoldOpening] > copy[BlipOpening]
-            => "A blip setting is outside its limits: the hold opening is above the blip opening",
-        Blip or BlipGears or BlipRatios => "A blip setting is outside its limits",
-        _ => null,
-    };
+    public static bool IsCurrent(OverlayHeader? header) => OverlayProtocol.IsCurrent(header);
+    public static bool IsCurrent(ReadOnlySpan<byte> image) => OverlayProtocol.IsCurrent(image);
+    public static string? Refusal(int table, ReadOnlySpan<byte> copy) => OverlaySettings.Refusal(table, copy);
 
     /// <summary>Whether every byte of an 8-byte copy of group 139..142 is within its limits (140's switch may be a CAN bit).</summary>
     private static bool WithinLimits(int table, ReadOnlySpan<byte> copy, IReadOnlyDictionary<int, IReadOnlyList<(byte Low, byte High)>> all)
@@ -274,17 +187,4 @@ public static class OverlayV10
                 return false;
         return true;
     }
-
-    /// <summary>The blip switch's choices are pops' own, one "n: label" line each, which the editor shows as a list.</summary>
-    private static string SwitchDescription() => string.Join("\n",
-        new[] { "When the ECU may blip the throttle on a downshift. Cruise control armed: the main switch is on and no speed is held." }
-            .Concat(OverlayV8.Triggers.Select(trigger => $"{trigger.Value}: {trigger.Label}")));
-
-    private static OverlayScalarDefinition Downshift(string shift, string description) =>
-        new($"Blip on {shift}", description + "\n0: Off\n1: On", "-", "X", 0, 1, 0, BlipCategory);
-
-    private static OverlayScalar Ratio(int offset, string gear, double low, double high) =>
-        new($"blip_ratio_{offset + 1}", $"rpm per km/h, {gear}", offset, new($"Engine speed per km/h in {gear}",
-            $"The engine rpm per km/h of road speed in {gear}. A blip into {gear} aims at the road speed times this; check it against a log in {gear}.",
-            "rpm/(km/h)", "0.5*X", low, high, 1, BlipCategory));
 }

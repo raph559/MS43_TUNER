@@ -9,7 +9,7 @@ namespace MS43Logger.AvaloniaApp;
 
 public sealed record ChoiceItem(long Value, string Label)
 {
-    /// <summary>The choice as the list shows it; the raw number has its own column (system 5.13).</summary>
+    /// <summary>The choice as the list shows it; the raw number has its own column.</summary>
     public string Text => Label;
 }
 
@@ -33,8 +33,8 @@ public sealed class ValueEditorViewModel : ViewModelBase, IDisposable
         _document = document ?? throw new ArgumentNullException(nameof(document));
         _history = history ?? throw new ArgumentNullException(nameof(history));
         Item = item ?? throw new ArgumentNullException(nameof(item));
-        // The choices as this bin's overlay reads them (V9 names its LC/NLS/RAL triggers).
-        Choices = item is XdfConstant constant ? catalog.Choices(constant, OverlayHeader.VersionIn(document.Image.Bytes))?.Select(choice => new ChoiceItem(choice.Value, choice.Label)).ToList() : null;
+        // The choices as this bin's overlay reads them (the current overlay names its LC/NLS/RAL triggers).
+        Choices = item is XdfConstant constant ? catalog.Choices(constant, OverlayProtocol.IsCurrent(document.Image.Bytes))?.Select(choice => new ChoiceItem(choice.Value, choice.Label)).ToList() : null;
         Limits = item is XdfConstant limited
             ? EditLimits.For(document.Reader.Codec, limited.Math, limited.Data, limited.RangeLow, limited.RangeHigh)
             : new EditLimits(0, 1, 1, null, null);
@@ -60,7 +60,7 @@ public sealed class ValueEditorViewModel : ViewModelBase, IDisposable
 
     public long RawValue => Current.Raw;
 
-    /// <summary>The slider's low end (system 5.14): the XDF end where it narrows the storable range, else the storable end.</summary>
+    /// <summary>The slider's low end: the XDF end where it narrows the storable range, else the storable end.</summary>
     public double SpanLow => Span().Low;
 
     public double SpanHigh => Span().High;
@@ -164,7 +164,18 @@ public sealed class ValueEditorViewModel : ViewModelBase, IDisposable
         }
 
         var codec = _document.Reader.Codec;
-        PendingValue = codec.ToPhysical(constant.Math, codec.ToRaw(constant.Math, constant.Data, physical));
+        try
+        {
+            PendingValue = codec.ToPhysical(constant.Math, codec.ToRaw(constant.Math, constant.Data, physical));
+        }
+        catch (Exception error) when (error is InvalidOperationException or NotSupportedException)
+        {
+            // An equation the codec cannot invert: the drag shows nothing to set, as TableEdits refuses the write.
+            PendingValue = null;
+            DragText = $"{constant.Title} cannot be set by dragging: {error.Message}";
+            return;
+        }
+
         DragText = $"Release to set {WithUnits(Number(PendingValue.Value))}. Esc cancels.";
     }
 
@@ -273,7 +284,7 @@ public sealed class ValueEditorViewModel : ViewModelBase, IDisposable
 
     /// <summary>
     /// Stores the typed value (snapped to the nearest value the ECU can hold). The field empties once the value is
-    /// written, since it is never prefilled (system 5.3); a refused or unparsable entry stays for correction.
+    /// written, since it is never prefilled; a refused or unparsable entry stays for correction.
     /// </summary>
     public bool Apply()
     {

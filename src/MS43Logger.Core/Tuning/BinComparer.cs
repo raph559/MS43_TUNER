@@ -74,7 +74,7 @@ public sealed record BinComparison(IReadOnlyList<ItemDifference> Items, IReadOnl
 /// <summary>Compares two bins item by item through one XDF, and lists the bytes no item covers.</summary>
 public static class BinComparer
 {
-    // File offsets where each flash area starts (MS43LAB REPORT.md §2).
+    // File offsets at the start of each MS43 flash area.
     private static readonly (int Start, string Name)[] Areas =
     [
         (0x00000, "Boot block"),
@@ -100,8 +100,8 @@ public static class BinComparer
         var catalog = new XdfCatalog(xdf);
         var readerA = new CalibrationReader(xdf, a);
         var readerB = new CalibrationReader(xdf, b);
-        // Each side names a trigger as its own overlay reads it (V9's LC/NLS/RAL triggers).
-        var (versionA, versionB) = (LiveTuning.OverlayHeader.VersionIn(a.Bytes), LiveTuning.OverlayHeader.VersionIn(b.Bytes));
+        // Each side names a trigger as its own overlay reads it (the current overlay's LC/NLS/RAL triggers).
+        var (versionA, versionB) = (LiveTuning.OverlayProtocol.IsCurrent(a.Bytes), LiveTuning.OverlayProtocol.IsCurrent(b.Bytes));
         var items = new List<ItemDifference>();
 
         foreach (var table in xdf.Tables)
@@ -271,9 +271,9 @@ public static class BinComparer
         item.CategoryIds.Select(id => xdf.Categories.TryGetValue(id, out var name) ? name : null).OfType<string>().FirstOrDefault()
         ?? XdfCatalog.OtherCategory;
 
-    private static string Show(XdfCatalog catalog, XdfConstant constant, ConstantValue value, int overlayVersion)
+    private static string Show(XdfCatalog catalog, XdfConstant constant, ConstantValue value, bool currentOverlay)
     {
-        if (catalog.Choices(constant, overlayVersion) is { } choices && choices.FirstOrDefault(choice => choice.Value == value.Raw) is { Label: { } label })
+        if (catalog.Choices(constant, currentOverlay) is { } choices && choices.FirstOrDefault(choice => choice.Value == value.Raw) is { Label: { } label })
         {
             return label;
         }

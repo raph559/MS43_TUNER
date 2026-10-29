@@ -1,37 +1,20 @@
 using System.Buffers.Binary;
-
 namespace MS43Logger.Core.LiveTuning;
 
+/// <summary>Compatibility entry points for session framing introduced in V3.</summary>
 public static class OverlayV3
 {
     public const int Version = 3;
-    public const int PatchBytes = 8;
+    public const int PatchBytes = OverlayProtocol.PatchBytes;
     public const int CopyBytes = 932;
-    public const int MostWrite = 112;
-    public const int MinimumPatchGapMilliseconds = 100;
+    public const int MostWrite = OverlayProtocol.MostWrite;
+    public const int MinimumPatchGapMilliseconds = OverlayProtocol.MinimumPatchGapMilliseconds;
     public static IReadOnlyList<int> Addresses { get; } = Array.AsReadOnly(new[] { 0x041D00, 0x00E6E0, 0x041E40, 0x00E704, 0x041F00 });
 
     public static int Offset(int table) => Addresses[table] & 0x3FFF;
 
-    public static byte[] Open(uint session)
-    {
-        if (session == 0) throw new ArgumentOutOfRangeException(nameof(session));
-        var bytes = new byte[6] { 0x6D, 10, 0, 0, 0, 0 };
-        Put(bytes, 2, session);
-        return bytes;
-    }
-
-    public static byte[] Mutation(byte[] command, uint session, uint revision)
-    {
-        if (command.Length < 2 || command[0] != 0x6D || command[1] is < 1 or > 8 || session == 0)
-            throw new ArgumentException("Invalid session mutation.");
-        var result = new byte[command.Length + 8];
-        command.AsSpan(0, 2).CopyTo(result);
-        Put(result, 2, session);
-        Put(result, 6, revision);
-        command.AsSpan(2).CopyTo(result.AsSpan(10));
-        return result;
-    }
+    public static byte[] Open(uint session) => OverlayProtocol.Open(session);
+    public static byte[] Mutation(byte[] command, uint session, uint revision) => OverlayProtocol.Mutation(command, session, revision);
 
     public static byte[] Patch(int table, int at, uint session, uint revision, ReadOnlySpan<byte> before, ReadOnlySpan<byte> after)
     {
@@ -52,19 +35,7 @@ public static class OverlayV3
         Put(result, 30, OverlayContract.Crc32(result.AsSpan(2, 28)));
         return result;
     }
-
-    public static IEnumerable<int> ChangedWindows(byte[] before, byte[] after)
-    {
-        if (before.Length != after.Length || before.Length < PatchBytes || (before.Length & 1) != 0)
-            throw new ArgumentException("Invalid table sizes.");
-        for (var i = 0; i < before.Length;)
-        {
-            if (before[i] == after[i]) { i++; continue; }
-            var at = Math.Min(i / PatchBytes * PatchBytes, before.Length - PatchBytes);
-            yield return at;
-            i = at + PatchBytes;
-        }
-    }
+    public static IEnumerable<int> ChangedWindows(byte[] before, byte[] after) => OverlayProtocol.ChangedWindows(before, after);
 
     public static OverlayStatus ParseStatus(IReadOnlyList<byte> reply)
     {
@@ -89,13 +60,7 @@ public static class OverlayV3
             throw new InvalidDataException("Invalid map byte count.");
         return new OverlayStatus(3, (p[5] & 1) != 0, false, entries, free, Get(p, 48), Get(p, 52));
     }
-
-    public static (OverlayReason? Reason, uint Revision) Response(byte[] response)
-    {
-        OverlayContract.ValidateFrame(response);
-        if (response.Length == 8 && response[2] == 0xA0) return (null, Get(response, 3));
-        return (OverlayContract.Refusal(response), 0);
-    }
+    public static (OverlayReason? Reason, uint Revision) Response(byte[] response) => OverlayProtocol.Response(response);
 
     private static uint Get(byte[] data, int at) => BinaryPrimitives.ReadUInt32BigEndian(data.AsSpan(at));
     private static void Put(byte[] data, int at, uint value) => BinaryPrimitives.WriteUInt32BigEndian(data.AsSpan(at), value);

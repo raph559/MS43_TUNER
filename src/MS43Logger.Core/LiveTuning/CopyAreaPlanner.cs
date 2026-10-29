@@ -17,16 +17,6 @@ public static class CopyAreaPlanner
         return FirstFit(OverlayContract.Maps[table].Bytes, Extents(status, except: table));
     }
 
-    /// <summary>The smallest single map (the lowest index on a tie) whose freeing would let <paramref name="table"/> fit; null when none would.</summary>
-    public static int? FreeFirst(int table, OverlayStatus status) => status.Version is OverlayV5.Version or OverlayV6.Version or OverlayV7.Version or OverlayV8.Version or OverlayV9.Version or OverlayV10.Version ? OverlayV5.FreeFirst(table, status) :
-        status.Version == OverlayV4.Version ? OverlayV4.FreeFirst(table, status) :
-        OverlayContract.Maps
-            .Where(m => m.Index != table && status.Tables[m.Index].State != OverlayState.Free)
-            .OrderBy(m => m.Bytes).ThenBy(m => m.Index)
-            .Where(m => FirstFit(OverlayContract.Maps[table].Bytes, Extents(status, except: table).Where(e => e.Table != m.Index)) is not null)
-            .Select(m => (int?)m.Index)
-            .FirstOrDefault();
-
     private static IEnumerable<(int Table, int Start, int End)> Extents(OverlayStatus status, int except) =>
         OverlayContract.Maps
             .Where(m => m.Index != except && status.Tables[m.Index].State != OverlayState.Free)

@@ -51,18 +51,18 @@ public sealed partial class XdfCatalog
 
     /// <summary>The "n: label" lines of a configuration switch's description, or null when it has fewer than two.</summary>
     /// <summary>
-    /// The choices as a bin with overlay <paramref name="overlayVersion"/> reads them: from V9, the activation bytes of launch
-    /// control, no-lift shift and rolling anti-lag also take triggers, listed by name; otherwise the description's lines.
+    /// The choices as a bin reads them: with the current overlay (<paramref name="currentOverlay"/>), the activation bytes of
+    /// launch control, no-lift shift and rolling anti-lag also take triggers, listed by name; otherwise the description's lines.
     /// </summary>
-    public IReadOnlyList<(long Value, string Label)>? Choices(XdfConstant constant, int overlayVersion)
+    public IReadOnlyList<(long Value, string Label)>? Choices(XdfConstant constant, bool currentOverlay)
     {
         ArgumentNullException.ThrowIfNull(constant);
-        if (overlayVersion >= LiveTuning.OverlayV9.Version && constant.Title switch
+        if (currentOverlay && constant.Title switch
             {
-                "c_conf_lc" => LiveTuning.OverlayV6.LaunchControl, "c_conf_nls" => LiveTuning.OverlayV6.NoLiftShift,
-                "c_conf_ral" => LiveTuning.OverlayV6.RollingAntiLag, _ => 0,
+                "c_conf_lc" => LiveTuning.OverlaySettings.LaunchControl, "c_conf_nls" => LiveTuning.OverlaySettings.NoLiftShift,
+                "c_conf_ral" => LiveTuning.OverlaySettings.RollingAntiLag, _ => 0,
             } is var table and > 0)
-            return LiveTuning.OverlayV9.TriggersFor(table).Select(t => ((long)t.Value, t.Label)).ToList();
+            return LiveTuning.OverlayTriggers.For(table).Select(t => ((long)t.Value, t.Label)).ToList();
         return Choices(constant);
     }
 
