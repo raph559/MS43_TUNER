@@ -53,7 +53,7 @@ public sealed class LiveTuningViewModel : ViewModelBase, IDisposable
     private string _memoryText = "Connect to read live RAM usage.";
     private string _allocationText = string.Empty;
     private int _memoryUsed;
-    private int _memoryCapacity = OverlayV3.CopyBytes;
+    private int _memoryCapacity = OverlayMemory.Budget;
     private string _limiterHysteresis = string.Empty;
     private int _limiterMode;
     private bool _limiterEnabled;
@@ -95,7 +95,7 @@ public sealed class LiveTuningViewModel : ViewModelBase, IDisposable
     public string MapSearch { get => _mapSearch; set { if (SetField(ref _mapSearch, value)) UpdateFilteredMaps(); } }
     public bool LoadedOnly { get => _loadedOnly; set { if (SetField(ref _loadedOnly, value)) UpdateFilteredMaps(); } }
     public bool HasVerifiedCatalogue => _line is not null && _page is not null
-        && _session?.Detection is { Problem: null, Header.Version: 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 };
+        && _session?.Detection is { Problem: null } detection && OverlayProtocol.IsCurrent(detection.Header);
     public bool IsV4 => HasVerifiedCatalogue && _session!.Detection!.Header!.Version is 4 or 5 or 6 or 7 or 8 or 9 or 10;
     public bool IsV5 => HasVerifiedCatalogue && _session!.Detection!.Header!.Version == 5;
     public bool IsV6 => HasVerifiedCatalogue && _session!.Detection!.Header!.Version is 6 or 7 or 8 or 9 or 10;
@@ -104,9 +104,8 @@ public sealed class LiveTuningViewModel : ViewModelBase, IDisposable
     public bool HasTableEditor => HasVerifiedCatalogue && Editor is not null;
     public string? ScalarNote => Selected?.Map.ScalarGroup?.Note;
 
-    public string LimiterScopeText => IsV6
-        ? "Launch control, no-lift shift and rolling anti-lag have separate optional settings groups. The hard fuel-cut limit keeps its flashed value."
-        : "The separate hard fuel-cut limit and launch / no-lift-shift thresholds keep their flashed values.";
+    public string LimiterScopeText =>
+        "Launch control, no-lift shift and rolling anti-lag have separate optional settings groups. The hard fuel-cut limit keeps its flashed value.";
     public string CatalogueText
     {
         get
@@ -120,11 +119,11 @@ public sealed class LiveTuningViewModel : ViewModelBase, IDisposable
             }
             if (_tune.Document is null) return "Open a BIN to check live-map support.";
             if (_session?.Detection?.Problem == "not found") return "No live-tuning overlay on this ECU.";
+            if (_session?.Detection is { Problem: not null, Header: { } other } && !OverlayProtocol.IsCurrent(other))
+                return $"Overlay V{other.Label} not supported: flash the V{OverlayProtocol.Label} bin.";
             if (_session?.Detection?.Problem is not null) return "Live-tuning overlay not supported.";
             if (!HasVerifiedCatalogue) return "Checking live-map support…";
-            return IsV6 ? $"{Maps.Count(m => m.Map.ScalarGroup is null && !m.Map.Reserved)} supported maps + {Maps.Count(m => m.Map.ScalarGroup is not null)} settings groups · load while RAM fits"
-                : IsV5 ? $"{Maps.Count} supported maps · load while RAM fits"
-                : IsV4 ? $"{Maps.Count} supported maps · choose up to 5" : $"{Maps.Count} supported maps";
+            return $"{Maps.Count(m => m.Map.ScalarGroup is null && !m.Map.Reserved)} supported maps + {Maps.Count(m => m.Map.ScalarGroup is not null)} settings groups · load while RAM fits";
         }
     }
     public string MemoryText { get => _memoryText; private set => SetField(ref _memoryText, value); }
@@ -250,6 +249,12 @@ public sealed class LiveTuningViewModel : ViewModelBase, IDisposable
             return Task.FromResult<string?>(null);
         }
 
+        // Every settings group needs its definitions before anything is copied, so a refusal never leaves half the maps copied.
+        if (rows.FirstOrDefault(row => row.Map.ScalarGroup is not null && session.SentCopy(row.Map.Index) is not null && ScalarsFor(row.Map) is null) is { } missing)
+        {
+            return Task.FromResult<string?>($"Nothing was copied: {missing.Title} needs complete matching definitions in the loaded XDF.");
+        }
+
         var source = bin.Image.ToArray();
         foreach (var row in rows)
         {
@@ -289,9 +294,18 @@ public sealed class LiveTuningViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        // The copy is what the ECU ran: edits made on the page after the last Send stay on the page, and are named.
+        var later = sent.Where(row => !PageCopy(row.Map).AsSpan().SequenceEqual(session.SentCopy(row.Map.Index)!)).ToList();
         var warning = await CopyToTuneAsync(sent);
+        if (warning?.StartsWith("Nothing was copied", StringComparison.Ordinal) == true)
+        {
+            Problem = warning;
+            return;
+        }
+
         Problem = $"Copied {sent.Count} {(sent.Any(row => row.Map.ScalarGroup is not null) ? (sent.Count == 1 ? "item" : "items") : (sent.Count == 1 ? "map" : "maps"))} to the Tune tab: save the bin there."
             + (never.Count > 0 ? $" Not copied, never sent: {string.Join(", ", never.Select(row => row.Title))}." : string.Empty)
+            + (later.Count > 0 ? $" Copied as last sent, without the edits made since: {string.Join(", ", later.Select(row => row.Title))}." : string.Empty)
             + (warning is null ? string.Empty : " " + warning);
     }
 
@@ -325,7 +339,11 @@ public sealed class LiveTuningViewModel : ViewModelBase, IDisposable
         }
         else
         {
-            _session.Rebind(line);
+            await _session.RebindAsync(line);
+            if (attachment != _attachments)
+            {
+                return;
+            }
         }
 
         var session = _session;
@@ -410,18 +428,22 @@ public sealed class LiveTuningViewModel : ViewModelBase, IDisposable
         Refresh();
     }
 
-    /// <summary>Sends one map or group, with every refusal of the page's own Send (the Fun tab sends this way).</summary>
-    public async Task SendAsync(LiveMapRow row)
+    /// <summary>
+    /// Sends one map or group, with every refusal of the page's own Send (the Fun tab sends this way). True only when it
+    /// went out and the ECU took it; otherwise <see cref="Problem"/> says why.
+    /// </summary>
+    public async Task<bool> SendAsync(LiveMapRow row)
     {
         if (_session is null || _pageFlash is null || IsReadOnly || _page is null)
         {
-            return;
+            Problem = "Not sent: the ECU link is not ready for live edits.";
+            return false;
         }
 
-        if (RefusalFor(row) is { } refused) { Problem = refused; return; }
+        if (RefusalFor(row) is { } refused) { Problem = refused; return false; }
         var index = row.Map.Index;
         var copy = PageCopy(row.Map);
-        await Act(async session =>
+        var sent = await Act(async session =>
         {
             var result = await session.SendAsync(index, copy);
             return result.Refused;
@@ -430,12 +452,15 @@ public sealed class LiveTuningViewModel : ViewModelBase, IDisposable
         {
             Problem = problem;
             _sessionProblemShown = problem;
+            return false;
         }
+
+        return sent;
     }
 
     /// <summary>
     /// Why the page's copy of <paramref name="row"/> would be refused before anything is sent (a missing definition, the
-    /// overlay's rules, protocol 2's edit limits), or null when it may be sent; the Fun tab checks every group of a page
+    /// overlay's rules), or null when it may be sent; the Fun tab checks every group of a page
     /// this way before it sends any.
     /// </summary>
     public string? RefusalFor(LiveMapRow row)
@@ -444,34 +469,28 @@ public sealed class LiveTuningViewModel : ViewModelBase, IDisposable
         var index = row.Map.Index;
         if (!HasDefinition(row.Map)) return "This item needs complete matching definitions in the loaded XDF.";
         var copy = PageCopy(row.Map);
-        if (IsV6 && OverlayV9.ValidateFor(OverlayVersion ?? 0, index, copy, flash[index], _session.Detection?.Header?.Minor ?? 0) is not null)
-            return (OverlayV10.Refusal(index, copy)
+        if (OverlaySettings.ValidateCopy(index, copy, flash[index]) is not null)
+            return (OverlaySettings.Refusal(index, copy)
                 ?? "The settings contain an unsupported activation mode or change a neighbouring calibration byte") + ". Nothing was sent.";
-        var fullRange = _session.Detection?.Header?.Version is 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10;
-        var leaner = fullRange ? Array.Empty<int>() : OverlayContract.LeanerCells(index, copy, flash[index]);
-        if (leaner.Count > 0)
-            return $"{row.Title}: {leaner.Count} {(leaner.Count == 1 ? "cell is" : "cells are")} leaner than flashed. Nothing was sent: richer only until a wideband sensor is fitted.";
-        var outside = fullRange ? Array.Empty<int>() : OverlayContract.EditLimitCells(index, copy, flash[index]);
-        if (outside.Count > 0)
-            return $"{row.Title}: {outside.Count} {(outside.Count == 1 ? "cell exceeds" : "cells exceed")} the firmware limit relative to flashed values. "
-                + (row.Map.RicherOnly ? "AFR cells allow 0 to +8 raw steps." : "Ignition and cam cells allow -8 to +8 raw steps.")
-                + " Nothing was sent. These limits do not establish engine safety.";
         return null;
     }
 
-    private async Task Act(Func<LiveTuningSession, Task<OverlayReason?>> action, bool clearProblem = false)
+    // True when the action ran and the ECU did not refuse it.
+    private async Task<bool> Act(Func<LiveTuningSession, Task<OverlayReason?>> action, bool clearProblem = false)
     {
         if (_session is not { } session || IsReadOnly)
         {
             Refresh();
-            return;
+            return false;
         }
 
+        var done = false;
         try
         {
             var refused = await action(session);
             Problem = refused is { } reason ? $"The ECU refused: {Describe(reason)}." : clearProblem || Problem is null ? null : Problem;
             _sessionProblemShown = session.Problem;
+            done = refused is null;
         }
         catch (TimeoutException)
         {
@@ -487,6 +506,7 @@ public sealed class LiveTuningViewModel : ViewModelBase, IDisposable
         }
 
         Refresh();
+        return done;
     }
 
     private void BuildPage(OverlayDetection detection)
@@ -614,38 +634,32 @@ public sealed class LiveTuningViewModel : ViewModelBase, IDisposable
                 .SequenceEqual(session?.SentCopy(index) is { } sent && row.Intent != MapIntent.None ? sent : flash[index]);
             row.CanSwitch = !IsReadOnly && status is { Running: true } && row.State is OverlayState.Ready or OverlayState.On;
             row.NotifyIsOn();
-            var fits = status is not null && CopyAreaPlanner.Place(index, status) is not null;
+            var fits = status is not null && OverlayMemory.Place(index, status) is not null;
             row.CanLoad = !IsReadOnly && status is { Running: true } && fits && HasDefinition(row.Map);
-            var tracking = status?.Version is 5 or 6 or 7 or 8 or 9 or 10 && row.State == OverlayState.Free && fits
-                && OverlayV5.Place(index, status)?.DirectorySlot >= OverlayV5.BaseSlots
-                    ? OverlayV5.TrackingBytes(status) == 0 ? $" + {8 + OverlayV5.LookupBytes(status.Version)} tracking" : " + 8 tracking" : string.Empty;
+            var tracking = status is not null && row.State == OverlayState.Free && fits
+                && OverlayMemory.Place(index, status)?.DirectorySlot >= OverlayMemory.BaseSlots
+                    ? OverlayMemory.TrackingBytes(status) == 0 ? $" + {8 + OverlayMemory.LookupBytes} tracking" : " + 8 tracking" : string.Empty;
             row.CapacityText = $"{row.Map.Bytes} bytes{tracking}" + (!HasDefinition(row.Map) ? " · XDF definition missing"
                 : status is null ? string.Empty : row.State != OverlayState.Free ? " · allocated" : fits ? " · fits" : " · no room");
         }
-        MemoryCapacity = status?.Version == 2 ? OverlayContract.CopyBytes : status?.Version >= 5 ? OverlayV5.Budget(status.Version) : OverlayV3.CopyBytes;
+        MemoryCapacity = OverlayMemory.Budget;
         MemoryUsed = status is null ? 0 : MemoryCapacity - status.FreeBytes;
         MemoryText = status is null ? "Connect to read live RAM usage." : $"{MemoryUsed} / {MemoryCapacity} bytes used · {status.FreeBytes} free";
         var loadedGroups = status is null ? 0 : Maps.Count(row => row.Map.ScalarGroup is not null && status.Tables[row.Map.Index].State != OverlayState.Free);
-        var loadedText = status?.Version is 6 or 7 or 8 or 9 or 10
-            ? $"{Maps.Count(row => row.Map.ScalarGroup is null && status.Tables[row.Map.Index].State != OverlayState.Free)} maps + {loadedGroups} settings {(loadedGroups == 1 ? "group" : "groups")}"
-            : $"{status?.Tables.Count(e => e.State != OverlayState.Free)} maps";
-        AllocationText = status?.Version is 5 or 6 or 7 or 8 or 9 or 10 ? $"{loadedText} loaded · {OverlayV5.TrackingBytes(status)} bytes for extra tracking\nLargest free block: {OverlayV5.LargestBlock(status)} bytes · hardcut: 8 bytes reserved."
-            : status?.Version == 4 ? $"{status.Tables.Count(e => e.State != OverlayState.Free)} / 5 map slots · largest free block {OverlayV4.LargestBlock(status)} bytes\nHardcut: 8 bytes reserved separately."
-            : status?.Version == 3 ? "Fixed map locations. Freeing a map does not move the others." : string.Empty;
+        AllocationText = status is null ? string.Empty
+            : $"{Maps.Count(row => row.Map.ScalarGroup is null && status.Tables[row.Map.Index].State != OverlayState.Free)} maps + {loadedGroups} settings {(loadedGroups == 1 ? "group" : "groups")} loaded"
+                + $" · {OverlayMemory.TrackingBytes(status)} bytes for extra tracking\nLargest free block: {OverlayMemory.LargestBlock(status)} bytes · hardcut: 8 bytes reserved.";
         if (status?.Limiter is { } hard)
         {
             if (!_limiterAdopted) { if (hard.Confirmed) ShowLimiter(hard); _limiterAdopted = true; }
             LimiterState = (hard.Enabled ? "Live settings enabled" : "Flashed settings selected")
                 + $" · currently {(hard.AppliedIgnitionCut ? "ignition" : "fuel")} cut"
-                + (hard.AppliedIgnitionCut != (hard.Enabled ? hard.IgnitionCut : session!.Detection!.LimiterFlash!.IgnitionCut)
+                + (hard.AppliedIgnitionCut != (hard.Enabled ? hard.IgnitionCut : session?.Detection?.LimiterFlash?.IgnitionCut ?? hard.AppliedIgnitionCut)
                     ? ". Mode change waits for the limiter to release." : string.Empty);
         }
         UpdateFilteredMaps();
         OnPropertyChanged(nameof(CanSendSelected));
         OnPropertyChanged(nameof(HasVerifiedCatalogue));
-        OnPropertyChanged(nameof(IsV4));
-        OnPropertyChanged(nameof(IsV5));
-        OnPropertyChanged(nameof(IsV6));
         OnPropertyChanged(nameof(LimiterScopeText));
         OnPropertyChanged(nameof(CatalogueText));
         OnPropertyChanged(nameof(HasScalarEditor));
@@ -728,9 +742,6 @@ public sealed class LiveTuningViewModel : ViewModelBase, IDisposable
     public IReadOnlyList<LiveScalarRow>? BuildScalarRows(OverlayMap map) =>
         map.ScalarGroup is not null && ScalarsFor(map) is { } constants && _page is { } page && _history is { } history
             ? LiveScalarRow.Build(page, history, map, constants) : null;
-
-    /// <summary>The detected overlay's protocol version; null before a detection.</summary>
-    public int? OverlayVersion => _session?.Detection?.Header?.Version;
 
     public string? OverlayLabel => _session?.Detection?.Header?.Label;
 
@@ -907,7 +918,7 @@ public sealed class LiveTuningViewModel : ViewModelBase, IDisposable
 
     public async Task SendLimiterAsync()
     {
-        if (!IsV4 || IsReadOnly) return;
+        if (!HasVerifiedCatalogue || IsReadOnly) return;
         try
         {
             static byte Raw(string value)

@@ -3,8 +3,8 @@
         xmlns:controls="using:MS43Logger.AvaloniaApp.Controls"
         xmlns:theme="using:MS43Logger.AvaloniaApp.Theme">
     <!--
-        Component styles of docs/superpowers/specs/2026-10-20-ms43-restyle-system.md, sections 3 to 5. Hover and press
-        are overlays of Ink1 on whatever surface a control sits on. Their fades live in Motion.axaml (MOTION 2). Keyboard focus is the
+        Component styles of docs/design-system.md, sections 3 to 5. Hover and press
+        are overlays of Ink1 on whatever surface a control sits on. Their fades live in Motion.axaml. Keyboard focus is the
         one Ink1 ring with a 2 px gap, never orange.
     -->
     <Styles.Resources>
@@ -83,7 +83,7 @@
         <Setter Property="FontSize" Value="13" />
     </Style>
 
-    <!-- Type (system 3.2). UI text in Segoe UI; every number in Bahnschrift with tabular figures; ids in Cascadia Mono. -->
+    <!-- Type. UI text in Segoe UI; every number in Bahnschrift with tabular figures; ids in Cascadia Mono. -->
     <Style Selector="TextBlock.label">
         <Setter Property="FontSize" Value="12" />
         <Setter Property="LineHeight" Value="16" />
@@ -164,7 +164,7 @@
         <Setter Property="Foreground" Value="{DynamicResource NowTextBrush}" />
     </Style>
 
-    <!-- Buttons (system 5.2): secondary by default; one primary per screen; quiet for second-rank actions. -->
+    <!-- Buttons: secondary by default; one primary per screen; quiet for second-rank actions. -->
     <Style Selector="Button">
         <Setter Property="Background" Value="{DynamicResource ButtonBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource ButtonEdgeBrush}" />
@@ -207,7 +207,7 @@
     </Style>
     <!-- Fluent's own Button theme still styles the part named PART_ContentPresenter while hovered, pressed or disabled: a
          filled box (white on Night hover), its own label colour and a 0.98 press scale. The label box stays clear and keeps
-         the button's colour, so the overlay above is the only state change (system 1.1); no press scale. -->
+         the button's colour, so the overlay above is the only state change; no press scale. -->
     <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button:pressed /template/ ContentPresenter#PART_ContentPresenter, Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="Transparent" />
@@ -329,7 +329,7 @@
         <Setter Property="Background" Value="Transparent" />
     </Style>
 
-    <!-- Screen tabs in the header (system 5.1): text tabs, the selected one Ink1 SemiBold with a 2 px underline. -->
+    <!-- Screen tabs in the header: text tabs, the selected one Ink1 SemiBold with a 2 px underline. -->
     <Style Selector="ToggleButton.tab">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
@@ -361,7 +361,7 @@
         <Setter Property="RenderTransform" Value="scaleX(1)" />
     </Style>
 
-    <!-- The tab column (owner, 2026-10-28): one row per screen, the current one marked by a 2 px bar on its left. -->
+    <!-- The tab column: one row per screen, the current one marked by a 2 px bar on its left. -->
     <Style Selector="ToggleButton.navtab">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
@@ -396,7 +396,7 @@
         <Setter Property="RenderTransform" Value="scaleY(1)" />
     </Style>
 
-    <!-- Segmented control (system 5.4): a Fill track with a 2 px inset; the selected segment is raised, with a soft edge
+    <!-- Segmented control: a Fill track with a 2 px inset; the selected segment is raised, with a soft edge
          and an Ink1 SemiBold label. -->
     <Style Selector="Border.seg">
         <Setter Property="Background" Value="{DynamicResource FillBrush}" />
@@ -460,7 +460,7 @@
         <Setter Property="FontSize" Value="12" />
     </Style>
 
-    <!-- Switch (system 5.5): off is a Pane track with an Edge and an Ink3 knob, on is an Ink1 track with a Pane knob. -->
+    <!-- Switch: off is a Pane track with an Edge and an Ink3 knob, on is an Ink1 track with a Pane knob. -->
     <Style Selector="ToggleSwitch">
         <Setter Property="MinWidth" Value="0" />
         <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
@@ -496,7 +496,7 @@
         <Setter Property="CornerRadius" Value="4" />
     </Style>
 
-    <!-- Inputs and pickers (system 5.3): Pane, a 1 px Edge, radius 8, 32 px. Focus shows the ring, not a border change. -->
+    <!-- Inputs and pickers: Pane, a 1 px Edge, radius 8, 32 px. Focus shows the ring, not a border change. -->
     <Style Selector="TextBox">
         <Setter Property="Background" Value="{DynamicResource PaneBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource EdgeBrush}" />
@@ -514,7 +514,7 @@
         <Setter Property="BorderBrush" Value="{DynamicResource EdgeBrush}" />
         <Setter Property="BorderThickness" Value="1" />
     </Style>
-    <!-- Number fields (system 5.3): the typed digits in Bahnschrift 13 with tabular figures; the placeholder and the unit
+    <!-- Number fields: the typed digits in Bahnschrift 13 with tabular figures; the placeholder and the unit
          suffix stay UI text. -->
     <Style Selector="TextBox.data13 /template/ TextPresenter#PART_TextPresenter">
         <Setter Property="TextElement.FontFamily" Value="{DynamicResource DataFont}" />
@@ -570,19 +570,19 @@
         <Setter Property="CornerRadius" Value="5" />
     </Style>
 
-    <!-- Loading (system 5.10): a 2 px indeterminate bar in Ink2 on a Hairline track, square ends, never the accent. -->
+    <!-- Loading: a 2 px indeterminate bar in Ink2 on a Hairline track, square ends, never the accent. -->
     <Style Selector="ProgressBar">
         <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
         <Setter Property="Background" Value="{DynamicResource HairlineBrush}" />
         <Setter Property="CornerRadius" Value="0" />
     </Style>
-    <!-- Fluent sizes the bar under :horizontal, which outranks a plain setter. -->
+    <!-- Fluent sizes the bar under:horizontal, which outranks a plain setter. -->
     <Style Selector="ProgressBar:horizontal">
         <Setter Property="MinHeight" Value="2" />
         <Setter Property="Height" Value="2" />
     </Style>
 
-    <!-- List rows (system 5.6): hover overlay; selected is Fill with a 2 px Ink1 bar on the left and an Ink1 SemiBold label. -->
+    <!-- List rows: hover overlay; selected is Fill with a 2 px Ink1 bar on the left and an Ink1 SemiBold label. -->
     <Style Selector="ListBox">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
@@ -629,7 +629,7 @@
         <Setter Property="Foreground" Value="{Binding $parent[ListBoxItem].Foreground}" />
     </Style>
 
-    <!-- The shortcut hint in a search field (system 5.3): "Ctrl K" in UI 11 Ink2 on a Fill chip, on every screen. -->
+    <!-- The shortcut hint in a search field: "Ctrl K" in UI 11 Ink2 on a Fill chip, on every screen. -->
     <Style Selector="Border.kbd">
         <Setter Property="Background" Value="{DynamicResource FillBrush}" />
         <Setter Property="CornerRadius" Value="4" />
@@ -642,7 +642,7 @@
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
-    <!-- Chips are real status only (system 5.7): "Saved", "1 item not saved", "Read-only". -->
+    <!-- Chips are real status only: "Saved", "1 item not saved", "Read-only". -->
     <Style Selector="Border.chip">
         <Setter Property="Background" Value="{DynamicResource FillBrush}" />
         <Setter Property="CornerRadius" Value="4" />
@@ -656,7 +656,7 @@
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
-    <!-- Banners (system 5.8): a warning carries a 3 px Warn stripe with its icon, because it marks real state. -->
+    <!-- Banners: a warning carries a 3 px Warn stripe with its icon, because it marks real state. -->
     <Style Selector="Border.banner">
         <Setter Property="Background" Value="{DynamicResource FillBrush}" />
         <Setter Property="CornerRadius" Value="8" />
@@ -670,13 +670,13 @@
         <Setter Property="BorderBrush" Value="{DynamicResource WarnBrush}" />
         <Setter Property="BorderThickness" Value="3,0,0,0" />
     </Style>
-    <!-- Amber for a condition short of danger, such as cold oil (performance spec 5); the text stays Ink1. -->
+    <!-- Amber for a condition short of danger, such as cold oil; the text stays Ink1. -->
     <Style Selector="Border.banner.caution">
         <Setter Property="BorderBrush" Value="{DynamicResource CautionBrush}" />
         <Setter Property="BorderThickness" Value="3,0,0,0" />
     </Style>
 
-    <!-- Dialogs (system 5.9, 4.3): the one Day elevation; at Night an Edge instead of a shadow nobody could see. -->
+    <!-- Dialogs: the one Day elevation; at Night an Edge instead of a shadow nobody could see. -->
     <Style Selector="Border.dialog">
         <Setter Property="Background" Value="{DynamicResource PopupBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource PopupEdgeBrush}" />

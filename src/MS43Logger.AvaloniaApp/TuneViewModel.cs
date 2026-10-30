@@ -97,6 +97,7 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _time = time;
         LiveCursor = new LiveCursorController(time);
+        _errorMessage = settings.LoadProblem;
     }
 
     /// <summary>
@@ -237,7 +238,7 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
     /// <summary>Set when the XDF was written for other firmware than the bin's.</summary>
     public string? FirmwareWarning { get => _firmwareWarning; private set => SetField(ref _firmwareWarning, value); }
 
-    /// <summary>What went wrong last (system 7.1); <see cref="ErrorAction"/> is the banner's way out.</summary>
+    /// <summary>What went wrong last; <see cref="ErrorAction"/> is the banner's way out.</summary>
     public string? ErrorMessage { get => _errorMessage; private set => SetField(ref _errorMessage, value); }
 
     public TuneAction ErrorAction { get => _errorAction; private set => SetField(ref _errorAction, value); }
@@ -303,7 +304,7 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
     /// <summary>The Settings dialog changed a choice that this screen shows.</summary>
     public void SettingsChanged() => OnPropertyChanged(nameof(SaveTip));
 
-    /// <summary>Save's tooltip; it only promises a .bak while the Settings switch keeps one.</summary>
+    /// <summary>Save's tooltip; it only promises a.bak while the Settings switch keeps one.</summary>
     public string SaveTip => !HasUnsavedChanges ? "Nothing to save" : Settings.KeepBackup ? "Save (Ctrl S). A .bak keeps the file as it was." : "Save (Ctrl S)";
 
     /// <summary>The editor for the selected table, map, curve or axis; null for values, switches and flags.</summary>
@@ -346,14 +347,14 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
 
     public bool IsReadOnlyItem => ReadOnlyReason is not null;
 
-    /// <summary>The rail's one line when a search finds nothing (system 7.1).</summary>
+    /// <summary>The rail's one line when a search finds nothing.</summary>
     public string? NoMatchText => HasDocument && SearchText.Trim().Length > 0 && Rail.Count == 0
         ? $"No map or value matches \"{SearchText.Trim()}\"."
         : null;
 
     public bool ShowsSurface => Editor is { Values: { Rows: > 1, Cols: > 1 } };
 
-    /// <summary>A one-column table (a curve or an axis) sits centred in the pane with its key line (system 8, owner).</summary>
+    /// <summary>A one-column table (a curve or an axis) sits centred in the pane with its key line.</summary>
     public bool CentreGrid => Editor is { Values.Cols: 1 };
 
 
@@ -363,7 +364,7 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
     /// <summary>The inspector's chart title: "Surface" for a map, "Breakpoints" for an axis, "Curve" for a curve.</summary>
     public string ShapeTitle => ShowsSurface ? "Surface" : IsAxis ? "Breakpoints" : "Curve";
 
-    /// <summary>An axis: its pane carries the breakpoint rule and its inspector the tables that use it (system 5.13).</summary>
+    /// <summary>An axis: its pane carries the breakpoint rule and its inspector the tables that use it.</summary>
     public bool IsAxis => SelectedItem is not null && Catalog is not null && Catalog.Kind(SelectedItem) == ItemKind.Axis;
 
     /// <summary>The tables that use the selected axis, from the XDF's axis links; empty for anything else.</summary>
@@ -371,7 +372,7 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
 
     public bool HasNoUsers => IsAxis && UsedBy.Count == 0;
 
-    /// <summary>The colour scale's caption (system 2.2): "Colour: 3.0 to 39.0 °CRK. Hatched cells are at the storage limit (-23.6)."</summary>
+    /// <summary>The colour scale's caption: "Colour: 3.0 to 39.0 °CRK. Hatched cells are at the storage limit (-23.6)."</summary>
     public string? ScaleCaption { get => _scaleCaption; private set => SetField(ref _scaleCaption, value); }
 
     public string? ScaleMinLabel => _scaleLabels.Min;
@@ -476,7 +477,7 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
     /// <summary>The selected item's kind, for its glyph in the title row.</summary>
     public ItemKind SelectedKind => SelectedItem is null || Catalog is null ? ItemKind.Value : Catalog.Kind(SelectedItem);
 
-    /// <summary>A bin is open and nothing is picked yet (system 7.1).</summary>
+    /// <summary>A bin is open and nothing is picked yet.</summary>
     public bool NothingSelected => HasDocument && SelectedItem is null;
 
     public string SearchText
@@ -700,6 +701,7 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
 
         try
         {
+            TableEdits.EnsureSameFirmware(document, image);
             if (Editor is { Selection: CellRange range } editor && item is XdfTable table)
             {
                 var plan = TableEdits.CopyFrom(document, table, range, image);
@@ -1118,7 +1120,7 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
                 }
 
                 details.Add(new Fact("Scaling", z.Math.Equation, TextIsId: true));
-                // An axis's rows are its numbered breakpoints, not an axis of their own (system 5.13).
+                // An axis's rows are its numbered breakpoints, not an axis of their own.
                 if (values.Rows > 1 && !editor.NumberRows)
                 {
                     details.Add(Axis("Rows", values.Y, values.Rows));
@@ -1136,7 +1138,7 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
                 var raw = $"raw {value.Current.Raw} (0x{Masked(value.Current.Raw, constant.Data):X})";
                 if (value.Choices is { } choices)
                 {
-                    // A switch (system 5.13): its choices come from the XDF description, its range in words.
+                    // A switch: its choices come from the XDF description, its range in words.
                     limits.Add(new Fact("Choices", $"{choices.Count}, from the XDF description"));
                     if (SwitchRange(value.Limits) is { } range)
                     {
@@ -1171,7 +1173,7 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
         DetailFacts = details;
     }
 
-    /// <summary>The colour scale's labels and caption and the surface's note, from the editor's colour range (system 2.2).</summary>
+    /// <summary>The colour scale's labels and caption and the surface's note, from the editor's colour range.</summary>
     private void DescribeScale(TableEditorViewModel editor)
     {
         var values = editor.Values;
@@ -1221,7 +1223,7 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
         OnPropertyChanged(nameof(ScaleMaxLabel));
     }
 
-    /// <summary>"Storable", "Step" and, when the XDF narrows it, "XDF range", in the item's units (system 5.13).</summary>
+    /// <summary>"Storable", "Step" and, when the XDF narrows it, "XDF range", in the item's units.</summary>
     private static void AddLimits(List<Fact> facts, EditLimits limits, string units, int? decimals)
     {
         string Number(double value) => ValueCodec.Format(value, 0, decimals, null, 16);
@@ -1238,7 +1240,7 @@ public sealed class TuneViewModel : ViewModelBase, ISidePanel
         }
     }
 
-    // A switch's XDF range in words (system 5.13): "up to 4", "from 1" or "1 to 4"; null where it narrows nothing.
+    // A switch's XDF range in words: "up to 4", "from 1" or "1 to 4"; null where it narrows nothing.
     private static string? SwitchRange(EditLimits limits)
     {
         static string Whole(double value) => ValueCodec.Format(value, 0, 0, null, 16);

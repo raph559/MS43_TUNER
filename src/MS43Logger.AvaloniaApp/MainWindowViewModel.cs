@@ -92,7 +92,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
         "TCO",
         "LAM1",
         "VB",
-        // Oil beside coolant (performance spec 9.3): TOIL in MS43X001, OILTEMP in the stock definitions.
+        // Oil beside coolant: TOIL in MS43X001, OILTEMP in the stock definitions.
         "TOIL",
         "OILTEMP",
     };
@@ -150,7 +150,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     /// <summary>
     /// True while the session dropped without Disconnect (a key-off: the ECU stopped answering after it had answered) and a
-    /// connect is tried every <see cref="ReconnectInterval"/>; the log stays open (live tuning spec 5.4).
+    /// connect is tried every <see cref="ReconnectInterval"/>; the log stays open.
     /// </summary>
     public bool IsReconnecting
     {
@@ -175,7 +175,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     /// <summary>
     /// The live maps' CSV cell, set by the shell: when set, each row's <c>live_maps</c> cell says which version of each map
-    /// was live (live tuning spec 5.7). One cell whatever the catalogue, so a row is never wider than the header.
+    /// was live. One cell whatever the catalogue, so a row is never wider than the header.
     /// </summary>
     internal Func<string> LiveMaps { get; set; }
 
@@ -199,7 +199,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// The status bar's connection line (system 5.11) in parts, so numbers can be set in Bahnschrift and the word
+    /// The status bar's connection line in parts, so numbers can be set in Bahnschrift and the word
     /// "Connected" in NowText: "Connected to COM1 · ms43x · Logging 00:04:12 to ms43-20261019-2225.csv · 9576 rows".
     /// </summary>
     public IReadOnlyList<StatusPart> StatusParts
@@ -359,14 +359,14 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     public IReadOnlyList<GaugeViewModel> Gauges { get; } = GaugeViewModel.CreateCluster();
 
-    /// <summary>The band's gear cell (system 8): GEAR, in both the MS43X001 and the stock definitions.</summary>
+    /// <summary>The band's gear cell: GEAR, in both the MS43X001 and the stock definitions.</summary>
     public ReadoutViewModel GearReadout { get; } = new("Gear", string.Empty, 0, "GEAR");
 
     /// <summary>The band's speed: VS (MS43X001) or VEHICLESPEED (stock definitions), whole km/h.</summary>
     public ReadoutViewModel SpeedReadout { get; } = new("Vehicle Speed", "km/h", 0, "VS", "VEHICLESPEED");
 
-    // Floored: GEAR's fraction is the high byte of N over 32, so rounding read one gear high above about 4100 rpm (performance spec 4.1).
-    /// <summary>The engaged gear, 1 to 5; null in neutral, with the clutch in, or without a value (system 7.2: no slot lit).</summary>
+    // Floored: GEAR's fraction is the high byte of N over 32, so rounding read one gear high above about 4100 rpm.
+    /// <summary>The engaged gear, 1 to 5; null in neutral, with the clutch in, or without a value (no slot lit).</summary>
     public int? Gear => GearReadout.Value is double gear && double.IsFinite(gear) && Math.Floor(gear) is >= 1 and <= 5 ? (int)Math.Floor(gear) : null;
 
     /// <summary>"4", or "n/a" when no gear is engaged or known.</summary>
@@ -374,14 +374,14 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     public double? VehicleSpeed => SpeedReadout.Value;
 
-    /// <summary>The rpm readout's caption (system 7.2): the open bin's limiter, or how to get one.</summary>
+    /// <summary>The rpm readout's caption: the open bin's limiter, or how to get one.</summary>
     public string RevLimitCaption => Gauges[0].RedFrom is double limit
         ? $"Rev limit {NumberFormat.Format(limit, 0)} rpm, read from the open bin"
         : "Rev limit: open a bin to read it";
 
     public bool HasRevLimit => Gauges[0].RedFrom is not null;
 
-    /// <summary>Tiles or dials in the band; everything else on the screen stays as it is (system 8).</summary>
+    /// <summary>Tiles or dials in the band; everything else on the screen stays as it is.</summary>
     public ReadoutsMode Readouts
     {
         get => _readouts;
@@ -413,12 +413,12 @@ public class MainWindowViewModel : INotifyPropertyChanged
     /// </summary>
     public ObservableCollection<DecodedValueViewModel> TileValues { get; } = new();
 
-    /// <summary>"No channel matches "xyz"." while the filter leaves both columns empty (system 7.2); null otherwise.</summary>
+    /// <summary>"No channel matches "xyz"." while the filter leaves both columns empty; null otherwise.</summary>
     public string NoMatchText => !string.IsNullOrWhiteSpace(SearchText) && PinnedValues.Count == 0 && OtherValues.Count == 0
         ? $"No channel matches \"{SearchText.Trim()}\"."
         : null;
 
-    /// <summary>No channel is pinned: the Pinned column says how to pin one (system 5.6).</summary>
+    /// <summary>No channel is pinned: the Pinned column says how to pin one.</summary>
     public bool ShowsNoPins => PinnedCount == 0 && string.IsNullOrWhiteSpace(SearchText);
 
     /// <summary>The trend window in seconds (Settings: 10, 30 or 60). A change keeps the samples that still fit.</summary>
@@ -488,7 +488,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
     }
 
     /// <summary>Creates the log folder when it is missing and returns <see cref="NextCsvPath"/>.</summary>
-    /// <summary>The Live banner's sentence (system 7.2), or null when there is nothing to report.</summary>
+    /// <summary>The Live banner's sentence, or null when there is nothing to report.</summary>
     public string Banner => _banner?.Text;
 
     public bool HasBanner => _banner is not null;
@@ -510,7 +510,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     public bool HasConnectionLog => ConnectionLog is not null;
 
-    /// <summary>The link stopped: the values shown are the last sample's, in Ink3 (system 7.2).</summary>
+    /// <summary>The link stopped: the values shown are the last sample's, in Ink3.</summary>
     public bool IsStale { get => _isStale; private set => SetField(ref _isStale, value); }
 
     /// <summary>"Show details" asks for the connection log; no window opens on its own when something fails.</summary>
@@ -535,8 +535,8 @@ public class MainWindowViewModel : INotifyPropertyChanged
     /// <summary>The logger stopped: the banner says why and what was kept; values freeze in Ink3 if any arrived.</summary>
     internal void ReportLoggingStopped(Exception error)
     {
-        // After samples, timeouts are the ECU going quiet (a key-off, a reset): the app reconnects on its own and keeps the
-        // log open. Before any sample they mean the faster baud was refused, and every other failure stops as before.
+        // After a sample, a timeout starts reconnection and keeps the CSV open (for example, after key-off or reset).
+        // A timeout before the first sample, or any other failure, stops logging.
         if (error is TimeoutException && SampleCount > 0)
         {
             BeginReconnect(error);
@@ -686,7 +686,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
         PreviewChannels();
     }
 
-    /// <summary>Lists the COM ports again; with none, the banner says to plug in the cable (system 7.2).</summary>
+    /// <summary>Lists the COM ports again; with none, the banner says to plug in the cable.</summary>
     public void RefreshPorts()
     {
         AvailablePorts = new ObservableCollection<string>(_ports());
@@ -795,7 +795,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
         _session = null;
         _retryText = null;
         IsConnected = false;
-        // As at a disconnect: a performance run ends on the link loss with the warm-up state it ran in (review focus 1).
+        // As at a disconnect: a performance run ends on the link loss with the warm-up state it ran in.
         ResetWarmUp();
         IsReconnecting = true;
         var csv = _csvWriter is not null && !string.IsNullOrWhiteSpace(CsvPath) ? Path.GetFileName(CsvPath) : null;
@@ -964,7 +964,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
             ReportLoggingStopped(error);
         });
 
-        // The log's extra reads go out only while a CSV is open and no Performance run records (the V10.1 review).
+        // The log's extra reads go out only while a CSV is open and no Performance run records.
         var source = _diagnostics = new DiagnosticPayloadSource((IPayloadSource)_watching ?? _session, _session, _overlayState,
             () => _csvWriter is not null && !(DiagnosticsPaused?.Invoke() ?? false));
         return logger.RunAsync(source, CurrentDefinition, channels, token);
@@ -980,7 +980,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
     /// <summary>Raised on the UI thread after each sample has been shown.</summary>
     public event EventHandler<LiveSample> SampleShown;
 
-    /// <summary>Coolant, oil and the overheat lamp as the samples report them (performance spec 5); reset on disconnect.</summary>
+    /// <summary>Coolant, oil and the overheat lamp as the samples report them; reset on disconnect.</summary>
     public WarmUpMonitor WarmUp { get; } = new();
 
     /// <summary>The warm-up banners under the connection banner, danger first; Performance shows the same ones.</summary>
@@ -990,14 +990,14 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     /// <summary>
     /// The sample <see cref="SampleShown"/> is raised for, as the warm-up monitor read it, so the Performance tab decodes no
-    /// sample a second time (minor review, finding 21); null without a definition.
+    /// sample a second time; null without a definition.
     /// </summary>
     internal PerfFrame? LastFrame { get; private set; }
 
     private IReadOnlyList<double?> _knock = Array.Empty<double?>();
     private int _knockVersion;
 
-    /// <summary>Knock retard per cylinder from the last sample, degrees, positive; empty when not connected (owner, 2026-10-28).</summary>
+    /// <summary>Knock retard per cylinder from the last sample, degrees, positive; empty when not connected.</summary>
     public IReadOnlyList<double?> Knock
     {
         get => _knock;
@@ -1036,7 +1036,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
     /// <summary>The clock this screen reads; the Performance tab names its results by it.</summary>
     internal TimeProvider Time => _time;
 
-    // Faster logging (owner, 2026-10-28): numbers change at most five times a second, the latest one shown; the knock bars
+    // Faster logging: numbers change at most five times a second, the latest one shown; the knock bars
     // hold each cylinder's highest retard of the last second, so a one-sample knock cannot flash by.
     private static readonly TimeSpan NumberInterval = TimeSpan.FromMilliseconds(200);
     private static readonly TimeSpan KnockHold = TimeSpan.FromSeconds(1);
@@ -1131,7 +1131,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
         ShowSample(sample.Values, sample.Time);
 
-        // Before SampleShown: a performance run reads the warm-up state this sample left (plan Task 6 ruling), from this frame.
+        // Before SampleShown: a performance run reads the warm-up state this sample left, from this frame.
         LastFrame = CurrentDefinition is { } definition
             ? PerfChannels.Read(definition, sample.Values, sample.Payload.Span, _runClock.At(sample), sample.Retries)
             : null;
@@ -1169,7 +1169,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(HasWarmUpBanners));
     }
 
-    // A new link starts from first readings: warm at the first reading needs no wait, cold needs its 10 s (spec 5).
+    // A new link starts from first readings: warm at the first reading needs no wait, cold needs its 10 s.
     private void ResetWarmUp()
     {
         _runClock.Reset();
@@ -1185,7 +1185,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
         SampleCount++;
         var show = _numbersShownAt is not { } shown || now - shown >= NumberInterval;
 
-        // The band shows what the last sample held: a channel missing from it reads n/a (system 7.2).
+        // The band shows what the last sample held: a channel missing from it reads n/a.
         var inSample = new Dictionary<string, double>(StringComparer.Ordinal);
         foreach (var decodedValue in decoded)
         {
@@ -1239,7 +1239,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
     /// <summary>Disconnects; every value goes back to n/a and the next log gets a new name.</summary>
     public void Disconnect() => Disconnect(keepValues: false);
 
-    /// <summary>The V9 watch: the screens set the map it records. Null unless the ECU runs overlay 9 or later.</summary>
+    /// <summary>The overlay's watch: the screens set the map it records. Null unless the ECU runs overlay V10.4.</summary>
     public MS43Logger.Core.LiveTuning.IWatchTarget Watch => _watching is null ? null : _watchTarget ??= new WatchTarget(this);
 
     private WatchTarget _watchTarget;
@@ -1252,9 +1252,8 @@ public class MainWindowViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// After the connect, before the first poll: the overlay header (DS2 06 at 0C:B544). With version 9 or 10 and its magic
-    /// (C0D9, C0DA) the logger polls with the watch; otherwise, an overlay this app does not know included, or when the read
-    /// fails, it polls with 0B B0 as before.
+    /// After the connect, before the first poll: the overlay header (DS2 06 at 0C:B544). With V10.4 and its magic (C0DA) the
+    /// logger polls with the watch; otherwise, an older overlay included, or when the read fails, it polls with 0B B0.
     /// </summary>
     private MS43Logger.Core.LiveTuning.WatchingPayloadSource Watching(Ds2Session session)
     {
@@ -1262,11 +1261,10 @@ public class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             var header = MS43Logger.Core.LiveTuning.Ds2Memory.Read(session, MS43Logger.Core.LiveTuning.OverlayContract.HeaderAddress, 16);
-            if (MS43Logger.Core.LiveTuning.OverlayHeader.Parse(header) is not
-                    { Version: >= MS43Logger.Core.LiveTuning.OverlayV9.Version and <= MS43Logger.Core.LiveTuning.OverlayV10.Version } parsed
-                || header[14] != 0xD0 + parsed.Version || header[15] != 0xC0)
+            if (MS43Logger.Core.LiveTuning.OverlayHeader.Parse(header) is not { } parsed
+                || !MS43Logger.Core.LiveTuning.OverlayProtocol.IsCurrent(parsed) || header[14] != 0xD0 + parsed.Version || header[15] != 0xC0)
                 return null;
-            _overlayState = parsed.Version == MS43Logger.Core.LiveTuning.OverlayV10.Version;
+            _overlayState = true;
         }
         catch (Exception error) when (error is TimeoutException or InvalidDataException or IOException or MS43Logger.Core.LiveTuning.Ds2RefusedException)
         {
@@ -1326,7 +1324,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
         ResetRate();
         IsConnected = false;
 
-        // After IsConnected: a performance run ends on the link loss with the warm-up state it ran in (review focus 1).
+        // After IsConnected: a performance run ends on the link loss with the warm-up state it ran in.
         ResetWarmUp();
 
         if (_session is not null)
@@ -1412,7 +1410,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
         PinnedCount = _allLiveValues.Count(value => value.IsPinned);
         VisibleChannelCount = LiveValues.Count;
 
-        // The tiles follow the pins only, never the filter; a channel the band already shows is not repeated (owner, 2026-10-28).
+        // The tiles follow the pins only, never the filter; a channel the band already shows is not repeated.
         var inBand = Readings.Select(reading => reading.ChannelId).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
         var pins = _allLiveValues.Where(value => value.IsPinned && !inBand.Contains(value.Id))
             .OrderBy(value => value.Title, StringComparer.OrdinalIgnoreCase).ToList();
@@ -1592,7 +1590,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
 }
 
-/// <summary>One channel of the Live list (system 5.6): its title, id, unit, the last value and its trend.</summary>
+/// <summary>One channel of the Live list: its title, id, unit, the last value and its trend.</summary>
 public class DecodedValueViewModel : INotifyPropertyChanged
 {
     private string _value;
@@ -1678,7 +1676,7 @@ public class DecodedValueViewModel : INotifyPropertyChanged
         }
     }
 
-    /// <summary>The pin button's tooltip and accessible name (system 5.6).</summary>
+    /// <summary>The pin button's tooltip and accessible name.</summary>
     public string PinTip => IsPinned ? "Unpin" : "Pin to top";
 
     public string PinName => $"{(IsPinned ? "Unpin" : "Pin")} {Title}";

@@ -100,9 +100,8 @@ public sealed class FunViewModel : ViewModelBase, IDisposable
     public string? Note => Selected?.Key is { } key && FunFeatures.MapIndexOf(key) is { } index
         ? EditedMaps.FirstOrDefault(m => m.Index == index)?.ScalarGroup?.Note : null;
 
-    // The open bin's own definitions: V8.5 and V9 widen the pops throttle opening, V10 adds the stabs and the blip.
-    private IReadOnlyList<OverlayMap> BinMaps =>
-        _tune.Document is { } bin ? OverlayV9.MapsFor(OverlayHeader.VersionIn(bin.Image.Bytes), OverlayHeader.MinorIn(bin.Image.Bytes)) : OverlayV8.Maps;
+    // The current overlay's definitions; a bin without it has only LC, NLS, RAL and the hardcut (FunFeatures.Offline).
+    private static IReadOnlyList<OverlayMap> BinMaps => OverlayCatalogue.Maps;
 
     /// <summary>The catalogue of what is edited: the ECU's verified one when connected, else the open bin's.</summary>
     private IEnumerable<OverlayMap> EditedMaps => Mode == FunMode.Live ? LiveTuning.Maps.Select(m => m.Map) : BinMaps;
@@ -148,7 +147,7 @@ public sealed class FunViewModel : ViewModelBase, IDisposable
         var keys = Mode switch
         {
             FunMode.Live => FunFeatures.Live(LiveTuning.Maps.Where(m => m.Map.ScalarGroup is not null
-                && LiveScalarDefinitions.ConstantsFor(m.Map, bin!.Xdf) is not null).Select(m => m.Map.Index), LiveTuning.IsV4),
+                && LiveScalarDefinitions.ConstantsFor(m.Map, bin!.Xdf) is not null).Select(m => m.Map.Index), LiveTuning.HasVerifiedCatalogue),
             FunMode.Bin => FunFeatures.Offline(bin!),
             _ => Array.Empty<string>(),
         };
@@ -178,27 +177,17 @@ public sealed class FunViewModel : ViewModelBase, IDisposable
     private string WhyUnavailable(string key, CalibrationDocument? bin)
     {
         if (Mode == FunMode.None) return "Open the car's bin on the Tune tab, or connect the car.";
-        if (key == FunFeatures.Pops)
+        if (key is FunFeatures.Pops or FunFeatures.Blip)
         {
-            if (Mode == FunMode.Live)
-                return LiveTuning.OverlayVersion < OverlayV8.Version
-                    ? $"The ECU runs overlay V{LiveTuning.OverlayVersion}; the pops need V8. Flash the V8 bin to use them."
-                    : "The loaded XDF and the ECU's overlay do not agree on the pops settings.";
-            var version = FunFeatures.OverlayVersionOf(bin!);
-            return version == 0 ? "This bin has no live overlay; the pops need V8. Open the V8 bin to set them."
-                : version < OverlayV8.Version ? $"This bin has overlay V{version}; the pops need V8. Open the V8 bin to set them."
-                : "The pops settings could not be read from this bin.";
-        }
-        if (key == FunFeatures.Blip)
-        {
-            if (Mode == FunMode.Live)
-                return LiveTuning.OverlayVersion < OverlayV10.Version
-                    ? $"The ECU runs overlay V{LiveTuning.OverlayVersion}; the blip needs V10. Flash the V10 bin to use it."
-                    : "The blip settings could not be read from the ECU.";
-            var version = FunFeatures.OverlayVersionOf(bin!);
-            return version == 0 ? "This bin has no live overlay; the blip needs V10. Open the V10 bin to set it."
-                : version < OverlayV10.Version ? $"This bin has overlay V{version}; the blip needs V10. Open the V10 bin to set it."
-                : "The blip settings could not be read from this bin.";
+            var (what, need, them) = key == FunFeatures.Pops ? ("pops", "need", "them") : ("blip", "needs", "it");
+            if (Mode == FunMode.Live) return $"The loaded XDF and the ECU's overlay do not agree on the {what} settings.";
+            return FunFeatures.OverlayOf(bin!) switch
+            {
+                null => $"This bin has no live overlay; the {what} {need} V{OverlayProtocol.Label}. Open the V{OverlayProtocol.Label} bin to set {them}.",
+                { } other when !OverlayProtocol.IsCurrent(other) =>
+                    $"This bin has overlay V{other.Label}; the app works with V{OverlayProtocol.Label} only. Open the V{OverlayProtocol.Label} bin to set the {what}.",
+                _ => $"The {what} settings could not be read from this bin.",
+            };
         }
         if (key == FunFeatures.Hardcut)
             return Mode == FunMode.Live ? "The ECU's overlay has no live limiter."
@@ -220,10 +209,10 @@ public sealed class FunViewModel : ViewModelBase, IDisposable
         var index = FunFeatures.MapIndexOf(key)!.Value;
         if (EditedMaps.FirstOrDefault(m => m.Index == index) is not { } map) return string.Empty;
         var value = bytes[map.Address & 0x7FFFF];
-        if (key is FunFeatures.Pops or FunFeatures.Blip && OverlayV8.Triggers.FirstOrDefault(trigger => trigger.Value == value) is { Short: { } named })
+        if (key is FunFeatures.Pops or FunFeatures.Blip && OverlayTriggers.Pops.FirstOrDefault(trigger => trigger.Value == value) is { Short: { } named })
             return named;
-        if (OverlayHeader.VersionIn(bytes) >= OverlayV9.Version
-            && OverlayV9.TriggersFor(index).FirstOrDefault(trigger => trigger.Value == value) is { Short: { } trigger })
+        if (OverlayProtocol.IsCurrent(bytes)
+            && OverlayTriggers.For(index).FirstOrDefault(trigger => trigger.Value == value) is { Short: { } trigger })
             return trigger;
         return value switch { 0 => "Off", 1 => "On", 2 => "Cruise", _ => value.ToString() };
     }
@@ -282,9 +271,9 @@ public sealed class FunViewModel : ViewModelBase, IDisposable
         var live = new List<string>();
         foreach (var row in rows.Reverse())
         {
-            await LiveTuning.SendAsync(row);
-            if (LiveTuning.Problem is { } problem)
+            if (!await LiveTuning.SendAsync(row))
             {
+                var problem = LiveTuning.Problem ?? "Not sent: the ECU did not take it.";
                 Problem = live.Count == 0 ? problem : $"{problem} {string.Join(" and ", live)} went live; the rest, the switch included, was not sent.";
                 Refresh(rebuild: false);
                 return;
@@ -383,8 +372,9 @@ public sealed class FunViewModel : ViewModelBase, IDisposable
             var offset = BinImage.ToOffset(address) - at;
             if (offset is >= 0 and < 8) after[offset] = (byte)plan.Changes[0].NewRaw;
         }
-        if (OverlayV9.ValidateFor(OverlayHeader.VersionIn(bin.Image.Bytes), map.Index, after, current, OverlayHeader.MinorIn(bin.Image.Bytes)) is null) return null;
-        return (OverlayV10.Refusal(map.Index, after) ?? "That activation mode is not supported") + ". Nothing was changed.";
+        var refused = OverlayProtocol.IsCurrent(bin.Image.Bytes) ? OverlaySettings.ValidateCopy(map.Index, after, current) : OverlayV8.ValidateCopy(map.Index, after, current);
+        if (refused is null) return null;
+        return (OverlaySettings.Refusal(map.Index, after) ?? "That activation mode is not supported") + ". Nothing was changed.";
     }
 
     private void OnLiveChanged(object? sender, PropertyChangedEventArgs e)

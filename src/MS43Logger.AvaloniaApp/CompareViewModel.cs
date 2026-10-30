@@ -39,7 +39,7 @@ public sealed record CompareRow(ItemDifference Difference, bool IsCurrent) : Com
 /// <summary>The list entry that opens the bytes that differ outside every XDF item.</summary>
 public sealed record CompareBytesRow(string Summary, bool IsCurrent) : CompareEntry;
 
-/// <summary>One segment of the kind filter (system 5.15): the kind's name over its count of differing items.</summary>
+/// <summary>One segment of the kind filter: the kind's name over its count of differing items.</summary>
 public sealed record KindChip(string Key, string Name, int Count, bool IsOn)
 {
     /// <summary>What a screen reader says for the segment: "Maps, 12".</summary>
@@ -164,14 +164,14 @@ public sealed class CompareViewModel : ViewModelBase, ISidePanel
 
     public IReadOnlyList<UnmappedRange> Unmapped => Result?.Unmapped ?? Array.Empty<UnmappedRange>();
 
-    /// <summary>"18 ranges, 11907 bytes outside the XDF (11436 differ)", no digit grouping (system 3.3); ranges may span a few equal bytes.</summary>
+    /// <summary>"18 ranges, 11907 bytes outside the XDF (11436 differ)", no digit grouping; ranges may span a few equal bytes.</summary>
     public string UnmappedSummary => Result is not { } result
         ? string.Empty
         : result.Unmapped.Count == 0
             ? "No bytes differ outside the XDF"
             : $"{result.Unmapped.Count} {(result.Unmapped.Count == 1 ? "range" : "ranges")}, {result.UnmappedBytes.ToString(CultureInfo.InvariantCulture)} bytes outside the XDF ({result.DifferingBytes.ToString(CultureInfo.InvariantCulture)} differ)";
 
-    /// <summary>The No B state's line (system 7.3): "A is CAR.bin. B can be any 512 KiB MS43 bin; both are read through A's XDF."</summary>
+    /// <summary>The No B state's line: "A is CAR.bin. B can be any 512 KiB MS43 bin; both are read through A's XDF."</summary>
     public string NoBText => $"A is {FileA}. B can be any 512 KiB MS43 bin; both are read through A's XDF.";
 
     /// <summary>A range of the bytes outside the XDF, "0x03C43 to 0x03C9B", both ends included.</summary>
@@ -181,7 +181,7 @@ public sealed class CompareViewModel : ViewModelBase, ISidePanel
         return string.Format(CultureInfo.InvariantCulture, "0x{0:X5} to 0x{1:X5}", range.Offset, range.End);
     }
 
-    /// <summary>Filters the list by item title and description (system 5.15), as the Tune rail's search does.</summary>
+    /// <summary>Filters the list by item title and description, as the Tune rail's search does.</summary>
     public string SearchText
     {
         get => _searchText;
@@ -341,7 +341,7 @@ public sealed class CompareViewModel : ViewModelBase, ISidePanel
     }
 
     /// <summary>
-    /// The line under the grid (system 2.5, 5.15): "A − B: -21.0 to +61.1 °CRK, 293 of 320 cells differ" on A − B, and
+    /// The line under the grid: "A − B: -21.0 to +61.1 °CRK, 293 of 320 cells differ" on A − B, and
     /// "Colour: -23.6 to 72.0 °CRK." on A or B, whose cells take the map colours.
     /// </summary>
     public string? ScaleCaption { get => _scaleCaption; private set => SetField(ref _scaleCaption, value); }
@@ -497,6 +497,7 @@ public sealed class CompareViewModel : ViewModelBase, ISidePanel
 
         try
         {
+            TableEdits.EnsureSameFirmware(document, _b);
             var plan = TableEdits.CopyFrom(document, selected.Item, _b);
             history.Apply(plan, $"Copy {selected.Item.Title} from {FileB}");
             var warnings = plan.Warnings.Count > 0 ? " " + string.Join(" ", plan.Warnings) : string.Empty;

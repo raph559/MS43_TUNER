@@ -37,7 +37,7 @@
             <Setter Property="FontWeight" Value="Normal" />
         </Style>
 
-        <!-- Below 1280 px of header (system 8): no wordmark, no XDF line, and the connection pickers merge into one button.
+        <!-- Below 1280 px of header: no wordmark, no XDF line, and the connection pickers merge into one button.
              The window buttons take 146 px of the window's width, so the header compacts below 1426 px of window
              (class "compactheader"); the panes keep the 1280 px step ("compact"). -->
         <Style Selector="Button#ConnectionButton">
@@ -49,7 +49,7 @@
         <Style Selector="Window.compactheader Button#ConnectionButton">
             <Setter Property="IsVisible" Value="True" />
         </Style>
-        <!-- The header's room (performance spec 9.1): a tighter margin after the mark, and the words "slow link" step aside
+        <!-- The header's room: a tighter margin after the mark, and the words "slow link" step aside
              while the rate and its warning icon stay. -->
         <Style Selector="StackPanel#Brand">
             <Setter Property="Margin" Value="0,0,24,0" />
@@ -91,7 +91,7 @@
 
     <!-- A maximized window without the system frame reaches past the screen edge by the frame's width; the margin pulls it back. -->
     <Grid Name="RootGrid" RowDefinitions="48,*,28" Margin="{Binding $parent[Window].OffScreenMargin}">
-        <!-- Header (system 5.1). It is also the window's title bar: drag it to move, double-click it to maximize or restore.
+        <!-- Header. It is also the window's title bar: drag it to move, double-click it to maximize or restore.
              The right padding leaves room for the window buttons, which sit above the dialog layer at the end of this grid. -->
         <Border Name="TitleBar" Grid.Row="0" Background="{DynamicResource FrameBrush}" BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="0,0,0,1"
                 Padding="16,0,146,0" PointerPressed="TitleBar_PointerPressed">
@@ -146,7 +146,7 @@
                 </Grid>
 
                 <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <!-- Rate, only while connected (system 5.1): "38 samples/s", or "No samples yet". -->
+                    <!-- Rate, only while connected: "38 samples/s", or "No samples yet". -->
                     <StackPanel Name="RateText" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,0"
                                 IsVisible="{Binding Live.IsConnected}" ToolTip.Tip="{Binding Live.RateDetail}">
                         <TextBlock Classes="label" Text="No samples yet" IsVisible="{Binding Live.HasNoSamplesYet}" />
@@ -260,10 +260,10 @@
             </Panel>
         </Grid>
 
-        <!-- Opening another bin: the open one stays and a 2 px bar runs under the header (system 7.1). -->
+        <!-- Opening another bin: the open one stays and a 2 px bar runs under the header. -->
         <ProgressBar Name="BusyBar" Grid.Row="1" VerticalAlignment="Top" IsIndeterminate="True" IsVisible="{Binding Tune.ShowsBusyBar}" />
 
-        <!-- Status bar (system 5.11) -->
+        <!-- Status bar -->
         <Border Grid.Row="2" Background="{DynamicResource FrameBrush}" BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="0,1,0,0" Padding="16,0,8,0">
             <!-- The connection line takes the width left over and trims its end; the whole line is in its tooltip. -->
             <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
@@ -305,7 +305,7 @@
         <!-- Last, so a dialog and its scrim cover the header, the screens and the status bar. -->
         <shell:DialogHost Name="Dialogs" Grid.RowSpan="3" />
 
-        <!-- The theme cross-fade (system 10.3): a picture of the old theme over the new one, fading out. Above everything, never hit. -->
+        <!-- The theme cross-fade: a picture of the old theme over the new one, fading out. Above everything, never hit. -->
         <Image Name="ThemeFade" Grid.RowSpan="3" Stretch="Fill" IsVisible="False" IsHitTestVisible="False" ZIndex="100" />
 
         <!-- Window buttons, after the dialog layer so the window can still be minimized or closed while a dialog is open. -->

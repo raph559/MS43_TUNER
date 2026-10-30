@@ -68,7 +68,6 @@ public static class OverlayContract
 {
     public const byte Command = 0x6D;
     public const int SupportedVersion = 2;
-    public const int MaxCellDelta = 8;
 
     /// <summary>The v2 copy area at external RAM 041D30, readable with DS2 command 06.</summary>
     public const int CopyBytes = 688;
@@ -210,24 +209,6 @@ public static class OverlayContract
         }
 
         return leaner;
-    }
-
-    /// <summary>Cells outside the immutable v2 limit relative to flash: +/-8 raw for ignition/cams, 0..8 for AFR.</summary>
-    public static IReadOnlyList<int> EditLimitCells(int table, ReadOnlySpan<byte> copy, ReadOnlySpan<byte> flash)
-    {
-        RequireSameSize(copy, flash);
-        var outside = new List<int>();
-        var minimum = Maps[table].RicherOnly ? 0 : -MaxCellDelta;
-        for (var i = 0; i < copy.Length; i++)
-        {
-            var delta = (int)copy[i] - flash[i];
-            if (delta < minimum || delta > MaxCellDelta)
-            {
-                outside.Add(i);
-            }
-        }
-
-        return outside;
     }
 
     /// <summary>The fields of a whole v2 status reply, <c>12 34 A0 …</c>.</summary>
