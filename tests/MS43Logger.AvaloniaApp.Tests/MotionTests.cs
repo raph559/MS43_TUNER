@@ -140,6 +140,59 @@ public sealed class MotionTests
         Assert.Equal(1, dialogs.Opacity);
     }
 
+    private static (Window Window, ToggleButton A, ToggleButton B, Border Seg) Segments(bool motion)
+    {
+        var a = new ToggleButton { Classes = { "seg" }, Content = "Manual", IsChecked = true };
+        var b = new ToggleButton { Classes = { "seg" }, Content = "Automatic" };
+        var seg = new Border { Classes = { "seg" }, Child = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 2, Children = { a, b } } };
+        var window = new Window { Width = 400, Height = 200, Content = new StackPanel { Margin = new Thickness(12), Children = { seg } } };
+        if (motion)
+        {
+            window.Styles.Add(App.NewMotionLayer());
+        }
+
+        window.Show();
+        Settle();
+        return (window, a, b, seg);
+    }
+
+    private static Border Pill(Border seg) => seg.GetVisualDescendants().OfType<Border>().Single(border => border.Classes.Contains("segpill"));
+
+    private static double Left(Visual control, Visual seg) => control.TranslatePoint(default, seg)!.Value.X;
+
+    // The owner: picking a segment (Manual, Automatic) was not animated. The raised pill now slides to the new choice.
+    [AvaloniaFact]
+    public void TheSelectedSegmentSlides()
+    {
+        var (_, a, b, seg) = Segments(motion: true);
+        var pill = Pill(seg);
+        Assert.Equal(Left(a, seg), Left(pill, seg), 1);
+        Assert.Equal(a.Bounds.Width, pill.Bounds.Width, 1);
+        Assert.Equal(Colors.Transparent, Assert.IsAssignableFrom<ISolidColorBrush>(a.Background).Color);
+
+        var since = System.Diagnostics.Stopwatch.StartNew();
+        a.IsChecked = false;
+        b.IsChecked = true;
+        Tick();
+        if (since.Elapsed < Fade)
+        {
+            Assert.True(Left(pill, seg) < Left(b, seg) - 1, $"the pill jumped: {Left(pill, seg)} at {since.ElapsedMilliseconds} ms");
+        }
+
+        Settle();
+        Assert.Equal(Left(b, seg), Left(pill, seg), 1);
+        Assert.Equal(b.Bounds.Width, pill.Bounds.Width, 1);
+    }
+
+    [AvaloniaFact]
+    public void WithMotionOffSegmentsFillAtOnce()
+    {
+        var (_, a, _, seg) = Segments(motion: false);
+
+        Assert.Empty(seg.GetVisualDescendants().OfType<Border>().Where(border => border.Classes.Contains("segpill")));
+        Assert.NotEqual(Colors.Transparent, Assert.IsAssignableFrom<ISolidColorBrush>(a.Background).Color);
+    }
+
     [AvaloniaFact]
     public void WithMotionOffNothingMoves()
     {
