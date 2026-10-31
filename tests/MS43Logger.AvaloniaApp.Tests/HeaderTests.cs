@@ -27,6 +27,24 @@ public sealed class HeaderTests : IDisposable
         }
     }
 
+    // The owner could not change the definition: a press on a picker in the header started a window drag, which
+    // swallowed the release that opens the list. Only the header's empty background (and plain text) drags the window.
+    [AvaloniaFact]
+    public void OnlyTheHeadersBackgroundDragsTheWindow()
+    {
+        var (window, _) = Show(width: 1600);
+        Visual Inside(string name) => Find.Named<Control>(window, name).GetVisualDescendants().OfType<TextBlock>().FirstOrDefault()
+            ?? (Visual)Find.Named<Control>(window, name);
+
+        Assert.False(MainWindow.StartsWindowDrag(Find.Named<ComboBox>(window, "DefinitionPicker")));
+        Assert.False(MainWindow.StartsWindowDrag(Inside("DefinitionPicker")));
+        Assert.False(MainWindow.StartsWindowDrag(Inside("PortPicker")));
+        Assert.False(MainWindow.StartsWindowDrag(Inside("FileMenuButton")));
+        Assert.False(MainWindow.StartsWindowDrag(Inside("TabTune")));
+        Assert.True(MainWindow.StartsWindowDrag(Find.Named<Border>(window, "TitleBar")));
+        Assert.True(MainWindow.StartsWindowDrag(Find.Named<TextBlock>(window, "Wordmark")));
+    }
+
     private static (MainWindow Window, ShellViewModel Shell) Show(double width = 1440, double height = 900)
     {
         var (window, shell) = TestShell.Create();
