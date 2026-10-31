@@ -1,6 +1,6 @@
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- Design tokens: docs/superpowers/specs/2026-10-20-ms43-restyle-system.md, sections 1 to 4. Day is look A, Night is look B. -->
+    <!-- Design tokens: docs/design-system.md, sections 1 to 4. Day is look A, Night is look B. -->
     <!--
         Segoe UI, not Segoe UI Variable: Avalonia reaches only the default instance of a variable font, so Segoe UI
         Variable has no SemiBold here, while Segoe UI ships a real Semibold face. Bahnschrift likewise renders its
@@ -46,7 +46,7 @@
             <SolidColorBrush x:Key="NowTextBrush" Color="#B4470A" />
             <Color x:Key="WarnColor">#B42318</Color>
             <SolidColorBrush x:Key="WarnBrush" Color="#B42318" />
-            <!-- Amber, only for the caution banner's stripe and icon (performance spec 5): 4.38:1 on Fill and 5.19:1 on Pane
+            <!-- Amber, only for the caution banner's stripe and icon: 4.38:1 on Fill and 5.19:1 on Pane
                  by Day, 7.33:1 and 9.13:1 at Night. -->
             <Color x:Key="CautionColor">#A15C00</Color>
             <SolidColorBrush x:Key="CautionBrush" Color="#A15C00" />
@@ -213,7 +213,7 @@
             <SolidColorBrush x:Key="HoverOverlayBrush" Color="#14F3F5F7" />
             <SolidColorBrush x:Key="PressedOverlayBrush" Color="#24F3F5F7" />
             <SolidColorBrush x:Key="ScrimBrush" Color="#80000000" />
-            <!-- No shadow at Night: on #0A0B0D it is invisible, so popups separate with Edge instead (system 4.3). -->
+            <!-- No shadow at Night: on #0A0B0D it is invisible, so popups separate with Edge instead. -->
             <BoxShadows x:Key="PopupShadow">0 0 0 0 #00000000</BoxShadows>
 
             <!-- Fluent's own keys, pointed at the tokens, so its switches, checkboxes and popups follow the system in every state. -->

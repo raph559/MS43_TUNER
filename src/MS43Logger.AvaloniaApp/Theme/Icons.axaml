@@ -1,7 +1,7 @@
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!--
-        The app's one icon set (system 6), drawn on a 16 px grid for a 1.5 px stroke with flat caps and mitre joins.
+        The app's one icon set, drawn on a 16 px grid for a 1.5 px stroke with flat caps and mitre joins.
         StrokeIcon strokes these; the few filled parts (a pinned pin's body, the switch glyph's square, the changed
         triangle) are separate *.Fill geometries. Same paths as the approved mockups.
     -->
@@ -49,7 +49,7 @@
     <StreamGeometry x:Key="Kind.Axis">M 1.5,12.25 L 14.5,12.25 M 2.25,12.25 L 2.25,6.5 M 5.5,12.25 L 5.5,9 M 8.25,12.25 L 8.25,6.5 M 10.5,12.25 L 10.5,9 M 12.25,12.25 L 12.25,9 M 13.75,12.25 L 13.75,6.5</StreamGeometry>
 
     <!--
-        Cell and row markers, drawn 6 px wide (system 2.4): changed is a filled corner triangle, differs a ring. Like every
+        Cell and row markers, drawn 6 px wide: changed is a filled corner triangle, differs a ring. Like every
         icon they sit on the 16 unit grid; StrokeIcon scales the shape, never the 1.5 px stroke.
     -->
     <StreamGeometry x:Key="Mark.Changed">M 0,0 L 16,0 L 16,16 Z</StreamGeometry>

@@ -5,7 +5,7 @@
              x:Class="MS43Logger.AvaloniaApp.Views.LiveTuningView"
              x:DataType="local:LiveTuningViewModel">
     <UserControl.Styles>
-        <!-- The map list (live tuning spec 4, mockup A): 256 px on Frame, as the Tune and Performance rails. -->
+        <!-- The map list: 256 px on Frame, as the Tune and Performance rails. -->
         <Style Selector="Border#LiveTuningRail">
             <Setter Property="Width" Value="256" />
         </Style>
@@ -189,7 +189,7 @@
                            IsVisible="{Binding KeptForOtherFlash, Converter={x:Static ObjectConverters.IsNotNull}}" />
                 <TextBlock Name="LiveTuningProblem" Classes="body" Text="{Binding Problem}" TextWrapping="Wrap" Foreground="{DynamicResource WarnBrush}"
                            IsVisible="{Binding Problem, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                <Expander Name="LiveLimiterPanel" Header="Hardcut / rev limiter" Theme="{StaticResource SidebarExpander}" IsVisible="{Binding IsV4}">
+                <Expander Name="LiveLimiterPanel" Header="Hardcut / rev limiter" Theme="{StaticResource SidebarExpander}" IsVisible="{Binding HasVerifiedCatalogue}">
                     <StackPanel Spacing="8" IsEnabled="{Binding !IsReadOnly}">
                         <TextBlock Classes="state" Text="Manual gearbox limits · RPM in steps of 32" TextWrapping="Wrap" />
                         <ItemsControl ItemsSource="{Binding LimiterGears}">

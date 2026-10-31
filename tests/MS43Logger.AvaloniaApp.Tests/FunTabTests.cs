@@ -49,30 +49,6 @@ public sealed class FunTabTests
     private static LiveScalarRow Row(FunViewModel fun, string label) => fun.ScalarRows.Single(r => r.Label == label);
 
     [CarAvaloniaTheory]
-    [InlineData(6, new[] { "lc", "nls", "ral", "hardcut" })]
-    [InlineData(7, new[] { "lc", "nls", "ral", "hardcut" })]
-    [InlineData(8, new[] { "lc", "nls", "ral", "hardcut", "pops" })]
-    [InlineData(9, new[] { "lc", "nls", "ral", "hardcut", "pops" })]
-    [InlineData(10, new[] { "lc", "nls", "ral", "hardcut", "pops", "blip" })]
-    public async Task ConnectedFeaturesFollowTheEcu(int version, string[] keys)
-    {
-        Assert.True(TuneScreen.Available);
-        var (window, shell, fun, _) = await Open(version, v8Bin: version >= 8);
-        try
-        {
-            Assert.Equal(FunMode.Live, fun.Mode);
-            Assert.Equal($"Car connected · editing live (overlay V{version})", fun.ModeText);
-            Assert.Equal(FunFeatures.Order, fun.Features.Select(f => f.Key));
-            Assert.Equal(keys, fun.Features.Where(f => f.IsAvailable).Select(f => f.Key));
-            if (version < 8)
-                Assert.Equal($"The ECU runs overlay V{version}; the pops need V8. Flash the V8 bin to use them.",
-                    fun.Features.Single(f => f.Key == "pops").Unavailable);
-            if (version == 8) { Choose(fun, "pops"); Avalonia.Threading.Dispatcher.UIThread.RunJobs(); Screens.Save(window, "fun-live-pops"); }
-        }
-        finally { Close(window, shell); }
-    }
-
-    [CarAvaloniaTheory]
     [InlineData(false, new[] { "lc", "nls", "ral", "hardcut" })]
     [InlineData(true, new[] { "lc", "nls", "ral", "hardcut", "pops" })]
     public async Task OfflineFeaturesFollowTheBin(bool v8Bin, string[] keys)

@@ -1,5 +1,5 @@
 <!--
-    The motion layer (system 10.3, MOTION 2). App.ApplyMotion adds this file only while Windows' "Animation effects"
+    The motion layer. App.ApplyMotion adds this file only while Windows' "Animation effects"
     setting is on; without it every state below is reached at once. Each motion answers something the user did and says
     what changed. Live values (gauges, numbers, the map cursor) are never animated: a needle or number in motion would
     show a value the engine never had.

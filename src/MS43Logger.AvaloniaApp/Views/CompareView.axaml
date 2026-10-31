@@ -6,7 +6,7 @@
              x:Class="MS43Logger.AvaloniaApp.Views.CompareView"
              x:DataType="local:CompareViewModel">
     <UserControl.Styles>
-        <!-- The list of differing items (system 5.15, 8): 280 px on Frame, 224 below 1280. -->
+        <!-- The list of differing items: 280 px on Frame, 224 below 1280. -->
         <Style Selector="Border#CompareList">
             <Setter Property="Width" Value="280" />
         </Style>
@@ -59,7 +59,7 @@
             <Setter Property="HorizontalAlignment" Value="Center" />
         </Style>
 
-        <!-- Rows (system 5.6, 5.15): two lines, 44 px; the current one Fill with the 2 px Ink1 bar and a SemiBold id. -->
+        <!-- Rows: two lines, 44 px; the current one Fill with the 2 px Ink1 bar and a SemiBold id. -->
         <Style Selector="ListBox#DiffList ListBoxItem">
             <Setter Property="Padding" Value="0" />
             <Setter Property="MinHeight" Value="0" />
@@ -185,7 +185,7 @@
     </UserControl.Styles>
 
     <Panel Background="{DynamicResource PaneBrush}">
-        <!-- No A (system 7.3) -->
+        <!-- No A -->
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" MaxWidth="480" IsVisible="{Binding !HasA}">
             <TextBlock Classes="empty-title" Text="Open a bin on the Tune tab first" TextAlignment="Center" TextWrapping="Wrap" />
             <TextBlock Name="NoAText" Classes="body" TextWrapping="Wrap" TextAlignment="Center" Foreground="{DynamicResource Ink2Brush}"
@@ -243,7 +243,7 @@
                         </DockPanel>
                     </StackPanel>
 
-                    <!-- A B that could not be opened, and a B of other firmware (system 7.3) -->
+                    <!-- A B that could not be opened, and a B of other firmware -->
                     <Border DockPanel.Dock="Top" Classes="banner warn" Margin="0,12,4,0" IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}">
                         <controls:NumberText Classes="body" Value="{Binding ErrorMessage}" TextWrapping="Wrap" Foreground="{DynamicResource Ink1Brush}" />
                     </Border>
@@ -288,7 +288,7 @@
                         </controls:FlexRow>
                     </Border>
 
-                    <!-- The two files are the same through the XDF (system 7.3) -->
+                    <!-- The two files are the same through the XDF -->
                     <StackPanel DockPanel.Dock="Top" Margin="8,24,4,0" Spacing="8" IsVisible="{Binding IsIdentical}">
                         <TextBlock Name="IdenticalText" Classes="body" FontWeight="SemiBold" TextWrapping="Wrap" Text="The two files are identical through this XDF." />
                         <TextBlock Classes="body" Text="{Binding UnmappedSummary}" TextWrapping="Wrap" Foreground="{DynamicResource Ink2Brush}" />
@@ -410,7 +410,7 @@
                     </StackPanel>
 
                     <Panel>
-                        <!-- A table: the grid takes the height left; rows give way from 26 to 20 px before it scrolls (system 8). -->
+                        <!-- A table: the grid takes the height left; rows give way from 26 to 20 px before it scrolls. -->
                         <controls:TableLayout Name="CompareTable" Margin="0,24,0,0" IsVisible="{Binding ShowsTable}">
                             <StackPanel Orientation="Horizontal" Spacing="8" Margin="50,0,0,4" Height="16">
                                 <TextBlock Classes="label" Text="{Binding Grid.Values.X.Units, FallbackValue=''}" VerticalAlignment="Center" />

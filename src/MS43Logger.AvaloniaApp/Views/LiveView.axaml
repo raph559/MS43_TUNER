@@ -7,7 +7,7 @@
              x:DataType="local:MainWindowViewModel"
              Background="{DynamicResource PaneBrush}">
     <UserControl.Styles>
-        <!-- Body (system 8): the Pane, 24 px in; 16 below 1200 px, where the band stacks and the dials shrink. -->
+        <!-- Body: the Pane, 24 px in; 16 below 1200 px, where the band stacks and the dials shrink. -->
         <Style Selector="DockPanel#LiveBody">
             <Setter Property="Margin" Value="24" />
         </Style>
@@ -37,7 +37,7 @@
             <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
         </Style>
 
-        <!-- Readings (system 3.2): Data 88 rpm, Data 56 load and advance, Data 24 speed and tiles; the unit in UI Ink3. -->
+        <!-- Readings: Data 88 rpm, Data 56 load and advance, Data 24 speed and tiles; the unit in UI Ink3. -->
         <Style Selector="TextBlock.reading">
             <Setter Property="Foreground" Value="{DynamicResource Ink1Brush}" />
             <Setter Property="VerticalAlignment" Value="Top" />
@@ -54,7 +54,7 @@
         <Style Selector="TextBlock.reading.tile Run.unit">
             <Setter Property="FontSize" Value="12" />
         </Style>
-        <!-- A missing value (system 7.2): n/a in UI Ink3, never 0 and never a dash. -->
+        <!-- A missing value: n/a in UI Ink3, never 0 and never a dash. -->
         <Style Selector="TextBlock.reading.na">
             <Setter Property="FontFamily" Value="{DynamicResource UiDisplayFont}" />
             <Setter Property="FontSize" Value="20" />
@@ -139,7 +139,7 @@
             <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
         </Style>
 
-        <!-- Banner, note and CSV row (system 7.2, 8): the banner 16 px above what follows, 12 below 1200 px. -->
+        <!-- Banner, note and CSV row: the banner 16 px above what follows, 12 below 1200 px. -->
         <Style Selector="Border#LiveBanner">
             <Setter Property="Margin" Value="0,0,0,16" />
         </Style>
@@ -166,7 +166,7 @@
             <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
         </Style>
 
-        <!-- Channels (system 5.6): the section 24 px under the band, 12 below 1200 px; two columns, one below 1200. -->
+        <!-- Channels: the section 24 px under the band, 12 below 1200 px; two columns, one below 1200. -->
         <Style Selector="DockPanel#ChannelsSection">
             <Setter Property="Margin" Value="0,24,0,0" />
         </Style>
@@ -242,7 +242,7 @@
             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
-        <!-- The value: Data 16 SemiBold; a missing one reads n/a in UI 13 Ink3 with why (system 7.2). -->
+        <!-- The value: Data 16 SemiBold; a missing one reads n/a in UI 13 Ink3 with why. -->
         <Style Selector="TextBlock.row-value">
             <Setter Property="FontFamily" Value="{DynamicResource DataFont}" />
             <Setter Property="FontFeatures" Value="{x:Static theme:Typography.Tabular}" />
@@ -279,7 +279,7 @@
 
     <DockPanel Name="LiveBody" Classes.stale="{Binding IsStale}">
 
-        <!-- What went wrong and the way out (system 7.2); "Show details" opens the connection log. -->
+        <!-- What went wrong and the way out; "Show details" opens the connection log. -->
         <Border Name="LiveBanner" DockPanel.Dock="Top" Classes="banner warn" IsVisible="{Binding HasBanner}">
             <DockPanel>
                 <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource WarnBrush}" Margin="0,1,12,0"
@@ -297,7 +297,7 @@
             </DockPanel>
         </Border>
 
-        <!-- Warm-up banners (performance spec 5, 9.3), below the connection banner: red with the warning icon for danger,
+        <!-- Warm-up banners, below the connection banner: red with the warning icon for danger,
              amber for caution, grey with the info icon for a note; the text stays Ink1 on every banner. -->
         <ItemsControl Name="WarmUpBanners" DockPanel.Dock="Top" ItemsSource="{Binding WarmUpBanners}" IsVisible="{Binding HasWarmUpBanners}"
                       Margin="0,0,0,8">
@@ -318,14 +318,14 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <!-- The baud-rate advice still helps while not connected (system 7.2). -->
+        <!-- The baud-rate advice still helps while not connected. -->
         <DockPanel Name="BaudNote" DockPanel.Dock="Top" Margin="0,0,0,12" IsVisible="{Binding IsNotConnected}">
             <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Info}" Foreground="{DynamicResource Ink2Brush}" Margin="0,1,8,0" VerticalAlignment="Top" />
             <TextBlock Classes="body" Foreground="{DynamicResource Ink2Brush}" TextWrapping="Wrap"
                        Text="If the ECU refuses the faster baud rate while the engine runs, connect first, then start the engine." />
         </DockPanel>
 
-        <!-- The CSV log, set before connecting; while logging its facts live in the status bar (system 8). -->
+        <!-- The CSV log, set before connecting; while logging its facts live in the status bar. -->
         <DockPanel Name="CsvRow" DockPanel.Dock="Top" IsVisible="{Binding IsNotConnected}" IsEnabled="{Binding !IsConnecting}">
             <ToggleSwitch Name="CsvSwitch" DockPanel.Dock="Left" IsChecked="{Binding EnableCsvLogging}" AutomationProperties.Name="Write CSV log" OnContent="Write CSV log" OffContent="Write CSV log"
                           VerticalAlignment="Center" />
@@ -338,7 +338,7 @@
             </Panel>
         </DockPanel>
 
-        <!-- The readout band (system 8): Tiles or Dials for rpm, load and advance; gear and speed are the same in both. -->
+        <!-- The readout band: Tiles or Dials for rpm, load and advance; gear and speed are the same in both. -->
         <controls:ReadoutBand Name="ReadoutBand" DockPanel.Dock="Top">
             <!-- rpm -->
             <Panel>
@@ -428,7 +428,7 @@
                 </Border>
             </Panel>
 
-            <!-- gear and speed share one cell, side by side (owner, 2026-10-28: the knock cell took the speed cell's place) -->
+            <!-- gear and speed share one cell, side by side (the knock cell took the speed cell's place) -->
             <Border Classes="cell">
                 <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
                     <TextBlock Classes="cell-title" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding GearReadout.FullName}"><Run Text="Gear" /><Run Classes="cell-id" Text="{Binding GearReadout.ChannelId, StringFormat='&#x2002;{0}', Mode=OneWay}" /></TextBlock>
@@ -441,7 +441,7 @@
                 </Grid>
             </Border>
 
-            <!-- Knock retard per cylinder (owner, 2026-10-28): the Performance tab's six bars and their average, as tall as the
+            <!-- Knock retard per cylinder: the Performance tab's six bars and their average, as tall as the
                  cell allows; each cylinder at or past 1.5 °CRK is named on the title line (never colour alone). -->
             <Border Name="LiveKnockSection" Classes="cell" ToolTip.Tip="{Binding KnockWarning}">
                 <DockPanel IsVisible="{Binding ShowsKnock}">
@@ -459,7 +459,7 @@
             </Border>
         </controls:ReadoutBand>
 
-        <!-- Pinned tiles (system 8), the pins in title order -->
+        <!-- Pinned tiles, the pins in title order -->
         <!-- The pins decide whether there are tiles; the window's size whether they show (a style cannot beat a binding). -->
         <Panel DockPanel.Dock="Top" IsVisible="{Binding HasPinned}">
         <StackPanel Name="PinsSection" Margin="0,24,0,0" Spacing="8">
@@ -495,7 +495,7 @@
         </StackPanel>
         </Panel>
 
-        <!-- Channels (system 5.6): Pinned on the left and Not pinned on the right, each scrolling on its own. -->
+        <!-- Channels: Pinned on the left and Not pinned on the right, each scrolling on its own. -->
         <DockPanel Name="ChannelsSection">
             <DockPanel DockPanel.Dock="Top" Height="32">
                 <TextBlock Classes="section-title" Text="Channels" VerticalAlignment="Center" />

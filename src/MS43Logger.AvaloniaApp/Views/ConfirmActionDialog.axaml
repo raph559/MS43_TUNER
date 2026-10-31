@@ -2,7 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="MS43Logger.AvaloniaApp.Views.ConfirmActionDialog"
              Width="440">
-    <!-- Asks before an action that changes what is open (system 5.9): the question as the title, what follows in UI 13
+    <!-- Asks before an action that changes what is open: the question as the title, what follows in UI 13
          Ink2, then Cancel and the action, primary last. The dialog host gives Esc to Cancel and Enter to the action. -->
     <StackPanel Spacing="8">
         <TextBlock Name="MessageText" Classes="title" TextWrapping="Wrap" />

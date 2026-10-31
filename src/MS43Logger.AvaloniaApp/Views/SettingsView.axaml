@@ -10,7 +10,7 @@
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Margin" Value="0,0,0,-4" />
         </Style>
-        <!-- Rows (system 5.12): label left, control right, so every control in the dialog shares one right edge. -->
+        <!-- Rows: label left, control right, so every control in the dialog shares one right edge. -->
         <Style Selector="DockPanel.row">
             <Setter Property="MinHeight" Value="32" />
         </Style>

@@ -14,7 +14,7 @@
         </Style>
     </UserControl.Styles>
 
-    <!-- "Show details" on a Live banner (system 7.2): what the banner said, then the full error to copy into a report.
+    <!-- "Show details" on a Live banner: what the banner said, then the full error to copy into a report.
          It replaces the all-caps error window. -->
     <DockPanel>
         <TextBlock DockPanel.Dock="Top" Classes="title" Text="Connection failed" />

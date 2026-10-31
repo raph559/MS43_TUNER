@@ -2,12 +2,13 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using MS43Logger.Core;
 using MS43Logger.Core.Faults;
+using MS43Logger.Core.LiveTuning;
 using MS43Logger.Core.Tests;
 
 namespace MS43Logger.AvaloniaApp.Tests;
 
 /// <summary>
-/// V10.1 plan, Task 4, as the V10.1 review reshaped it: the CSV log carries the stock payload's overrun, cut, brake and
+/// The CSV log carries the stock payload's overrun, cut, brake and
 /// clutch bits on every row, the fault memory, and on a V10 ECU the pops and blip state, so a log explains why pops did or
 /// did not come. The columns are always there, as wide on every row as the header; empty where unread. Without a log, or
 /// while a Performance run records, the ECU gets the bare poll.
@@ -136,7 +137,7 @@ public sealed class DiagnosticLogTests : IDisposable
             column => Assert.Equal("", last[column]));
     }
 
-    [AvaloniaFact] // the V10.1 review: without a log the reads are for nothing, so the ECU gets the bare poll
+    [AvaloniaFact] // without a log the reads are for nothing, so the ECU gets the bare poll
     public async Task WithoutALogTheEcuGetsOnlyThePoll()
     {
         var (live, port) = Live(Ecu(Memory(fdf8: 0x4000), overlay: true), logging: false);
@@ -146,7 +147,7 @@ public sealed class DiagnosticLogTests : IDisposable
         Assert.Empty(LogReads(port));
     }
 
-    [AvaloniaFact] // the V10.1 review: a Performance run's timing is the poll's own
+    [AvaloniaFact] // a Performance run's timing is the poll's own
     public async Task WhileAPerformanceRunRecordsTheEcuGetsOnlyThePoll()
     {
         var (live, port) = Live(Ecu(Memory(fdf8: 0x4000), overlay: true));

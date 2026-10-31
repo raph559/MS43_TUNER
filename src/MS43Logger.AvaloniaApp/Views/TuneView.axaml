@@ -6,7 +6,7 @@
              x:Class="MS43Logger.AvaloniaApp.Views.TuneView"
              x:DataType="local:TuneViewModel">
     <UserControl.Styles>
-        <!-- Rail (system 5.6, 8): 256 px Frame, 224 px below 1280. -->
+        <!-- Rail: 256 px Frame, 224 px below 1280. -->
         <Style Selector="Border#RailHost">
             <Setter Property="Width" Value="256" />
         </Style>
@@ -77,7 +77,7 @@
             <Setter Property="VerticalAlignment" Value="Bottom" />
         </Style>
 
-        <!-- Pane (system 8): padding 24, 16 below 1280; the toolbar and the grid 24 below what is above them, 16 below 1280. -->
+        <!-- Pane: padding 24, 16 below 1280; the toolbar and the grid 24 below what is above them, 16 below 1280. -->
         <Style Selector="Border#PaneHost">
             <Setter Property="Padding" Value="24" />
         </Style>
@@ -102,7 +102,7 @@
             <Setter Property="BorderBrush" Value="{DynamicResource HairlineBrush}" />
             <Setter Property="HorizontalAlignment" Value="Left" />
         </Style>
-        <!-- A one-column table sits centred with its key line (system 8, owner); a map keeps the cells' left edge. -->
+        <!-- A one-column table sits centred with its key line; a map keeps the cells' left edge. -->
         <Style Selector="controls|MapGrid#MapGrid">
             <Setter Property="HorizontalAlignment" Value="Left" />
         </Style>
@@ -117,7 +117,7 @@
             <Setter Property="Margin" Value="0,12,0,0" />
             <Setter Property="HorizontalAlignment" Value="Center" />
         </Style>
-        <!-- A value's reading: the unit in UI 13 Ink3 on the Data 56 baseline (system 5.13). -->
+        <!-- A value's reading: the unit in UI 13 Ink3 on the Data 56 baseline. -->
         <Style Selector="TextBlock#ValueReading Run.unit">
             <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
             <Setter Property="FontSize" Value="13" />
@@ -128,7 +128,7 @@
             <Setter Property="LineHeight" Value="16" />
             <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
         </Style>
-        <!-- A switch's choices (system 5.13): an Edge-bordered list; the chosen row has the selected-row look and a check. -->
+        <!-- A switch's choices: an Edge-bordered list; the chosen row has the selected-row look and a check. -->
         <Style Selector="ListBox#ChoiceList">
             <Setter Property="Background" Value="{DynamicResource PaneBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource EdgeBrush}" />
@@ -164,7 +164,7 @@
             <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
         </Style>
 
-        <!-- Inspector (system 8): 312 px Frame; below 1280 an overlay from the right, opened by Details. -->
+        <!-- Inspector: 312 px Frame; below 1280 an overlay from the right, opened by Details. -->
         <Style Selector="Panel#InspectorSlot">
             <Setter Property="Grid.Column" Value="2" />
         </Style>
@@ -367,7 +367,7 @@
                     <Button Name="DetailsToggle" Grid.Column="6" Classes="quiet" Content="Details" Click="Details_Click" VerticalAlignment="Center"
                             ToolTip.Tip="Edit limits, surface, details and colour scale" />
                 </Grid>
-                <!-- Info lines under the title (system 7.1): inline, the info icon, no box. -->
+                <!-- Info lines under the title: inline, the info icon, no box. -->
                 <DockPanel DockPanel.Dock="Top" Margin="0,8,0,0" IsVisible="{Binding IsReadOnlyItem}">
                     <controls:StrokeIcon Data="{StaticResource Icon.Info}" Margin="0,1,8,0" VerticalAlignment="Top" />
                     <TextBlock Name="ReadOnlyLine" Classes="body" Text="{Binding ReadOnlyReason}" TextWrapping="Wrap" Foreground="{DynamicResource Ink2Brush}" />
@@ -436,7 +436,7 @@
                             </StackPanel>
                         </Border>
                     </StackPanel>
-                    <!-- A value's exact entry (system 5.13): the Value field with its unit, then Set, secondary since Save is the primary. -->
+                    <!-- A value's exact entry: the Value field with its unit, then Set, secondary since Save is the primary. -->
                     <TextBox Name="ValueInput" Width="120" Height="32" Classes="data13 commits" Watermark="Value" Text="{Binding Value.Input, FallbackValue=''}"
                              KeyDown="ValueInput_KeyDown" AutomationProperties.Name="Value" IsVisible="{Binding Value.IsValue, FallbackValue=False}">
                         <TextBox.InnerRightContent>
@@ -483,7 +483,7 @@
                 <Panel>
                     <!-- A table: the grid, then the key line -->
                     <controls:TableLayout Name="TableArea" Classes.centred="{Binding CentreGrid}" IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}">
-                        <!-- The column axis (system 8): its units in UI 12 Ink2, its id in Cascadia Ink3. -->
+                        <!-- The column axis: its units in UI 12 Ink2, its id in Cascadia Ink3. -->
                         <StackPanel Name="AxisLine" Orientation="Horizontal" Spacing="8" Margin="50,0,0,4" Height="16"
                                     IsVisible="{Binding !CentreGrid}">
                             <TextBlock Classes="label" Text="{Binding Editor.Values.X.Units, FallbackValue=''}" VerticalAlignment="Center" />
@@ -518,7 +518,7 @@
                                 <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding LiveCursor.Readout, Converter={x:Static ObjectConverters.IsNotNull}}">
                                     <Ellipse Width="8" Height="8" StrokeThickness="1.5" Stroke="{DynamicResource Ink2Brush}" VerticalAlignment="Center" />
                                     <TextBlock Name="LiveReadout" Classes.live="{Binding LiveCursor.ReadoutIsLive}" Text="{Binding LiveCursor.Readout}" />
-                                    <!-- Whether the ECU is reading this map now (system 7.1 key line); Ink3 when it is not, or samples stopped. -->
+                                    <!-- Whether the ECU is reading this map now; Ink3 when it is not, or samples stopped. -->
                                     <TextBlock Name="LiveUse" Text="{Binding LiveCursor.Use}" Classes.dim="{Binding LiveCursor.UseIsDim}"
                                                ToolTip.Tip="{Binding LiveCursor.UseDetail}"
                                                IsVisible="{Binding LiveCursor.Use, Converter={x:Static ObjectConverters.IsNotNull}}" />
@@ -529,7 +529,7 @@
                         </StackPanel>
                     </controls:TableLayout>
 
-                    <!-- A value, switch or flag (system 5.13, 5.14): the item, then its key line. -->
+                    <!-- A value, switch or flag: the item, then its key line. -->
                     <StackPanel Name="ValueArea" HorizontalAlignment="Left" Margin="0,24,0,0"
                                 IsVisible="{Binding Value, Converter={x:Static ObjectConverters.IsNotNull}}">
                         <!-- A value: the Data 56 reading with its unit, then the slider between - and +. -->
@@ -556,7 +556,7 @@
                                     <controls:StrokeIcon Data="{StaticResource Icon.Plus}" />
                                 </Button>
                             </Grid>
-                            <!-- The legend of the XDF ticks, led by the tick it explains (system 5.14). -->
+                            <!-- The legend of the XDF ticks, led by the tick it explains. -->
                             <DockPanel Name="LimitsLegendLine" Margin="0,12,0,0"
                                        IsVisible="{Binding Value.LimitsLegend, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False}">
                                 <Border DockPanel.Dock="Left" Width="2" Height="12" Margin="1,2,9,0" VerticalAlignment="Top" Background="{DynamicResource Ink2Brush}" />
@@ -564,7 +564,7 @@
                             </DockPanel>
                         </StackPanel>
 
-                        <!-- A switch: its choices as a list you pick one from (system 5.13); picking writes at once. -->
+                        <!-- A switch: its choices as a list you pick one from; picking writes at once. -->
                         <ListBox Name="ChoiceList" Width="360" HorizontalAlignment="Left"
                                  ItemsSource="{Binding Value.Choices, FallbackValue={x:Null}}" SelectedItem="{Binding Value.SelectedChoice, FallbackValue={x:Null}}"
                                  IsVisible="{Binding Value.IsSwitch, FallbackValue=False}" IsEnabled="{Binding !IsReadOnlyItem}"
@@ -607,14 +607,14 @@
                         </StackPanel>
                     </StackPanel>
 
-                    <!-- Bin open, nothing picked (system 7.1) -->
+                    <!-- Bin open, nothing picked -->
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="480" Spacing="8" IsVisible="{Binding NothingSelected}">
                         <TextBlock Classes="empty-title" Text="Pick a map, curve or value on the left" TextAlignment="Center" TextWrapping="Wrap" />
                         <TextBlock Classes="body" Text="Search with Ctrl K. Pinned items stay at the top." TextAlignment="Center" TextWrapping="Wrap"
                                    Foreground="{DynamicResource Ink2Brush}" />
                     </StackPanel>
 
-                    <!-- First run, and the first open (system 5.10, 7.1) -->
+                    <!-- First run, and the first open -->
                     <Panel Name="EmptyBlock" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="480" IsVisible="{Binding !HasDocument}">
                         <StackPanel Spacing="8" IsVisible="{Binding !IsBusy}">
                             <TextBlock Name="EmptyTitle" Classes="empty-title" Text="Open a bin to start tuning" TextAlignment="Center" TextWrapping="Wrap" />
@@ -699,7 +699,7 @@
                             <Border Classes="rule" Margin="-16,8,-16,16" />
                         </StackPanel>
 
-                        <!-- An axis's users (system 5.13), from the XDF's axis links. -->
+                        <!-- An axis's users, from the XDF's axis links. -->
                         <StackPanel IsVisible="{Binding IsAxis}">
                             <TextBlock Classes="h2" Text="Used by" />
                             <ItemsControl Name="UsedByList" Margin="0,4,0,0" ItemsSource="{Binding UsedBy}">
@@ -737,7 +737,7 @@
                             </ItemsControl>
                         </StackPanel>
 
-                        <!-- Colour scale (system 2.1, 2.2) -->
+                        <!-- Colour scale -->
                         <StackPanel Spacing="8" IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}">
                             <Border Classes="rule" />
                             <TextBlock Classes="h2" Text="Colour scale" />

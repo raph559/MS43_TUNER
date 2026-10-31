@@ -5,14 +5,14 @@
              x:Class="MS43Logger.AvaloniaApp.Views.FunView"
              x:DataType="local:FunViewModel">
     <UserControl.Styles>
-        <!-- The Fun tab (spec 2026-10-28, layout C): the features on the left, the chosen one's settings on the right. -->
+        <!-- The Fun tab (layout C): the features on the left, the chosen one's settings on the right. -->
         <Style Selector="Border#FunRail">
             <Setter Property="Width" Value="256" />
         </Style>
         <Style Selector="ListBox#FunFeatures ListBoxItem">
             <Setter Property="Padding" Value="12,10" />
         </Style>
-        <!-- A feature the bin or the ECU does not have stays listed, greyed (owner, 2026-10-28). -->
+        <!-- A feature the bin or the ECU does not have stays listed, greyed. -->
         <Style Selector="Grid.off TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
         </Style>
