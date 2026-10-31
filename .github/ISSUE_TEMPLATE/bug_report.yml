@@ -1,0 +1,96 @@
+name: Bug report
+description: Something in MS43 Tuner or the CLI does not work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. MS43 Tuner never writes ECU flash: flashing and the checksum are done with MS4X Flasher, so flashing problems belong with the MS4X project.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, including any message the app showed, word for word.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The screen you were on and what you did, one step per line.
+      placeholder: |
+        1. Open Tune
+        2. Open bin…
+        3. Select the map and press Smooth
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: App version or commit
+      description: The commit hash if you built from source (git rev-parse --short HEAD), or the name of the release zip you downloaded.
+      placeholder: 09c36da
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: Run winver to see it.
+      placeholder: Windows 11 24H2
+    validations:
+      required: true
+
+  - type: input
+    id: cable
+    attributes:
+      label: Cable
+      description: The K+DCAN USB cable, its chip if you know it, and the COM port.
+      placeholder: K+DCAN USB, FTDI chip, COM3
+
+  - type: dropdown
+    id: definition
+    attributes:
+      label: Definition
+      description: The logging definition picked in Live or passed to the CLI with --variant.
+      options:
+        - ms43x
+        - b22
+        - b25
+        - b30
+        - Not used (no live connection)
+    validations:
+      required: true
+
+  - type: input
+    id: firmware
+    attributes:
+      label: Firmware id
+      description: For a Tune or Compare bug, add the XDF file name too.
+      placeholder: MS430069 or MS43X001
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, CSV or screenshots
+      description: |
+        Drag in a CSV log from Live or the CLI, a screenshot, or paste the error text. Anything attached here is visible to everyone who can see this repository.
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Bins
+      options:
+        - label: I will not attach a bin I want to keep private.
+          required: true
