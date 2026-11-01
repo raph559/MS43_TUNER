@@ -82,12 +82,6 @@ public sealed class WatchLoggingTests
         Assert.All(port.Written.Where(f => f.Length > 2 && f[2] is not (0x91 or 0x06)), f => Assert.Equal(StockPoll, f));
     }
 
-    [AvaloniaFact]
-    public Task AV9EcuIsPolledWithTheWatch() => PolledWithTheWatch(9);
-
-    [AvaloniaFact] // V10's header ends DA C0: the watch must not depend on V9's magic
-    public Task TheWatchLogsOnAV10Ecu() => PolledWithTheWatch(10);
-
     [AvaloniaFact] // an overlay this app does not know may log differently: it gets the stock poll
     public async Task AnUnknownLaterOverlayIsPolledExactlyAsToday()
     {

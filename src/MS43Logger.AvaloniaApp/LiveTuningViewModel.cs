@@ -96,7 +96,6 @@ public sealed class LiveTuningViewModel : ViewModelBase, IDisposable
     public bool LoadedOnly { get => _loadedOnly; set { if (SetField(ref _loadedOnly, value)) UpdateFilteredMaps(); } }
     public bool HasVerifiedCatalogue => _line is not null && _page is not null
         && _session?.Detection is { Problem: null } detection && OverlayProtocol.IsCurrent(detection.Header);
-    public bool IsV5 => HasVerifiedCatalogue && _session!.Detection!.Header!.Version == 5;
     public ObservableCollection<LiveScalarRow> ScalarFields { get; } = new();
     public bool HasScalarEditor => HasVerifiedCatalogue && ScalarFields.Count > 0;
     public bool HasTableEditor => HasVerifiedCatalogue && Editor is not null;

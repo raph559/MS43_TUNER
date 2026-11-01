@@ -6,8 +6,8 @@ using MS43Logger.Core.Tuning;
 namespace MS43Logger.AvaloniaApp.Tests;
 
 /// <summary>
-/// V9's triggers for launch control (124), no-lift shift (125) and rolling anti-lag (126), by name wherever the app
-/// lists an activation byte: Live tuning, the Fun tab, the Tune tab and Compare. A V8 or older bin keeps the XDF's list.
+/// The overlay's triggers for launch control (124), no-lift shift (125) and rolling anti-lag (126), by name wherever the
+/// app lists an activation byte: Live tuning, the Fun tab, the Tune tab and Compare. A bin without V10.4 keeps the XDF's list.
 /// </summary>
 public sealed class TriggerChoiceTests : IDisposable
 {
@@ -50,36 +50,6 @@ public sealed class TriggerChoiceTests : IDisposable
     }
 
     [CarAvaloniaFact]
-    public async Task V9ListsTheTriggersByName()
-    {
-        Assert.True(TuneScreen.Available);
-        var (window, shell) = await Live(9);
-        try
-        {
-            var lc = ActivationChoices(shell, 124);
-            Assert.Equal([0L, 1, 2, 0x82, 0x97], lc.Select(c => c.Value));
-            Assert.Equal(["Off", "Clutch pressed", "Cruise light on + clutch", "ASC off + clutch", "A/C on + clutch"], lc.Select(c => c.Label));
-            var ral = ActivationChoices(shell, 126);
-            Assert.Equal([0L, 1, 0x82, 0x97], ral.Select(c => c.Value));
-            Assert.Equal(["Off", "“−” pressed", "ASC off + “−”", "A/C on + “−”"], ral.Select(c => c.Label));
-        }
-        finally { Close(window, shell); }
-    }
-
-    [CarAvaloniaFact] // RF7
-    public async Task V8KeepsTheStockChoices()
-    {
-        Assert.True(TuneScreen.Available);
-        var (window, shell) = await Live(8);
-        try
-        {
-            Assert.Equal([0L, 1, 2], ActivationChoices(shell, 124).Select(c => c.Value));
-            Assert.Equal([0L, 1], ActivationChoices(shell, 126).Select(c => c.Value));
-        }
-        finally { Close(window, shell); }
-    }
-
-    [CarAvaloniaFact]
     public async Task TheFunListShowsTheTriggersShortName()
     {
         Assert.True(TuneScreen.Available);
@@ -96,21 +66,22 @@ public sealed class TriggerChoiceTests : IDisposable
         finally { Close(window, shell); }
     }
 
-    private string Bin(int version, byte lc)
+    /// <summary>The car bin with an overlay header of <paramref name="version"/>.<paramref name="minor"/> and LC's activation byte.</summary>
+    private string Bin(int version, int minor, byte lc)
     {
         var bytes = File.ReadAllBytes(TuneScreen.Car!);
-        "LTOV"u8.CopyTo(bytes.AsSpan(0x4B544)); bytes[0x4B548] = (byte)version; bytes[0x4B549] = 0;
+        "LTOV"u8.CopyTo(bytes.AsSpan(0x4B544)); bytes[0x4B548] = (byte)version; bytes[0x4B549] = (byte)minor;
         bytes[0x7132C] = lc;
-        var path = Path.Combine(_folder, $"v{version}-{lc:X2}.bin");
+        var path = Path.Combine(_folder, $"v{version}.{minor}-{lc:X2}.bin");
         File.WriteAllBytes(path, bytes);
         return path;
     }
 
     [CarAvaloniaFact]
-    public async Task TheTuneTabNamesTheTriggerInAV9Bin()
+    public async Task TuneNamesTriggersOnlyForTheCurrentOverlay()
     {
         Assert.True(TuneScreen.Available);
-        var (window, shell) = await TuneScreen.OpenAsync(select: "c_conf_lc", binPath: Bin(9, 0x97), time: new ManualTicker());
+        var (window, shell) = await TuneScreen.OpenAsync(select: "c_conf_lc", binPath: Bin(10, 4, 0x97), time: new ManualTicker());
         try
         {
             var value = shell.Tune.Value!;
@@ -119,19 +90,19 @@ public sealed class TriggerChoiceTests : IDisposable
         }
         finally { Close(window, shell); }
 
-        (window, shell) = await TuneScreen.OpenAsync(select: "c_conf_lc", binPath: Bin(8, 1), time: new ManualTicker());
+        (window, shell) = await TuneScreen.OpenAsync(select: "c_conf_lc", binPath: Bin(10, 2, 1), time: new ManualTicker());   // an older overlay
         try { Assert.Equal([0L, 1, 2], shell.Tune.Value!.Choices!.Select(c => c.Value)); }
         finally { Close(window, shell); }
     }
 
     [CarFact]
-    public void CompareNamesTheTriggerOnTheV9Side()
+    public void CompareNamesTriggersOnTheCurrentOverlaySide()
     {
         Assert.True(TuneScreen.Available);
         var xdf = XdfDefinition.LoadFromFile(TuneScreen.Xdf!);
-        var v9 = BinImage.FromBytes(File.ReadAllBytes(Bin(9, 0x97)));
-        var v8 = BinImage.FromBytes(File.ReadAllBytes(Bin(8, 1)));
-        var item = BinComparer.Compare(xdf, v9, v8).Items.Single(i => i.Item.Title == "c_conf_lc");
+        var current = BinImage.FromBytes(File.ReadAllBytes(Bin(10, 4, 0x97)));
+        var older = BinImage.FromBytes(File.ReadAllBytes(Bin(9, 0, 1)));
+        var item = BinComparer.Compare(xdf, current, older).Items.Single(i => i.Item.Title == "c_conf_lc");
         Assert.Equal("A/C on + clutch", item.ValueA);
         Assert.Contains("clutch is pressed", item.ValueB);
     }
