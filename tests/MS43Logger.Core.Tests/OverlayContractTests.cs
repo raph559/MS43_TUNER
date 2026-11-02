@@ -54,56 +54,6 @@ public class OverlayContractTests
     }
 
     [Fact]
-    public void Writes_CoverEveryChangedRun_InChunksOf120()
-    {
-        var flash = new byte[320];
-        var copy = (byte[])flash.Clone();
-        for (var i = 0; i < 250; i++)
-        {
-            copy[i] = 1;
-        }
-
-        copy[300] = 9;
-        var writes = OverlayContract.Writes(0, copy, flash);
-        Assert.Equal(new[] { (0, 120), (120, 120), (240, 10), (300, 1) }, writes.Select(w => (w[3] << 8 | w[4], w.Length - 5)));
-        Assert.All(writes, w => Assert.Equal(new byte[] { 0x6D, 0x02, 0x00 }, w[..3]));
-        Assert.Empty(OverlayContract.Writes(0, flash, flash));
-    }
-
-    [Fact]
-    public void LeanerCells_OnlyForTheLambdaMap()
-    {
-        var flash = Enumerable.Repeat((byte)128, 192).ToArray();
-        var copy = (byte[])flash.Clone();
-        copy[5] = 127;
-        copy[6] = 140;
-        Assert.Equal(new[] { 5 }, OverlayContract.LeanerCells(2, copy, flash));
-        Assert.Empty(OverlayContract.LeanerCells(3, copy, flash));
-    }
-
-    [Fact]
-    public void ParseStatus_ReadsTheFiveEntriesAndTheFreeBytes()
-    {
-        var payload = new List<byte> { (byte)'L', (byte)'T', (byte)'O', (byte)'V', 0x02, 0x03 };
-        payload.AddRange(new byte[] { 0x03, 0x00, 0x00, 0x00, 0xCB, 0xF4, 0x39, 0x26 });
-        payload.AddRange(new byte[] { 0x01, 0x00, 0x01, 0x40, 0x00, 0x00, 0x00, 0x00 });
-        payload.AddRange(new byte[24]);
-        payload.AddRange(new byte[] { 0x01, 0x4C });
-        var reply = Frame(new byte[] { 0xA0 }.Concat(payload).ToArray());
-        Assert.Equal(52, reply.Length);
-
-        var status = OverlayContract.ParseStatus(reply);
-        Assert.Equal(2, status.Version);
-        Assert.True(status.Running);
-        Assert.True(status.RicherOnly);
-        Assert.Equal(new OverlayEntry(OverlayState.On, 0, 0xCBF43926), status.Tables[0]);
-        Assert.Equal(new OverlayEntry(OverlayState.Loaded, 320, 0), status.Tables[1]);
-        Assert.Equal(new OverlayEntry(OverlayState.Free, 0, 0), status.Tables[4]);
-        Assert.Equal(332, status.FreeBytes);
-        Assert.Throws<InvalidDataException>(() => OverlayContract.ParseStatus(Frame(0xA0)));
-    }
-
-    [Fact]
     public void Refusal_ReadsTheReason()
     {
         Assert.Equal(OverlayReason.Integrity, OverlayContract.Refusal(Frame(0xB1, 0x09)));

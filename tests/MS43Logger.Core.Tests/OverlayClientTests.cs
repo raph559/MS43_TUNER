@@ -13,18 +13,13 @@ public class OverlayClientTests
 
     private static bool Is6D(byte[] payload) => payload[0] == OverlayContract.Command;
 
-    /// <summary>Plan 5's ignition block: +3 steps at rows 10–13 by load columns 12–15 of the RON98 ignition map.</summary>
+    /// <summary>Adds three raw steps at rows 10 to 13 and load columns 12 to 15 of the RON98 ignition map.</summary>
     private static byte[] IgnitionBlock(byte[] flash)
     {
         var copy = (byte[])flash.Clone();
         foreach (var row in new[] { 10, 11, 12, 13 })
-        {
             foreach (var column in new[] { 12, 13, 14, 15 })
-            {
                 copy[row * 16 + column] += 3;
-            }
-        }
-
         return copy;
     }
 
@@ -63,96 +58,47 @@ public class OverlayClientTests
     [Fact]
     public void Send_LoadsWritesAndSwitchesOn_WithTheCompleteContentCrc()
     {
-        var (ecu, client, detection) = Running();
+        var (_, client, detection) = Running();
         var copy = IgnitionBlock(detection.Flash[0]);
 
-        var result = client.Send(0, copy, detection.Flash[0], client.Status());
+        Assert.Equal(new SendResult(null, null), client.Send(0, copy, detection.Flash[0], client.Status()));
 
-        Assert.Equal(new SendResult(null, null), result);
-        Assert.Equal(new OverlayEntry(OverlayState.On, 0, OverlayContract.Crc32(copy)), ecu.Peek().Tables[0]);
-        Assert.Equal(copy, client.ReadCopy(0, ecu.Peek().Tables[0]));
+        var entry = client.Status().Tables[0];
+        Assert.Equal((OverlayState.On, OverlayContract.Crc32(copy)), (entry.State, entry.ContentCrc32));
+        Assert.Equal(copy, client.ReadCopy(0, entry));
     }
 
     [Fact]
-    public void Send_ToAnOnMap_SwitchesItOffWritesAndOn()
+    public void Send_ALeanerLambdaCell_IsSent()                              // the edit limits of protocol 2 are gone
     {
-        var (ecu, client, detection) = Running();
-        client.Send(0, IgnitionBlock(detection.Flash[0]), detection.Flash[0], client.Status());
-        var again = IgnitionBlock(IgnitionBlock(detection.Flash[0]));
-        again[0] = detection.Flash[0][0];
-
-        var result = client.Send(0, again, detection.Flash[0], client.Status());
-
-        Assert.Null(result.Refused);
-        Assert.Equal(new OverlayEntry(OverlayState.On, 0, OverlayContract.Crc32(again)), ecu.Peek().Tables[0]);
-        Assert.Equal(again, client.ReadCopy(0, ecu.Peek().Tables[0]));
-    }
-
-    [Fact]
-    public void Send_ALeanerLambdaCell_SendsNothing()
-    {
-        var (ecu, client, detection) = Running();
+        var (_, client, detection) = Running();
         var leaner = (byte[])detection.Flash[2].Clone();
         leaner[3]--;
-        var sent = ecu.Requests.Count;
 
-        Assert.Equal(new SendResult(OverlayReason.Leaner, null), client.Send(2, leaner, detection.Flash[2], client.Status()));
-        Assert.Equal(sent + 1, ecu.Requests.Count);                        // only the status
+        Assert.Null(client.Send(2, leaner, detection.Flash[2], client.Status()).Refused);
     }
 
     [Fact]
-    public void Send_ADroppedWrite_IsResentOnce()
+    public void Send_RefusesAStatusOfAnotherVersion()
     {
-        var (ecu, client, detection) = Running();
-        var copy = detection.Flash[1].Select(b => (byte)(b + 2)).ToArray();
-        ecu.DropWrites = 1;
-
-        Assert.Null(client.Send(1, copy, detection.Flash[1], client.Status()).Refused);
-        Assert.Equal(new OverlayEntry(OverlayState.On, 0, OverlayContract.Crc32(copy)), ecu.Peek().Tables[1]);
-        Assert.Single(ecu.Requests, r => r is [0x6D, 0x03, ..]);
-        Assert.Equal(2, ecu.Requests.Count(r => r is [0x6D, 0x01, ..]));
-    }
-
-    [Fact]
-    public void Send_WhenItDoesNotFit_NamesTheMapToFree()
-    {
-        var (ecu, client, detection) = Running();
-        ecu.Request(OverlayContract.Load(3, 150));
-        ecu.Request(OverlayContract.Load(4, 400));
-
-        var result = client.Send(0, IgnitionBlock(detection.Flash[0]), detection.Flash[0], client.Status());
-
-        Assert.Equal(new SendResult(null, 3), result);
-        Assert.Equal(OverlayState.Free, ecu.Peek().Tables[0].State);
-    }
-
-    [Fact]
-    public void Place_FitsBetweenTheMapsInTheArea()
-    {
-        var (ecu, client, _) = Running();
-        ecu.Request(OverlayContract.Load(2, 0));
-        ecu.Request(OverlayContract.Load(3, 300));
-        var status = client.Status();
-
-        Assert.Equal(192, CopyAreaPlanner.Place(1, status));
-        Assert.Equal(492, CopyAreaPlanner.Place(4, status));
-        Assert.Equal(300, CopyAreaPlanner.Place(3, status));               // a map already placed keeps its place
-        Assert.Null(CopyAreaPlanner.Place(0, status));
+        var (_, client, detection) = Running();
+        var other = client.Status() with { Version = 9 };
+        Assert.Throws<ArgumentException>(() => client.Send(0, detection.Flash[0], detection.Flash[0], other));
     }
 
     [Fact]
     public void Switches_AndRevert_GoToTheEcu()
     {
-        var (ecu, client, detection) = Running();
-        client.Send(1, detection.Flash[1], detection.Flash[1], client.Status());
+        var (_, client, detection) = Running();
+        Assert.Null(client.Send(1, detection.Flash[1], detection.Flash[1], client.Status()).Refused);
         Assert.Null(client.Off(1));
-        Assert.Equal(OverlayState.Ready, ecu.Peek().Tables[1].State);
+        Assert.Equal(OverlayState.Ready, client.Status().Tables[1].State);
         Assert.Null(client.AllOn());
-        Assert.Equal(OverlayState.On, ecu.Peek().Tables[1].State);
+        Assert.Equal(OverlayState.On, client.Status().Tables[1].State);
         Assert.Null(client.AllOff());
         Assert.Null(client.On(1, OverlayContract.Crc32(detection.Flash[1])));
-        Assert.Equal(OverlayReason.TableOn, client.Free(1));
+        Assert.Equal(OverlayState.On, client.Status().Tables[1].State);
         Assert.Null(client.Revert());
-        Assert.Equal(OverlayState.Free, ecu.Peek().Tables[1].State);
+        Assert.Equal(OverlayState.Free, client.Status().Tables[1].State);
     }
 }

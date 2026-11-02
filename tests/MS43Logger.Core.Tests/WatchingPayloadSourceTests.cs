@@ -2,7 +2,7 @@ using MS43Logger.Core.LiveTuning;
 
 namespace MS43Logger.Core.Tests;
 
-/// <summary>With a V9 ECU the logger polls with sub 11 and keeps the watch record each reply carries.</summary>
+/// <summary>With the overlay the logger polls with sub 11 and keeps the watch record each reply carries.</summary>
 public sealed class WatchingPayloadSourceTests
 {
     private static FakeOverlayV4Ecu Ecu() => new(FakeOverlayEcu.Image(), 9);
