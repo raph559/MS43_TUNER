@@ -5,9 +5,9 @@ namespace MS43Logger.Core.Tests;
 /// <summary>With the overlay the logger polls with sub 11 and keeps the watch record each reply carries.</summary>
 public sealed class WatchingPayloadSourceTests
 {
-    private static FakeOverlayV4Ecu Ecu() => new(FakeOverlayEcu.Image(), 9);
+    private static FakeOverlayEcu Ecu() => new(FakeOverlayEcu.CurrentImage());
 
-    private static List<byte[]> Overlay(FakeOverlayV4Ecu ecu) => ecu.Requests.Where(r => r[0] == 0x6D).ToList();
+    private static List<byte[]> Overlay(FakeOverlayEcu ecu) => ecu.Requests.Where(r => r[0] == 0x6D).ToList();
 
     private static readonly WatchRecord A = new(WatchKind.MapIndices, 7, 3, 0x8000, 5, 0x4000, 12);
 
@@ -57,7 +57,7 @@ public sealed class WatchingPayloadSourceTests
         Assert.Equal(0x775D4u, source.LastRecordWatched);
     }
 
-    [Fact] // RF4
+    [Fact]
     public void NoRecordFromBeforeTheNewWatchsAck()
     {
         var ecu = Ecu(); var source = new WatchingPayloadSource(ecu);

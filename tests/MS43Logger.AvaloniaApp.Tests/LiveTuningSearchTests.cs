@@ -11,12 +11,12 @@ namespace MS43Logger.AvaloniaApp.Tests;
 /// </summary>
 public sealed class LiveTuningSearchTests
 {
-    private static async Task<(Avalonia.Controls.Window Window, ShellViewModel Shell, LiveTuningViewModel Page, XdfCatalog Catalog)> V7()
+    private static async Task<(Avalonia.Controls.Window Window, ShellViewModel Shell, LiveTuningViewModel Page, XdfCatalog Catalog)> OpenLiveMapCatalogueAsync()
     {
         var (window, shell) = await TuneScreen.OpenAsync(time: new ManualTicker());
         shell.SelectedTab = ShellViewModel.LiveTuningTab;
         var page = shell.LiveTuning;
-        await page.AttachLine(new FakeOverlayV4Ecu(shell.Tune.Document!.Image.ToArray(), 7));
+        await page.AttachLine(new FakeOverlayEcu(shell.Tune.Document!.Image.ToArray()));
         return (window, shell, page, new XdfCatalog(shell.Tune.Document.Xdf));
     }
 
@@ -26,7 +26,7 @@ public sealed class LiveTuningSearchTests
     public async Task EachMap_CarriesItsXdfCategoryAndDescription()
     {
         Assert.True(TuneScreen.Available);
-        var (window, _, page, catalog) = await V7();
+        var (window, _, page, catalog) = await OpenLiveMapCatalogueAsync();
         try
         {
             var row = page.Maps.First(row => row.Map.ScalarGroup is null);
@@ -42,7 +42,7 @@ public sealed class LiveTuningSearchTests
     public async Task TheSearch_FindsAMapByAWordOfItsDescription()
     {
         Assert.True(TuneScreen.Available);
-        var (window, _, page, _) = await V7();
+        var (window, _, page, _) = await OpenLiveMapCatalogueAsync();
         try
         {
             var row = page.Maps.First(row => row.Map.ScalarGroup is null && row.HasDescription
@@ -64,7 +64,7 @@ public sealed class LiveTuningSearchTests
     public async Task TheSearch_FindsTheMapsOfACategory_AndEveryWordMustMatch()
     {
         Assert.True(TuneScreen.Available);
-        var (window, _, page, _) = await V7();
+        var (window, _, page, _) = await OpenLiveMapCatalogueAsync();
         try
         {
             var category = page.Maps.SelectMany(row => row.Categories).First(name => name != XdfCatalog.OtherCategory);
@@ -80,12 +80,12 @@ public sealed class LiveTuningSearchTests
     public async Task WithoutASearch_TheListIsGroupedByCategory_AndACategoryOpensAndCloses()
     {
         Assert.True(TuneScreen.Available);
-        var (window, _, page, _) = await V7();
+        var (window, _, page, _) = await OpenLiveMapCatalogueAsync();
         try
         {
             var categories = page.Rail.OfType<LiveRailCategory>().ToList();
             Assert.NotEmpty(categories);
-            Assert.Equal(page.Maps.SelectMany(row => row.Categories).Distinct().Count(), categories.Count);
+            Assert.Equal(page.Maps.Where(row => !row.Map.Reserved).SelectMany(row => row.Categories).Distinct().Count(), categories.Count);
 
             var closed = categories.First(category => !category.IsExpanded);
             page.ToggleCategory(closed.Name);
@@ -105,7 +105,7 @@ public sealed class LiveTuningSearchTests
     public async Task SelectingAMap_OpensItsCategory_SoTheListShowsIt()
     {
         Assert.True(TuneScreen.Available);
-        var (window, _, page, _) = await V7();
+        var (window, _, page, _) = await OpenLiveMapCatalogueAsync();
         try
         {
             var other = page.Maps.Last(row => !row.Categories.Intersect(page.Selected!.Categories).Any());

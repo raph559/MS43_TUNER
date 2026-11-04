@@ -67,12 +67,6 @@ public sealed record OverlayMap(int Index, string Key, string Group, int Address
 public static class OverlayContract
 {
     public const byte Command = 0x6D;
-    public const int SupportedVersion = 2;
-
-    /// <summary>The v2 copy area at external RAM 041D30, readable with DS2 command 06.</summary>
-    public const int CopyBytes = 688;
-
-    public const int CopyRamAddress = 0x041D30;
 
     /// <summary>The overlay's 16-byte header in the flash, at 0C:B544.</summary>
     public const int HeaderAddress = 0x0CB544;
@@ -164,104 +158,6 @@ public static class OverlayContract
         return ~crc;
     }
 
-    /// <summary>The writes that turn a copy of <paramref name="flash"/> into <paramref name="copy"/>: one per run of changed bytes, long runs split.</summary>
-    public static IReadOnlyList<byte[]> Writes(int table, ReadOnlySpan<byte> copy, ReadOnlySpan<byte> flash)
-    {
-        RequireSameSize(copy, flash);
-        var writes = new List<byte[]>();
-        for (var i = 0; i < copy.Length;)
-        {
-            if (copy[i] == flash[i])
-            {
-                i++;
-                continue;
-            }
-
-            var end = i;
-            while (end < copy.Length && copy[end] != flash[end] && end - i < MostWrite)
-            {
-                end++;
-            }
-
-            writes.Add(Write(table, i, copy[i..end]));
-            i = end;
-        }
-
-        return writes;
-    }
-
-    /// <summary>The cells of a richer-only map below their flashed value (λ = 1.5 − X/256: lower is leaner); none for the other maps.</summary>
-    public static IReadOnlyList<int> LeanerCells(int table, ReadOnlySpan<byte> copy, ReadOnlySpan<byte> flash)
-    {
-        RequireSameSize(copy, flash);
-        if (!Maps[table].RicherOnly)
-        {
-            return Array.Empty<int>();
-        }
-
-        var leaner = new List<int>();
-        for (var i = 0; i < copy.Length; i++)
-        {
-            if (copy[i] < flash[i])
-            {
-                leaner.Add(i);
-            }
-        }
-
-        return leaner;
-    }
-
-    /// <summary>The fields of a whole v2 status reply, <c>12 34 A0 …</c>.</summary>
-    public static OverlayStatus ParseStatus(IReadOnlyList<byte> reply)
-    {
-        if (reply.Count > 7 && reply[7] == OverlayV4.Version) return OverlayV4.ParseStatus(reply);
-        if (reply.Count > 7 && reply[7] == OverlayV3.Version) return OverlayV3.ParseStatus(reply);
-        ValidateFrame(reply);
-        if (reply.Count != 52 || reply[2] != 0xA0
-            || reply[3] != 'L' || reply[4] != 'T' || reply[5] != 'O' || reply[6] != 'V')
-        {
-            throw new InvalidDataException("not the overlay's status reply: " + Convert.ToHexString(reply.ToArray()));
-        }
-
-        var p = reply.Skip(3).ToArray();
-        if (p[4] != SupportedVersion)
-        {
-            throw new InvalidDataException($"Unsupported live-tuning overlay version {p[4]}; version {SupportedVersion} is required.");
-        }
-
-        int Word(int at) => p[at] << 8 | p[at + 1];
-        uint DWord(int at) => (uint)p[at] << 24 | (uint)p[at + 1] << 16 | (uint)p[at + 2] << 8 | p[at + 3];
-        var tables = Enumerable.Range(0, Maps.Count)
-            .Select(i => new OverlayEntry((OverlayState)p[6 + 8 * i], Word(8 + 8 * i), DWord(10 + 8 * i)))
-            .ToArray();
-        for (var i = 0; i < tables.Length; i++)
-        {
-            var entry = tables[i];
-            if ((byte)entry.State > (byte)OverlayState.On || p[7 + 8 * i] != 0
-                || (entry.State != OverlayState.Free && entry.Offset + Maps[i].Bytes > CopyBytes))
-            {
-                throw new InvalidDataException("Invalid overlay table directory.");
-            }
-
-            for (var j = 0; j < i; j++)
-            {
-                if (entry.State != OverlayState.Free && tables[j].State != OverlayState.Free
-                    && entry.Offset < tables[j].Offset + Maps[j].Bytes && tables[j].Offset < entry.Offset + Maps[i].Bytes)
-                {
-                    throw new InvalidDataException("Overlapping overlay table directory.");
-                }
-            }
-        }
-
-        var free = CopyBytes - tables.Select((entry, i) => entry.State == OverlayState.Free ? 0 : Maps[i].Bytes).Sum();
-        if (Word(46) != free)
-        {
-            throw new InvalidDataException("Invalid overlay free-byte count.");
-        }
-
-        return new OverlayStatus(p[4], (p[5] & 1) != 0, (p[5] & 2) != 0, tables, free);
-    }
-
     /// <summary>The reason of a B0/B1 refusal; null for an A0 reply. Anything else is not the overlay's reply.</summary>
     public static OverlayReason? Refusal(IReadOnlyList<byte> reply)
     {
@@ -281,14 +177,6 @@ public static class OverlayContract
             || reply.Aggregate((byte)0, (xor, value) => (byte)(xor ^ value)) != 0)
         {
             throw new InvalidDataException("Invalid DS2 reply length, address or checksum.");
-        }
-    }
-
-    private static void RequireSameSize(ReadOnlySpan<byte> copy, ReadOnlySpan<byte> flash)
-    {
-        if (copy.Length != flash.Length)
-        {
-            throw new ArgumentException("the copy and the flashed map differ in size");
         }
     }
 

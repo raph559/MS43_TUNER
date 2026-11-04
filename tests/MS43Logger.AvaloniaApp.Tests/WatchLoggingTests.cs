@@ -135,11 +135,11 @@ public sealed class WatchLoggingTests
         var (window, shell) = await TuneScreen.OpenAsync(select: null, time: new ManualTime());
         try
         {
-            ReadOnlySpan<byte> header = [(byte)'L', (byte)'T', (byte)'O', (byte)'V', 9, 0], pops = [0x00, 0x14, 0x17, 0xB8, 0x32, 0x9E, 0x00, 0x14];
+            ReadOnlySpan<byte> header = [(byte)'L', (byte)'T', (byte)'O', (byte)'V', 10, 4], pops = OverlayV104Settings.Defaults;
             for (var i = 0; i < header.Length; i++) shell.Tune.Document!.Image.WriteElement(new XdfData(0x4B544 + i, 8, false, true, 1, 1, null), 0, header[i]);
             for (var i = 0; i < pops.Length; i++) shell.Tune.Document!.Image.WriteElement(new XdfData(0x4FF80 + i, 8, false, true, 1, 1, null), 0, pops[i]);
             shell.SelectedTab = ShellViewModel.LiveTuningTab;
-            var ecu = new StoppingLine(new FakeOverlayV4Ecu(shell.Tune.Document!.Image.ToArray(), 9));
+            var ecu = new StoppingLine(new FakeOverlayEcu(shell.Tune.Document!.Image.ToArray()));
             await shell.LiveTuning.AttachLine(ecu);
             Assert.False(shell.Live.OverlayQuiet);
             ecu.Fail = true;

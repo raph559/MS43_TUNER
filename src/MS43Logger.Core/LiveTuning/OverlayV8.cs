@@ -3,14 +3,9 @@ namespace MS43Logger.Core.LiveTuning;
 /// <summary>Compatibility catalogue and limits for the original pops encoding.</summary>
 public static class OverlayV8
 {
-    public const int Version = 8, Pops = 138, DefaultsAddress = 0xCFF80, PoolABytes = 700, CopyBytes = 928;
+    public const int Pops = OverlaySettings.Pops, DefaultsAddress = OverlaySettings.DefaultsAddress;
     public const string Category = OverlaySettings.PopsCategory;
-
-    /// <summary>"A/C on": bit 7 of 615h byte 0 is 1 while the A/C button is on (owner's car check, 2026-10-29).</summary>
-    public const byte AirConOn = 0x97;
-
-    /// <summary>"ASC off": bit 2 of 153h byte 0 is 1 while ASC is switched off (owner's car check, 2026-11-03).</summary>
-    public const byte AscOff = 0x82;
+    public const byte AirConOn = OverlayTriggers.AirConOn, AscOff = OverlayTriggers.AscOff;
     public static IReadOnlyList<(byte Value, string Label, string Short)> Triggers => OverlayTriggers.Pops;
 
     /// <summary>Each byte's lowest and highest value, as the firmware enforces them.</summary>
@@ -54,13 +49,6 @@ public static class OverlayV8
         .Append(new OverlayMap(Pops, "pops", "Pops & bangs", DefaultsAddress, 8, false, PopsGroup)).ToArray());
 
     public static bool IsCanBit(byte value) => OverlayTriggers.IsCanBit(value);
-
-    public static OverlayReason? ValidateCopy(int table, ReadOnlySpan<byte> copy, ReadOnlySpan<byte> flash)
-    {
-        if (table != Pops) return OverlayV6.ValidateCopy(table, copy, flash);
-        if (copy.Length != 8) return OverlayReason.Range;
-        for (var i = 0; i < 8; i++)
-            if ((i != 0 || !IsCanBit(copy[i])) && (copy[i] < Limits[i].Low || copy[i] > Limits[i].High)) return OverlayReason.Range;
-        return null;
-    }
+    public static OverlayReason? ValidateCopy(int table, ReadOnlySpan<byte> copy, ReadOnlySpan<byte> flash) => table == Pops
+        ? OverlaySettings.ValidatePops(copy, Limits) : OverlaySettings.ValidateStockLaunchCopy(table, copy, flash);
 }

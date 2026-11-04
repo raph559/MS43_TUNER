@@ -6,7 +6,7 @@ public class LiveTuningSessionTests
 {
     private static async Task<(FakeOverlayEcu Ecu, LiveTuningSession Session)> Started(Action<FakeOverlayEcu>? before = null)
     {
-        var ecu = new FakeOverlayEcu(FakeOverlayEcu.Image()) { Running = true };
+        var ecu = new FakeOverlayEcu(FakeOverlayEcu.CurrentImage()) { Running = true };
         before?.Invoke(ecu);
         var session = new LiveTuningSession(ecu);
         await session.StartAsync();
@@ -36,7 +36,7 @@ public class LiveTuningSessionTests
     [Fact]
     public async Task WithoutTheOverlay_NothingIsSent()
     {
-        var ecu = new FakeOverlayEcu(FakeOverlayEcu.Image(), hasOverlay: false);
+        var ecu = new FakeOverlayEcu(FakeOverlayEcu.CurrentImage()) { HasOverlay = false };
         var session = new LiveTuningSession(ecu);
         Assert.Equal("not found", (await session.StartAsync()).Problem);
         await session.TickAsync();
@@ -107,7 +107,7 @@ public class LiveTuningSessionTests
     }
 
     [Fact]
-    public async Task SendWhileStopped_IsRefusedAndShown()                       // Review Focus 2
+    public async Task SendWhileStopped_IsRefusedAndShown()
     {
         var (ecu, session) = await Started();
         ecu.Stall();
@@ -122,16 +122,17 @@ public class LiveTuningSessionTests
     }
 
     [Fact]
-    public async Task MapsTheAppDidNotSend_AreAdopted()                          // Review Focus 4
+    public async Task MapsTheAppDidNotSend_AreAdopted()
     {
         var flash = FakeOverlayEcu.Image().AsSpan(OverlayContract.Maps[1].Address, 36).ToArray();
         var copy = flash.Select(b => (byte)(b + 1)).ToArray();
         var (_, session) = await Started(ecu =>
         {
-            ecu.Request(OverlayContract.Load(1, 100));
-            ecu.Request(OverlayContract.Write(1, 0, copy));
-            ecu.Request(OverlayContract.On(1, OverlayContract.Crc32(copy)));
-            ecu.Request(OverlayContract.Load(3, 200));
+            // Another app's session: map 1 live with its own copy, map 3 loaded and off.
+            var other = new OverlayClient(ecu); var detection = other.Detect();
+            Assert.Null(other.Send(1, copy, detection.Flash[1], other.Status()).Refused);
+            Assert.Null(other.Send(3, detection.Flash[3], detection.Flash[3], other.Status()).Refused);
+            Assert.Null(other.Off(3));
         });
 
         Assert.Equal(MapIntent.Live, session.Intent(1));
@@ -141,7 +142,7 @@ public class LiveTuningSessionTests
     }
 
     [Fact]
-    public async Task APortError_StopsTheSessionAndReports()                     // Review Focus 5
+    public async Task APortError_StopsTheSessionAndReports()
     {
         var (ecu, session) = await Started();
         Exception? stopped = null;
@@ -201,15 +202,15 @@ public class LiveTuningSessionTests
     }
 
     [Fact]
-    public async Task ASentOffMap_LeftOnByALostOff_IsSwitchedOffNextTick()   // final review I2a
+    public async Task ASentOffMap_LeftOnByALostOff_IsSwitchedOffNextTick()
     {
         var (ecu, session) = await Started();
         await session.SendAsync(1, Plus(session, 1, 2));
         await session.SetOnAsync(1, false);
         ecu.KeyCycle();
         ecu.Running = true;
-        var lost = true;
-        ecu.FailWhen = r => r is [0x6D, 0x04, ..] && lost && !(lost = false) ? new TimeoutException() : null;
+        var lost = 2;                                                        // the off and its one resend
+        ecu.FailWhen = r => r is [0x6D, 0x04, ..] && lost-- > 0 ? new TimeoutException() : null;
 
         await session.TickAsync();                                           // sent again and on; its off is lost
         Assert.Equal(OverlayState.On, ecu.Peek().Tables[1].State);
@@ -220,7 +221,7 @@ public class LiveTuningSessionTests
     }
 
     [Fact]
-    public async Task ALoadedMapItHadSent_IsPutBack()                           // final review I2b
+    public async Task ALoadedMapItHadSent_IsPutBack()
     {
         var (ecu, session) = await Started();
         var v1 = Plus(session, 1, 2);
@@ -237,7 +238,7 @@ public class LiveTuningSessionTests
     }
 
     [Fact]
-    public async Task AMalformedReply_DoesNotStopTheSession()                   // final review I6
+    public async Task AMalformedReply_DoesNotStopTheSession()
     {
         var (ecu, session) = await Started();
         ecu.ReplyNext = new byte[] { 0x12, 0x04, 0xA0, 0xB6 };              // a late accept where the status should be
@@ -272,7 +273,7 @@ public class LiveTuningSessionTests
     }
 
     [Fact]
-    public async Task ARebind_KeepsWhatWasSent_WhenTheFlashIsTheSame()          // final review C1
+    public async Task ARebind_KeepsWhatWasSent_WhenTheFlashIsTheSame()
     {
         var (ecu, session) = await Started();
         var copy = Plus(session, 1, 2);
@@ -294,7 +295,7 @@ public class LiveTuningSessionTests
     {
         var (ecu, session) = await Started();
         await session.SendAsync(1, Plus(session, 1, 2));
-        var other = new FakeOverlayEcu(FakeOverlayEcu.Image(seed: 3)) { Running = true };
+        var other = new FakeOverlayEcu(FakeOverlayEcu.CurrentImage(seed: 3)) { Running = true };
 
         session.Rebind(other);
         await session.StartAsync();

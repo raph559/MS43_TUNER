@@ -18,11 +18,15 @@ public sealed class LiveTuningTests : IDisposable
         }
     }
 
-    private async Task<(LiveTuningViewModel Page, FakeOverlayEcu Ecu, TuneViewModel Tune)> Attached(bool hasOverlay = true, byte[]? ecuImage = null, int version = 2)
+    private async Task<(LiveTuningViewModel Page, FakeOverlayEcu Ecu, TuneViewModel Tune)> Attached(bool hasOverlay = true, byte[]? ecuImage = null,
+        int version = OverlayV10.Version, int minor = OverlayV10.Minor)
     {
         var tune = new TuneViewModel(AppSettings.Load(_folder));
         await tune.OpenAsync(TuneScreen.Car!, TuneScreen.Xdf);
-        var ecu = new FakeOverlayEcu(ecuImage ?? File.ReadAllBytes(TuneScreen.Car!), hasOverlay) { Running = true, Version = version };
+        var ecu = new FakeOverlayEcu(ecuImage ?? File.ReadAllBytes(TuneScreen.Car!))
+        {
+            Running = true, HasOverlay = hasOverlay, HeaderVersion = version, Minor = minor,
+        };
         var page = new LiveTuningViewModel(new MainWindowViewModel(ports: () => ["COM1"]), tune, new LiveEditStore(Path.Combine(_folder, "live-edits.json")));
         await page.AttachLine(ecu);
         return (page, ecu, tune);
@@ -76,9 +80,9 @@ public sealed class LiveTuningTests : IDisposable
 
         var (page, ecu, _) = await Attached();
         Assert.False(page.IsReadOnly);
-        Assert.Contains("Overlay 2 found · engine running", page.LinkText);
+        Assert.Contains("Overlay 10.4 found · engine running", page.LinkText);
         Assert.True(page.HasVerifiedCatalogue);
-        Assert.Equal("5 supported maps", page.CatalogueText);
+        Assert.Equal("135 supported maps + 7 settings groups · load while RAM fits", page.CatalogueText);
 
         Raise(page, 1, 2);
         Assert.True(page.Maps[1].HasUnsent);

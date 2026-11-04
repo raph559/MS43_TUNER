@@ -11,7 +11,7 @@ namespace MS43Logger.AvaloniaApp.Tests;
 /// </summary>
 public sealed class FunTabTests
 {
-    private static readonly byte[] PopsDefaults = [0x00, 0x14, 0x17, 0xB8, 0x32, 0x9E, 0x00, 0x14];
+    private static readonly byte[] GroupDefaults = OverlayV104Settings.Defaults;
 
     private static void Put(ShellViewModel shell, int offset, ReadOnlySpan<byte> bytes)
     {
@@ -19,21 +19,21 @@ public sealed class FunTabTests
             shell.Tune.Document!.Image.WriteElement(new XdfData(offset + i, 8, false, true, 1, 1, null), 0, bytes[i]);
     }
 
-    /// <summary>The car bin, made a V8 bin (overlay header version 8 and the pops defaults) when asked.</summary>
-    private static async Task<(Avalonia.Controls.Window Window, ShellViewModel Shell, FunViewModel Fun, FakeOverlayV4Ecu? Ecu)> Open(
-        int? ecu = null, bool v8Bin = false)
+    /// <summary>The car bin, made a V10.4 bin (its overlay header and flashed groups) when asked, with a V10.4 ECU on it when asked.</summary>
+    private static async Task<(Avalonia.Controls.Window Window, ShellViewModel Shell, FunViewModel Fun, FakeOverlayEcu? Ecu)> Open(
+        bool ecu = false, bool overlayBin = false)
     {
         var (window, shell) = await TuneScreen.OpenAsync(select: null, time: new ManualTicker());
-        if (v8Bin)
+        if (overlayBin)
         {
-            Put(shell, 0x4B544, [(byte)'L', (byte)'T', (byte)'O', (byte)'V', 8, 0]);
-            Put(shell, 0x4FF80, PopsDefaults);
+            Put(shell, 0x4B544, [(byte)'L', (byte)'T', (byte)'O', (byte)'V', 10, 4]);
+            Put(shell, 0x4FF80, GroupDefaults);
         }
         shell.SelectedTab = ShellViewModel.FunTab;
-        FakeOverlayV4Ecu? fake = null;
-        if (ecu is { } version)
+        FakeOverlayEcu? fake = null;
+        if (ecu)
         {
-            fake = new FakeOverlayV4Ecu(shell.Tune.Document!.Image.ToArray(), version);
+            fake = new FakeOverlayEcu(shell.Tune.Document!.Image.ToArray());
             await shell.LiveTuning.AttachLine(fake);
         }
         return (window, shell, shell.Fun, fake);
@@ -50,10 +50,10 @@ public sealed class FunTabTests
 
     [CarAvaloniaTheory]
     [InlineData(false, new[] { "lc", "nls", "ral", "hardcut" })]
-    [InlineData(true, new[] { "lc", "nls", "ral", "hardcut", "pops" })]
+    [InlineData(true, new[] { "lc", "nls", "ral", "hardcut", "pops", "blip" })]
     public async Task OfflineFeaturesFollowTheBin(bool v8Bin, string[] keys)
     {
-        var (window, shell, fun, _) = await Open(v8Bin: v8Bin);
+        var (window, shell, fun, _) = await Open(overlayBin: v8Bin);
         try
         {
             Assert.Equal(FunMode.Bin, fun.Mode);
@@ -69,8 +69,8 @@ public sealed class FunTabTests
         finally { Close(window, shell); }
     }
 
-    // Owner, 2026-10-28: every feature stays in the list; one the bin or the ECU does not have is greyed, says why, and
-    // offers nothing to edit (the car file has no overlay, so its pops bytes are not pops settings).
+    // Features absent from the bin stay listed but disabled with a reason; their calibration bytes must not be edited
+    // as overlay settings.
     [CarAvaloniaFact]
     public async Task AFeatureTheBinLacksIsListedGreyedWithItsReason()
     {
@@ -81,7 +81,7 @@ public sealed class FunTabTests
             var pops = fun.Features.Single(f => f.Key == "pops");
             Assert.False(pops.IsAvailable);
             Assert.Equal("Unavailable", pops.SwitchText);
-            Assert.Equal("This bin has no live overlay; the pops need V8. Open the V8 bin to set them.", pops.Unavailable);
+            Assert.Equal("This bin has no live overlay; the pops need V10.4. Open the V10.4 bin to set them.", pops.Unavailable);
             Assert.Equal("lc", fun.Selected!.Key);
 
             fun.Selected = pops;
@@ -111,7 +111,7 @@ public sealed class FunTabTests
         shell.Fun.Dispose(); shell.LiveTuning.Dispose();
     }
 
-    [CarAvaloniaFact] // RF5
+    [CarAvaloniaFact]
     public async Task AGroupWhoseXdfConstantsAreMissingIsNotListed()
     {
         var (window, shell, _, _) = await Open();
@@ -119,7 +119,7 @@ public sealed class FunTabTests
         {
             var lc = OverlayV6.Maps.Single(m => m.Index == OverlayV6.LaunchControl);
             var broken = lc with { ScalarGroup = lc.ScalarGroup! with { Fields = [.. lc.ScalarGroup.Fields.Select(f => f.Offset == 3 ? f with { Key = "c_lc_missing" } : f)] } };
-            var groups = OverlayV8.Maps.Where(m => m.ScalarGroup is not null).Select(m => m.Index == lc.Index ? broken : m).ToArray();
+            var groups = OverlayV10.Maps.Where(m => m.ScalarGroup is not null).Select(m => m.Index == lc.Index ? broken : m).ToArray();
             Assert.DoesNotContain("lc", FunFeatures.Offline(shell.Tune.Document!, groups));
             Assert.Contains("nls", FunFeatures.Offline(shell.Tune.Document!, groups));
         }
@@ -142,8 +142,8 @@ public sealed class FunTabTests
     [CarAvaloniaFact]
     public async Task LiveEditInFunSendsWhatTheLivePageSends()
     {
-        var (w1, s1, fun, ecu1) = await Open(8, v8Bin: true);
-        var (w2, s2, _, ecu2) = await Open(8, v8Bin: true);
+        var (w1, s1, fun, ecu1) = await Open(ecu: true, overlayBin: true);
+        var (w2, s2, _, ecu2) = await Open(ecu: true, overlayBin: true);
         try
         {
             Choose(fun, "pops");
@@ -165,7 +165,7 @@ public sealed class FunTabTests
     [CarAvaloniaFact]
     public async Task LiveEditInFunShowsInTheLivePage()
     {
-        var (window, shell, fun, _) = await Open(6);
+        var (window, shell, fun, _) = await Open(ecu: true);
         try
         {
             Choose(fun, "lc");
@@ -179,7 +179,7 @@ public sealed class FunTabTests
     [CarAvaloniaFact]
     public async Task OutOfRangePopsIsRefusedInFunAsOnThePage()
     {
-        var (window, shell, fun, ecu) = await Open(8, v8Bin: true);
+        var (window, shell, fun, ecu) = await Open(ecu: true, overlayBin: true);
         try
         {
             Choose(fun, "pops");
@@ -192,10 +192,10 @@ public sealed class FunTabTests
         finally { Close(window, shell); }
     }
 
-    [CarAvaloniaFact] // RF4
+    [CarAvaloniaFact]
     public async Task ChoosingInFunLeavesTheLivePageAlone()
     {
-        var (window, shell, fun, _) = await Open(8, v8Bin: true);
+        var (window, shell, fun, _) = await Open(ecu: true, overlayBin: true);
         try
         {
             var selected = shell.LiveTuning.Selected; var fields = shell.LiveTuning.ScalarFields.Count;
@@ -206,10 +206,10 @@ public sealed class FunTabTests
         finally { Close(window, shell); }
     }
 
-    [CarAvaloniaFact] // RF1, RF2
+    [CarAvaloniaFact]
     public async Task ConnectingAndDisconnectingSwitchesWhatTheRowsEdit()
     {
-        var (window, shell, fun, _) = await Open(v8Bin: true);
+        var (window, shell, fun, _) = await Open(overlayBin: true);
         try
         {
             Choose(fun, "lc");
@@ -217,7 +217,7 @@ public sealed class FunTabTests
             var rpm = fun.ScalarRows.Single(r => r.Key == "c_lc_n_max").Editor; rpm.Input = "4800"; Assert.True(rpm.Apply());
             Assert.Equal(150, shell.Tune.Document!.Image.Bytes[0x7132F]);
 
-            var ecu = new FakeOverlayV4Ecu(shell.Tune.Document.Image.ToArray(), 8);
+            var ecu = new FakeOverlayEcu(shell.Tune.Document.Image.ToArray());
             await shell.LiveTuning.AttachLine(ecu);
             Assert.Equal(FunMode.Live, fun.Mode);
             Assert.DoesNotContain(fun.ScalarRows, row => offline.Contains(row));
@@ -236,7 +236,7 @@ public sealed class FunTabTests
     [CarAvaloniaFact]
     public async Task HardcutSendsThroughTheLimiter()
     {
-        var (window, shell, fun, ecu) = await Open(6);
+        var (window, shell, fun, ecu) = await Open(ecu: true);
         try
         {
             Choose(fun, "hardcut");
@@ -267,10 +267,10 @@ public sealed class FunTabTests
         finally { Close(window, shell); }
     }
 
-    [CarAvaloniaFact] // RF3
+    [CarAvaloniaFact]
     public async Task OfflineOutOfRangeIsRefusedAndUndone()
     {
-        var (window, shell, fun, _) = await Open(v8Bin: true);
+        var (window, shell, fun, _) = await Open(overlayBin: true);
         try
         {
             Choose(fun, "pops");
@@ -306,7 +306,7 @@ public sealed class FunTabTests
     [CarAvaloniaFact]
     public async Task TheListShowsEachSwitch()
     {
-        var (window, shell, fun, _) = await Open(v8Bin: true);
+        var (window, shell, fun, _) = await Open(overlayBin: true);
         try
         {
             Put(shell, 0x4FF80, [0x97]);
@@ -323,10 +323,10 @@ public sealed class FunTabTests
         finally { Close(window, shell); }
     }
 
-    [CarAvaloniaFact] // review C1, C2
+    [CarAvaloniaFact]
     public async Task OfflineChecksOnlyFunEdits_AndARefusalLeavesNoRedo()
     {
-        var (window, shell, fun, _) = await Open(v8Bin: true);
+        var (window, shell, fun, _) = await Open(overlayBin: true);
         try
         {
             Choose(fun, "pops");
@@ -346,10 +346,10 @@ public sealed class FunTabTests
         finally { Close(window, shell); }
     }
 
-    [CarAvaloniaFact] // review I1
+    [CarAvaloniaFact]
     public async Task ConnectedTypingSurvivesTheLivePagesTick()
     {
-        var (window, shell, fun, _) = await Open(6);
+        var (window, shell, fun, _) = await Open(ecu: true);
         try
         {
             Choose(fun, "lc");
@@ -362,10 +362,10 @@ public sealed class FunTabTests
         finally { Close(window, shell); }
     }
 
-    [CarAvaloniaFact] // review I2, I4
+    [CarAvaloniaFact]
     public async Task WriteToBinNeedsASend_AndTheHardcutUndoRevertsAll()
     {
-        var (window, shell, fun, _) = await Open(6);
+        var (window, shell, fun, _) = await Open(ecu: true);
         try
         {
             Choose(fun, "lc");

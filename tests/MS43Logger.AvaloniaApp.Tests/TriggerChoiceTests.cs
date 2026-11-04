@@ -26,14 +26,14 @@ public sealed class TriggerChoiceTests : IDisposable
             shell.Tune.Document!.Image.WriteElement(new XdfData(offset + i, 8, false, true, 1, 1, null), 0, bytes[i]);
     }
 
-    /// <summary>The car bin with its overlay header at <paramref name="version"/>, live on a fake ECU of that version.</summary>
-    private static async Task<(Avalonia.Controls.Window Window, ShellViewModel Shell)> Live(int version)
+    /// <summary>The car bin made a V10.4 bin, live on a V10.4 ECU.</summary>
+    private static async Task<(Avalonia.Controls.Window Window, ShellViewModel Shell)> Live()
     {
         var (window, shell) = await TuneScreen.OpenAsync(select: null, time: new ManualTicker());
-        Put(shell, 0x4B544, [(byte)'L', (byte)'T', (byte)'O', (byte)'V', (byte)version, 0]);
-        Put(shell, 0x4FF80, [0x00, 0x14, 0x17, 0xB8, 0x32, 0x9E, 0x00, 0x14]);
+        Put(shell, 0x4B544, [(byte)'L', (byte)'T', (byte)'O', (byte)'V', 10, 4]);
+        Put(shell, 0x4FF80, OverlayV104Settings.Defaults);
         shell.SelectedTab = ShellViewModel.LiveTuningTab;
-        await shell.LiveTuning.AttachLine(new FakeOverlayV4Ecu(shell.Tune.Document!.Image.ToArray(), version));
+        await shell.LiveTuning.AttachLine(new FakeOverlayEcu(shell.Tune.Document!.Image.ToArray()));
         return (window, shell);
     }
 
@@ -56,8 +56,8 @@ public sealed class TriggerChoiceTests : IDisposable
         var (window, shell) = await TuneScreen.OpenAsync(select: null, time: new ManualTicker());
         try
         {
-            Put(shell, 0x4B544, [(byte)'L', (byte)'T', (byte)'O', (byte)'V', 9, 0]);
-            Put(shell, 0x4FF80, [0x00, 0x14, 0x17, 0xB8, 0x32, 0x9E, 0x00, 0x14]);
+            Put(shell, 0x4B544, [(byte)'L', (byte)'T', (byte)'O', (byte)'V', 10, 4]);
+            Put(shell, 0x4FF80, OverlayV104Settings.Defaults);
             Put(shell, 0x7132C, [0x97]);
             shell.SelectedTab = ShellViewModel.FunTab;
             shell.Fun.Refresh();

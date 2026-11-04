@@ -6,7 +6,7 @@ public class OverlayClientTests
 {
     private static (FakeOverlayEcu Ecu, OverlayClient Client, OverlayDetection Detection) Running(byte[]? image = null)
     {
-        var ecu = new FakeOverlayEcu(image ?? FakeOverlayEcu.Image()) { Running = true };
+        var ecu = new FakeOverlayEcu(image ?? FakeOverlayEcu.CurrentImage()) { Running = true };
         var client = new OverlayClient(ecu);
         return (ecu, client, client.Detect());
     }
@@ -28,28 +28,31 @@ public class OverlayClientTests
     {
         var (ecu, _, detection) = Running();
         Assert.Null(detection.Problem);
-        Assert.Equal(new OverlayHeader(2, 0xB554, 0xBB18, 0xBB40, 5), detection.Header);
-        Assert.Equal(5, detection.Flash.Count);
-        Assert.All(OverlayContract.Maps, m => Assert.Equal(ecu.Read(m.Address, m.Bytes), detection.Flash[m.Index]));
+        Assert.Equal((10, 4, 143), (detection.Header!.Version, detection.Header.Minor, detection.Header.TableCount));
+        Assert.Equal(143, detection.Flash.Count);
+        Assert.All(OverlayV10.Maps, m => Assert.Equal(ecu.Read(m.Address, m.Bytes), detection.Flash[m.Index]));
+        Assert.NotNull(detection.LimiterFlash);
         Assert.DoesNotContain(ecu.Requests, Is6D);
     }
 
     [Fact]
     public void Detect_WithoutTheOverlay_SaysNotFound_AndSendsNo6D()
     {
-        var ecu = new FakeOverlayEcu(FakeOverlayEcu.Image(), hasOverlay: false);
-        var detection = new OverlayClient(ecu).Detect();
+        var ecu = new FakeOverlayEcu(FakeOverlayEcu.CurrentImage()) { HasOverlay = false };
+        var client = new OverlayClient(ecu);
+        var detection = client.Detect();
         Assert.Equal("not found", detection.Problem);
         Assert.Null(detection.Header);
         Assert.Empty(detection.Flash);
+        Assert.Throws<InvalidOperationException>(() => client.Status());
         Assert.DoesNotContain(ecu.Requests, Is6D);
     }
 
     [Fact]
-    public void Detect_UsesTheEcusBytes_AndReportsADifferentBin()            // Review Focus 3
+    public void Detect_UsesTheEcusBytes_AndReportsADifferentBin()
     {
-        var (_, _, detection) = Running(FakeOverlayEcu.Image(seed: 7));
-        var openBin = FakeOverlayEcu.Image();
+        var (_, _, detection) = Running(FakeOverlayEcu.CurrentImage(seed: 7));
+        var openBin = FakeOverlayEcu.CurrentImage();
         var map = OverlayContract.Maps[0];
         Assert.Equal(FakeOverlayEcu.Image(seed: 7).AsSpan(map.Address, map.Bytes).ToArray(), detection.Flash[0]);
         Assert.NotEqual(openBin.AsSpan(map.Address, map.Bytes).ToArray(), detection.Flash[0]);
