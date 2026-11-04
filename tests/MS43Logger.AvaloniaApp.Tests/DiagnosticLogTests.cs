@@ -57,7 +57,7 @@ public sealed class DiagnosticLogTests : IDisposable
             if (address == 0x0CB544)
             {
                 if (!overlay) return null;
-                var header = new byte[16]; "LTOV"u8.CopyTo(header); header[4] = 10; header[5] = 1; header[14] = 0xDA; header[15] = 0xC0;
+                var header = new byte[16]; "LTOV"u8.CopyTo(header); header[4] = OverlayV10.Version; header[5] = OverlayV10.Minor; header[14] = 0xDA; header[15] = 0xC0;
                 return Frame([0xA0, .. header]);
             }
             return Frame([0xA0, .. Enumerable.Range(address, n).Select(a => memory.GetValueOrDefault(a))]);

@@ -48,6 +48,22 @@ public sealed class FunTabTests
 
     private static LiveScalarRow Row(FunViewModel fun, string label) => fun.ScalarRows.Single(r => r.Label == label);
 
+    [CarAvaloniaFact]
+    public async Task ConnectedEveryFeatureIsThere()
+    {
+        Assert.True(TuneScreen.Available);
+        var (window, shell, fun, _) = await Open(ecu: true, overlayBin: true);
+        try
+        {
+            Assert.Equal(FunMode.Live, fun.Mode);
+            Assert.Equal("Car connected · editing live (overlay V10.4)", fun.ModeText);
+            Assert.Equal(FunFeatures.Order, fun.Features.Select(f => f.Key));
+            Assert.All(fun.Features, f => Assert.True(f.IsAvailable, f.Key));
+            Choose(fun, "pops"); Avalonia.Threading.Dispatcher.UIThread.RunJobs(); Screens.Save(window, "fun-live-pops");
+        }
+        finally { Close(window, shell); }
+    }
+
     [CarAvaloniaTheory]
     [InlineData(false, new[] { "lc", "nls", "ral", "hardcut" })]
     [InlineData(true, new[] { "lc", "nls", "ral", "hardcut", "pops", "blip" })]
