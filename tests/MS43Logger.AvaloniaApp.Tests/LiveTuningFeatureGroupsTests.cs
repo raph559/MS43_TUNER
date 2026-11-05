@@ -269,7 +269,186 @@ public sealed class LiveTuningFeatureGroupsTests
         finally { Close(window, shell); }
     }
 
+    [CarAvaloniaFact]
+    public async Task AHoldAboveTheOpeningIsRefusedInFunAsOnThePage()
+    {
+        var (window, shell, ecu, _) = await Open(true, ShellViewModel.FunTab);
+        var fun = shell.Fun;
+        try
+        {
+            Choose(fun, FunFeatures.Blip);
+            var opening = Field(fun.ScalarRows, "Blip opening"); opening.Input = "10.0"; Assert.True(opening.Apply());
+            var hold = Field(fun.ScalarRows, "Hold opening"); hold.Input = "20.0"; Assert.True(hold.Apply());
+            var requests = ecu!.Requests.Count;
+            await fun.SendAsync();
+            Assert.Contains("the hold opening is above the blip opening", fun.Problem);
+            Assert.DoesNotContain(ecu.Requests.Skip(requests), p => p[0] == 0x6D && p[1] is 1 or 2 or 3);
+        }
+        finally { Close(window, shell); }
+    }
+
+    [CarAvaloniaFact] // a refusal must never leave the feature switched on with stale settings
+    public async Task AnInvalidGearsGroupSendsNothingFromTheBlipPage()
+    {
+        var (window, shell, ecu, _) = await Open(true, ShellViewModel.FunTab);
+        var fun = shell.Fun;
+        try
+        {
+            Choose(fun, FunFeatures.Blip);
+            var on = Field(fun.ScalarRows, "Switch"); on.SelectedChoice = on.Choices!.Single(choice => choice.Value == 1);
+            var tap = Field(fun.ScalarRows, "Tap length"); tap.Input = "610"; tap.Apply();      // 61, one above the firmware's 60
+            var requests = ecu!.Requests.Count;
+            await fun.SendAsync();
+            Assert.Contains("A blip setting is outside its limits", fun.Problem);
+            Assert.DoesNotContain(ecu.Requests.Skip(requests), p => p[0] == 0x6D && p[1] is 1 or 2 or 3 or 9);
+            Assert.Equal(OverlayState.Free, ecu.Entries[OverlayV10.Blip].State);
+        }
+        finally { Close(window, shell); }
+    }
+
+    [CarAvaloniaFact] // the group holding the feature's switch goes last
+    public async Task TheBlipPageSendsItsSwitchGroupLast()
+    {
+        var (window, shell, ecu, _) = await Open(true, ShellViewModel.FunTab);
+        var fun = shell.Fun;
+        try
+        {
+            Choose(fun, FunFeatures.Blip);
+            var on = Field(fun.ScalarRows, "Switch"); on.SelectedChoice = on.Choices!.Single(choice => choice.Value == 1);
+            var requests = ecu!.Requests.Count;
+            await fun.SendAsync();
+            Assert.Null(fun.Problem);
+            var loads = ecu.Requests.Skip(requests).Where(p => p is [0x6D, 1, ..]).Select(p => (int)p[10]).ToArray();
+            Assert.Equal([OverlayV10.BlipRatios, OverlayV10.BlipGears, OverlayV10.Blip], loads);
+        }
+        finally { Close(window, shell); }
+    }
+
+    [CarAvaloniaFact] // after a refusal the page says what went live, and the feature's switch stays as it was
+    public async Task ARefusedGroupSaysWhatWentLiveAndKeepsTheSwitchOff()
+    {
+        var (window, shell, ecu, _) = await Open(true, ShellViewModel.FunTab);
+        var fun = shell.Fun;
+        try
+        {
+            Choose(fun, FunFeatures.Blip);
+            var on = Field(fun.ScalarRows, "Switch"); on.SelectedChoice = on.Choices!.Single(choice => choice.Value == 1);
+            ecu!.RefuseLoad = (OverlayV10.BlipGears, OverlayReason.Overlap);
+            await fun.SendAsync();
+            Assert.Equal(OverlayState.On, ecu.Entries[OverlayV10.BlipRatios].State);
+            Assert.Equal(OverlayState.Free, ecu.Entries[OverlayV10.Blip].State);
+            Assert.StartsWith("blip_gears does not fit.", fun.Problem);                        // the session's own no-room text
+            Assert.Contains("Downshift blip: gear ratios went live; the rest, the switch included, was not sent.", fun.Problem);
+            Assert.False(fun.IsOn);
+        }
+        finally { Close(window, shell); }
+    }
+
+    [CarAvaloniaFact] // the Fun switch follows the group that holds the feature's switch
+    public async Task TheFunSwitchFollowsTheBlipsSwitchGroup()
+    {
+        var (window, shell, ecu, _) = await Open(true, ShellViewModel.FunTab);
+        var fun = shell.Fun;
+        var page = shell.LiveTuning;
+        try
+        {
+            page.Selected = Row(page, OverlayV10.Blip);                                   // 140 live alone, from the Live page
+            var on = Field(page.ScalarFields, "Switch"); on.SelectedChoice = on.Choices!.Single(choice => choice.Value == 1);
+            await page.SendSelectedAsync();
+            Assert.Null(page.Problem);
+            Choose(fun, FunFeatures.Blip);
+            Assert.True(fun.IsOn);
+            Assert.True(fun.CanSwitch);
+            fun.IsOn = false;
+            await page.TickAsync();
+            Assert.Equal(OverlayState.Ready, ecu!.Entries[OverlayV10.Blip].State);
+            Assert.Equal(OverlayState.Free, ecu.Entries[OverlayV10.BlipGears].State);
+            Assert.Null(page.Problem);
+        }
+        finally { Close(window, shell); }
+    }
+
+    [CarAvaloniaFact]
+    public async Task OfflineAHoldAboveTheOpeningIsUndone()
+    {
+        var (window, shell, _, before) = await Open(false, ShellViewModel.FunTab);
+        var fun = shell.Fun;
+        try
+        {
+            Choose(fun, FunFeatures.Blip);
+            var opening = Field(fun.ScalarRows, "Blip opening"); opening.Input = "10.0"; Assert.True(opening.Apply());
+            Assert.Equal(50, shell.Tune.Document!.Image.ToArray()[0x4FF95]);
+            var hold = Field(fun.ScalarRows, "Hold opening"); hold.Input = "20.0"; hold.Apply();
+            Assert.Equal(before[0x4FF96], shell.Tune.Document!.Image.ToArray()[0x4FF96]);
+        }
+        finally { Close(window, shell); }
+    }
+
     public static TheoryData<int, int> OlderOverlays => new() { { 9, 0 }, { 10, 2 } };
+
+    [CarAvaloniaTheory, MemberData(nameof(OlderOverlays))]
+    public async Task AnOlderEcuIsRefusedAndShowsNoneOfTheGroups(int version, int minor)
+    {
+        var (window, shell, ecu, _) = await Open(true, ShellViewModel.FunTab, version, minor);
+        try
+        {
+            var label = minor == 0 ? $"{version}" : $"{version}.{minor}";
+            Assert.False(shell.LiveTuning.HasVerifiedCatalogue);
+            Assert.Equal($"Overlay V{label} not supported: flash the V10.4 bin.", shell.LiveTuning.CatalogueText);
+            Assert.DoesNotContain(ecu!.Requests, p => p[0] == 0x6D);
+            Assert.Equal(FunMode.Bin, shell.Fun.Mode);
+            foreach (var key in new[] { FunFeatures.Pops, FunFeatures.Blip })
+            {
+                var feature = shell.Fun.Features.Single(f => f.Key == key);
+                Assert.False(feature.IsAvailable);
+                Assert.Contains($"This bin has overlay V{label}; the app works with V10.4 only.", feature.Unavailable);
+            }
+        }
+        finally { Close(window, shell); }
+    }
+
+    [CarAvaloniaFact]
+    public async Task AnOlderBinOfflineShowsNoPopsOrBlip()
+    {
+        var (window, shell, _, _) = await Open(false, ShellViewModel.FunTab, version: 9, minor: 0);
+        try
+        {
+            var blip = shell.Fun.Features.Single(f => f.Key == FunFeatures.Blip);
+            Assert.False(blip.IsAvailable);
+            Assert.Equal("This bin has overlay V9; the app works with V10.4 only. Open the V10.4 bin to set the blip.", blip.Unavailable);
+            Assert.False(shell.Fun.Features.Single(f => f.Key == FunFeatures.Pops).IsAvailable);
+            Assert.True(shell.Fun.Features.Single(f => f.Key == FunFeatures.LaunchControl).IsAvailable);
+        }
+        finally { Close(window, shell); }
+    }
+
+    [CarAvaloniaFact]
+    public async Task EditsOfTheGroupsGoIntoTheBin()
+    {
+        var (window, shell, _, before) = await Open(true, ShellViewModel.LiveTuningTab);
+        var page = shell.LiveTuning;
+        try
+        {
+            (int Index, string Label, string Value)[] edits =
+            [
+                (OverlayV8.Pops, "Duration", "3.0"), (OverlayV10.Blip, "Blip opening", "12.0"),
+                (OverlayV10.BlipGears, "Tap length", "300"), (OverlayV10.BlipRatios, "rpm per km/h, 3rd", "45.0"),
+            ];
+            foreach (var (index, label, value) in edits)
+            {
+                page.Selected = Row(page, index);
+                var field = Field(page.ScalarFields, label); field.Input = value; Assert.True(field.Apply());
+                await page.SendSelectedAsync(); Assert.Null(page.Problem);
+            }
+            await page.CopyToTuneAsync(edits.Select(edit => Row(page, edit.Index)).ToList());
+            var expected = before.ToArray(); expected[0x4FF81] = 30; expected[0x4FF95] = 60; expected[0x4FF9D] = 30; expected[0x4FFA2] = 90;
+            var after = shell.Tune.Document!.Image.ToArray();
+            Assert.Equal(expected.AsSpan(0x4FF80, 40).ToArray(), after.AsSpan(0x4FF80, 40).ToArray());
+            Assert.Equal(before.AsSpan(0, 0x4FF80).ToArray(), after.AsSpan(0, 0x4FF80).ToArray());
+            Assert.Equal(before.AsSpan(0x4FFA8).ToArray(), after.AsSpan(0x4FFA8).ToArray());
+        }
+        finally { Close(window, shell); }
+    }
 
     private sealed class ManualTicker : TimeProvider
     {
