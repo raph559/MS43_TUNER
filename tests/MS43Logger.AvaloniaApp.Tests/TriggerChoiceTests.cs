@@ -50,6 +50,23 @@ public sealed class TriggerChoiceTests : IDisposable
     }
 
     [CarAvaloniaFact]
+    public async Task TheOverlayListsTheTriggersByName()
+    {
+        Assert.True(TuneScreen.Available);
+        var (window, shell) = await Live();
+        try
+        {
+            var lc = ActivationChoices(shell, 124);
+            Assert.Equal([0L, 1, 2, 0x82, 0x97], lc.Select(c => c.Value));
+            Assert.Equal(["Off", "Clutch pressed", "Cruise light on + clutch", "ASC off + clutch", "A/C on + clutch"], lc.Select(c => c.Label));
+            var ral = ActivationChoices(shell, 126);
+            Assert.Equal([0L, 1, 0x82, 0x97], ral.Select(c => c.Value));
+            Assert.Equal(["Off", "“−” pressed", "ASC off + “−”", "A/C on + “−”"], ral.Select(c => c.Label));
+        }
+        finally { Close(window, shell); }
+    }
+
+    [CarAvaloniaFact]
     public async Task TheFunListShowsTheTriggersShortName()
     {
         Assert.True(TuneScreen.Available);

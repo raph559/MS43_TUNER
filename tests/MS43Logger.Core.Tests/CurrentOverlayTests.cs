@@ -9,6 +9,18 @@ namespace MS43Logger.Core.Tests;
 /// </summary>
 public sealed class CurrentOverlayTests
 {
+    private static readonly byte[] Defaults = OverlayV104Settings.Defaults;
+
+    internal static FakeOverlayEcu Ecu() => new(FakeOverlayEcu.CurrentImage());
+
+    private static byte[] Group(int table) => Defaults.AsSpan(8 * (table - OverlayV8.Pops), 8).ToArray();
+
+    private static byte[] With(int table, params (int Index, byte Value)[] changes)
+    {
+        var copy = Group(table);
+        foreach (var (index, value) in changes) copy[index] = value;
+        return copy;
+    }
 
     private static OverlayScalar Field(int table, int offset) =>
         OverlayV10.Maps[table].ScalarGroup!.Fields.Single(field => field.Offset == offset);
@@ -16,10 +28,68 @@ public sealed class CurrentOverlayTests
     private static double Shown(OverlayScalarDefinition definition, byte raw) =>
         ExpressionEvaluator.Evaluate(definition.Equation, new Dictionary<string, double> { ["X"] = raw });
 
+    [Fact]
+    public void DetectionAcceptsCurrentOverlayWithValidMagic()
+    {
+        var ecu = Ecu(); var client = new OverlayClient(ecu); var detection = client.Detect();
+        Assert.Null(detection.Problem);
+        Assert.Equal("10.4", detection.Header!.Label);
+        Assert.Equal(143, detection.Catalogue!.Count);
+        Assert.Equal(OverlayV10.Maps, detection.Catalogue);
+        Assert.Equal(Group(OverlayV10.Blip), detection.Flash[OverlayV10.Blip]);
+        ecu.HeaderMagic = 0xC0D9; Assert.Equal("not understood", client.Detect().Problem);
+    }
+
     public static TheoryData<int, int> OlderOverlays => new()
     {
         { 2, 0 }, { 3, 0 }, { 4, 0 }, { 5, 0 }, { 6, 0 }, { 7, 0 }, { 8, 0 }, { 8, 5 }, { 9, 0 }, { 10, 0 }, { 10, 1 }, { 10, 2 }, { 10, 3 }, { 11, 0 }, { 10, 5 },
     };
+
+    [Theory, MemberData(nameof(OlderOverlays))]
+    public void EveryOtherVersionIsRefusedAndSentNothing(int version, int minor)
+    {
+        var ecu = Ecu(); ecu.HeaderVersion = version; ecu.Minor = minor;
+        var client = new OverlayClient(ecu); var detection = client.Detect();
+        Assert.Contains($"overlay V{(minor == 0 ? version.ToString() : $"{version}.{minor}")}", detection.Problem);
+        Assert.Contains("V10.4 only", detection.Problem);
+        Assert.Empty(detection.Flash);
+        Assert.Null(detection.Catalogue);
+        Assert.Throws<InvalidOperationException>(() => client.Status());
+        Assert.DoesNotContain(ecu.Requests, p => p[0] == 0x6D);
+    }
+
+    [Fact]
+    public void ABinCarriesTheCurrentOverlayOnlyAtV104()
+    {
+        var image = FakeOverlayEcu.CurrentImage();
+        Assert.False(OverlayV10.IsCurrent(image));                               // no header yet
+        "LTOV"u8.CopyTo(image.AsSpan(0x4B544)); image[0x4B548] = 10; image[0x4B549] = 4;
+        Assert.True(OverlayV10.IsCurrent(image));
+        image[0x4B549] = 3; Assert.False(OverlayV10.IsCurrent(image));          // V10.3
+        image[0x4B549] = 2; Assert.False(OverlayV10.IsCurrent(image));
+        image[0x4B548] = 9; image[0x4B549] = 0; Assert.False(OverlayV10.IsCurrent(image));
+    }
+
+    [Fact]
+    public void TheCatalogueMatchesTheEcusTableList()
+    {
+        // Expected V10.4 settings groups: ID, key, flash address, and field count.
+        (int Id, string Key, int Address, int Fields)[] added =
+            [(140, "blip", 0xCFF90, 8), (141, "blip_gears", 0xCFF98, 8), (142, "blip_ratios", 0xCFFA0, 4)];
+        Assert.Equal(Enumerable.Range(0, 143), OverlayV10.Maps.Select(map => map.Index));
+        foreach (var (id, key, address, fields) in added)
+        {
+            var map = OverlayV10.Maps[id];
+            Assert.Equal((key, address, 8, 2, fields), (map.Key, map.Address, map.Bytes, map.Flags, map.ScalarGroup!.Fields.Count));
+        }
+        var reserved = OverlayV10.Maps[OverlayV10.Reserved];
+        Assert.Equal(("reserved_139", 0xCFF88, 8, 2, true), (reserved.Key, reserved.Address, reserved.Bytes, reserved.Flags, reserved.Reserved));
+        Assert.Null(reserved.ScalarGroup);
+        Assert.Equal(1, OverlayV10.Maps.Count(m => m.Reserved));
+        foreach (var (v8, v10) in OverlayV8.Maps.Zip(OverlayV10.Maps))
+            if (v8.Index == OverlayV8.Pops) Assert.Equal(v8 with { ScalarGroup = v10.ScalarGroup }, v10);
+            else Assert.Equal(v8, v10);
+    }
 
     [Fact]
     public void NoSettingMentionsTheStabs()
@@ -27,6 +97,30 @@ public sealed class CurrentOverlayTests
         var fields = OverlayV10.Maps.Where(m => m.ScalarGroup is not null).SelectMany(m => m.ScalarGroup!.Fields);
         Assert.DoesNotContain(fields, f => f.Label.Contains("stab", StringComparison.OrdinalIgnoreCase)
             || f.Definition?.Description.Contains("stab", StringComparison.OrdinalIgnoreCase) == true);
+    }
+
+    [Fact]
+    public void ThePopsGroupHasTheRealAfrAndV9sOpening()
+    {
+        var afr = Field(OverlayV8.Pops, 3);
+        Assert.Equal("AFR target (petrol)", afr.Label);
+        Assert.Equal(("AFR", 5.0, 14.7, 1), (afr.Definition!.Units, afr.Definition.RangeLow, afr.Definition.RangeHigh, afr.Definition.Decimals));
+        Assert.Equal(7.0, Shown(afr.Definition, 70), 9);
+        Assert.Equal(5.0, Shown(afr.Definition, 50), 9);
+        Assert.Equal(14.7, Shown(afr.Definition, 147), 9);
+        Assert.Equal(OverlayV9.PopsGroup.Fields.Single(f => f.Offset == 6), Field(OverlayV8.Pops, 6));
+        Assert.Equal(20.0, Field(OverlayV8.Pops, 6).Definition!.RangeHigh);
+    }
+
+    [Fact]
+    public void TheGroupsAreTitledAndCategorisedAsTheAppShowsThem()
+    {
+        Assert.Equal(["Downshift blip", "Downshift blip: gears and tap", "Downshift blip: gear ratios"],
+            OverlayV10.Maps.Skip(140).Select(map => map.ScalarGroup!.Title));
+        Assert.All(OverlayV10.Maps.Skip(140).SelectMany(map => map.ScalarGroup!.Fields),
+            field => Assert.Equal("Downshift blip", field.Definition!.Category));
+        Assert.Equal(["5th → 4th", "4th → 3rd", "3rd → 2nd", "2nd → 1st", "Tap threshold", "Tap length", "Blip lead", "Spark above the target"],
+            OverlayV10.Maps[OverlayV10.BlipGears].ScalarGroup!.Fields.Select(f => f.Label));
     }
 
     public static TheoryData<int, int, string, double, double> Ranges => new()
@@ -45,6 +139,17 @@ public sealed class CurrentOverlayTests
     {
         var definition = Field(table, offset).Definition!;
         Assert.Equal((units, low, high), (definition.Units, definition.RangeLow, definition.RangeHigh));
+    }
+
+    [Fact]
+    public void TheNewerSettingsSayWhatTheyDo()
+    {
+        var lead = Field(OverlayV10.BlipGears, 6).Definition!.Description;
+        Assert.Contains("192 rpm", lead);
+        Assert.Contains("0 waits for the engine speed itself", lead);
+        var cap = Field(OverlayV10.BlipGears, 7).Definition!;
+        Assert.Equal(-23.625, Shown(cap, 0), 9);
+        Assert.Equal(30.0, Shown(cap, 143), 9);
     }
 
     [Fact]
@@ -70,6 +175,10 @@ public sealed class CurrentOverlayTests
         { 142, 4, 1 }, { 142, 7, 1 },
     };
 
+    [Theory, MemberData(nameof(OutOfRange))]
+    public void ValidateRefusesEveryOutOfRangeByte(int table, int index, byte value) =>
+        Assert.Equal(OverlayReason.Range, OverlayV10.ValidateCopy(table, With(table, (index, value)), Group(table)));
+
     public static TheoryData<int, int, byte> AtTheLimits => new()
     {
         { 138, 3, 50 }, { 138, 3, 70 }, { 138, 3, 147 }, { 138, 6, 200 }, { 138, 0, 0x97 },
@@ -83,5 +192,103 @@ public sealed class CurrentOverlayTests
         { 142, 3, 50 }, { 142, 3, 85 },
     };
 
+    [Theory, MemberData(nameof(AtTheLimits))]
+    public void ValidateAcceptsEveryByteAtItsLimits(int table, int index, byte value) =>
+        Assert.Null(OverlayV10.ValidateCopy(table, With(table, (index, value)), Group(table)));
+
+    [Fact]
+    public void TheFlashedGroupsAreValid()
+    {
+        foreach (var table in new[] { 138, 139, 140, 141, 142 })
+            Assert.Null(OverlayV10.ValidateCopy(table, Group(table), Group(table)));
+    }
+
+    [Fact]
+    public void LcTakesItsTriggers()
+    {
+        var flash = FakeOverlayEcu.Image().AsSpan(0x7132C, 8).ToArray(); var trigger = flash.ToArray(); trigger[0] = OverlayV8.AirConOn;
+        Assert.Null(OverlayV10.ValidateCopy(OverlayV6.LaunchControl, trigger, flash));
+    }
+
+    [Fact]
+    public void AHoldOpeningAboveTheBlipOpeningIsRefused()
+    {
+        Assert.Equal(OverlayReason.Range, OverlayV10.ValidateCopy(OverlayV10.Blip, With(140, (5, 50), (6, 51)), Group(140)));
+        Assert.Null(OverlayV10.ValidateCopy(OverlayV10.Blip, With(140, (5, 50), (6, 50)), Group(140)));
+    }
+
+    [Fact]
+    public void TheRefusalSaysWhichRuleAGroupBroke()
+    {
+        Assert.Equal("A pops setting is outside its limits", OverlayV10.Refusal(OverlayV8.Pops, With(138, (6, 201))));
+        Assert.Equal("A blip setting is outside its limits", OverlayV10.Refusal(OverlayV10.Blip, With(140, (5, 151))));
+        Assert.Equal("A blip setting is outside its limits: the hold opening is above the blip opening",
+            OverlayV10.Refusal(OverlayV10.Blip, With(140, (5, 40), (6, 41))));
+        Assert.Equal("A blip setting is outside its limits", OverlayV10.Refusal(OverlayV10.BlipGears, With(141, (3, 2))));
+        Assert.Equal("A blip setting is outside its limits", OverlayV10.Refusal(OverlayV10.BlipRatios, With(142, (0, 179))));
+        Assert.Null(OverlayV10.Refusal(OverlayV6.LaunchControl, new byte[8]));
+    }
+
+    [Fact]
+    public void ACopyOfAnotherLengthIsRefused() =>
+        Assert.Equal(OverlayReason.Range, OverlayV10.ValidateCopy(OverlayV10.Blip, Group(140).AsSpan(0, 4), Group(140)));
+
+    [Fact]
+    public void PlannerKeepsPoolAWithin668()
+    {
+        Assert.Equal(896, OverlayV5.Budget);
+        Assert.Equal(668, OverlayV5.PoolAEnd);
+        Assert.True(OverlayV5.Fits(660, 8));
+        Assert.False(OverlayV5.Fits(664, 8));
+        Assert.Equal(OverlayV10.Maps, OverlayV5.Catalogue);
+    }
+
     public static TheoryData<int[]> FittingSets => new() { new[] { 1, 2, 3, 4 }, new[] { 0, 1, 3, 4 }, new[] { 0, 1, 2, 4 }, new[] { 0, 1, 2, 3 } };
+
+    [Theory, MemberData(nameof(FittingSets))]
+    public void ThePlannerFitsFourOfTheFirstFiveMaps(int[] tables)
+    {
+        var ecu = Ecu(); var client = new OverlayClient(ecu); var detection = client.Detect();
+        foreach (var table in tables)
+        {
+            var copy = detection.Flash[table].ToArray(); copy[0] = (byte)(copy[0] == 255 ? 254 : copy[0] + 1);
+            Assert.Null(client.Send(table, copy, detection.Flash[table], client.Status()).Refused);
+        }
+    }
+
+    [Fact]
+    public void TheSettingsGoLiveAndReadBack()
+    {
+        var ecu = Ecu(); var client = new OverlayClient(ecu); var detection = client.Detect();
+        foreach (var (table, copy) in new[] { (140, With(140, (0, 1), (5, 100))), (141, With(141, (6, 30), (7, 40))), (138, With(138, (3, 147))) })
+        {
+            Assert.Null(client.Send(table, copy, detection.Flash[table], client.Status()).Refused);
+            var entry = client.Status().Tables[table];
+            Assert.Equal(OverlayState.On, entry.State);
+            Assert.Equal(copy, client.ReadCopy(table, entry));
+        }
+    }
+
+    [Fact]
+    public void AnInvalidCopyIsRefusedBeforeSending()
+    {
+        var ecu = Ecu(); var client = new OverlayClient(ecu); var detection = client.Detect();
+        var requests = ecu.Requests.Count;
+        Assert.Equal(OverlayReason.Range, client.Send(OverlayV10.Blip, With(140, (5, 40), (6, 41)), detection.Flash[OverlayV10.Blip], client.Status()).Refused);
+        Assert.Equal(OverlayReason.Range, client.Send(OverlayV8.Pops, With(138, (3, 210)), detection.Flash[OverlayV8.Pops], client.Status()).Refused);
+        Assert.Equal(OverlayReason.Range, client.Send(OverlayV10.Reserved, With(139, (0, 1)), detection.Flash[OverlayV10.Reserved], client.Status()).Refused);
+        Assert.DoesNotContain(ecu.Requests.Skip(requests), p => p[0] == 0x6D && p[1] is 1 or 2 or 3 or 9);
+    }
+
+    [Theory] // V10.4: the pops spark angle at most +30.0 °BTDC (143), as the firmware's pops_limits
+    [InlineData(0, true)] [InlineData(143, true)] [InlineData(144, false)] [InlineData(255, false)]
+    public void ThePopsAngleIsLimitedToPlus30(byte angle, bool accepted)
+    {
+        Assert.Equal(((byte)0, (byte)143), OverlayV10.PopsLimits[2]);
+        var pops = OverlayV10.PopsGroup.Fields.Single(field => field.Offset == 2).Definition!;
+        Assert.Equal(30.0, pops.RangeHigh);
+        var copy = OverlayV104Settings.Defaults[..8];
+        copy[2] = angle;
+        Assert.Equal(accepted ? null : OverlayReason.Range, OverlayV10.ValidateCopy(OverlayV8.Pops, copy, OverlayV104Settings.Defaults[..8]));
+    }
 }

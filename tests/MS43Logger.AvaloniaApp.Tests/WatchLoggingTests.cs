@@ -30,12 +30,12 @@ public sealed class WatchLoggingTests
         return frame;
     }
 
-    /// <summary>An ECU whose overlay header (DS2 06 at 0C:B544) reads <paramref name="version"/>; V9 answers subs 11 and 12.</summary>
-    private static Func<byte[], byte[]?> Overlay(int version, int stockBytes) => frame =>
+    /// <summary>An ECU whose overlay header (DS2 06 at 0C:B544) reads <paramref name="version"/>.<paramref name="minor"/>; from V9 it answers subs 11 and 12.</summary>
+    private static Func<byte[], byte[]?> Overlay(int version, int stockBytes, int minor = 0) => frame =>
     {
         if (frame is [0x12, 0x09, 0x06, 0x00, 0x0C, 0xB5, 0x44, 0x10, _])
         {
-            var header = new byte[16]; "LTOV"u8.CopyTo(header); header[4] = (byte)version;
+            var header = new byte[16]; "LTOV"u8.CopyTo(header); header[4] = (byte)version; header[5] = (byte)minor;
             header[14] = (byte)(0xD0 + version); header[15] = 0xC0;
             return Frame([0xA0, .. header]);
         }
@@ -82,6 +82,23 @@ public sealed class WatchLoggingTests
         Assert.All(port.Written.Where(f => f.Length > 2 && f[2] is not (0x91 or 0x06)), f => Assert.Equal(StockPoll, f));
     }
 
+    [AvaloniaTheory] // an older overlay is not the app's: it gets the stock poll, though it could answer sub 11
+    [InlineData(9, 0)]
+    [InlineData(10, 2)]
+    [InlineData(10, 3)]
+    public async Task AnOlderOverlayIsPolledExactlyAsToday(int version, int minor)
+    {
+        var (live, port) = Live(Overlay(version, StockBytes, minor));
+        await live.ConnectAsync();
+        await Until(() => live.SampleCount >= 3, "three samples");
+        live.Disconnect();
+        Assert.Null(live.Watch);
+        Assert.All(port.Written.Where(f => f.Length > 2 && f[2] is not (0x91 or 0x06)), f => Assert.Equal(StockPoll, f));
+    }
+
+    [AvaloniaFact] // the header ends DA C0
+    public Task TheWatchLogsOnAV104Ecu() => PolledWithTheWatch(10, 4);
+
     [AvaloniaFact] // an overlay this app does not know may log differently: it gets the stock poll
     public async Task AnUnknownLaterOverlayIsPolledExactlyAsToday()
     {
@@ -93,9 +110,9 @@ public sealed class WatchLoggingTests
         Assert.All(port.Written.Where(f => f.Length > 2 && f[2] is not (0x91 or 0x06)), f => Assert.Equal(StockPoll, f));
     }
 
-    private async Task PolledWithTheWatch(int version)
+    private async Task PolledWithTheWatch(int version, int minor)
     {
-        var (live, port) = Live(Overlay(version, StockBytes));
+        var (live, port) = Live(Overlay(version, StockBytes, minor));
         LiveSample? last = null;
         live.SampleShown += (_, sample) => last = sample;
         await live.ConnectAsync();
@@ -111,7 +128,7 @@ public sealed class WatchLoggingTests
     [AvaloniaFact] // V8's rule: with the overlay quiet, its live settings go back to flash after 3 s; V9's log frames must not keep it alive
     public async Task AQuietOverlayIsLoggedWithTheStockPollUntilANewSession()
     {
-        var (live, port) = Live(Overlay(9, StockBytes));
+        var (live, port) = Live(Overlay(OverlayV10.Version, StockBytes, OverlayV10.Minor));
         await live.ConnectAsync();
         await Until(() => live.SampleCount >= 3, "three samples");
         live.QuietOverlay(true);
