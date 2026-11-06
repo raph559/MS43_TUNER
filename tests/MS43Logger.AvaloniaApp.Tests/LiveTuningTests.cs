@@ -71,6 +71,69 @@ public sealed class LiveTuningTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task AnOlderOverlay_IsReadOnlyWithAnExplicitUpgradeReason()
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        foreach (var (version, minor, label) in new[] { (2, 0, "2"), (9, 0, "9"), (10, 2, "10.2") })
+        {
+            var (page, ecu, _) = await Attached(version: version, minor: minor);
+            Assert.True(page.IsReadOnly);
+            Assert.Equal($"The ECU runs live-tuning overlay V{label}; this app works with V10.4 only. "
+                + "Flash the V10.4 bin to tune live. No live commands will be sent.", page.ReadOnlyReason);
+            Assert.False(page.HasVerifiedCatalogue);
+            Assert.Equal($"Overlay V{label} not supported: flash the V10.4 bin.", page.CatalogueText);
+            Assert.All(ecu.Requests, r => Assert.Equal(0x06, r[0]));
+        }
+    }
+
+    [CarAvaloniaFact]
+    public async Task FourOfTheFirstMapsAndFullMapEditsRemainLive()
+    {
+        Assert.True(TuneScreen.Available, "This test needs the local car bin and XDF.");
+        var (page, ecu, _) = await Attached();
+        Assert.False(page.IsReadOnly);
+        Assert.Contains("Overlay 10.4 found", page.LinkText);
+        Assert.True(page.HasVerifiedCatalogue);
+        int[] maps = [1, 2, 3, 4];                                           // the five together need 932 bytes, the ECU has 896
+        foreach (var i in maps) Raise(page, i, i == 2 ? 1 : 9);              // whole maps, beyond protocol 2's old +/-8 steps
+        await page.SendAllAsync();
+        Assert.All(maps, i => Assert.Equal(OverlayState.On, ecu.Peek().Tables[i].State));
+        Assert.All(page.Maps, map => Assert.False(map.HasUnsent));
+        var start = ecu.Requests.Count;
+        foreach (var i in maps) Raise(page, i, 1);
+        await page.SendAllAsync();
+        var writes = ecu.Requests.Skip(start).Where(p => p[0] == 0x6D && p[1] != 0).ToArray();
+        Assert.NotEmpty(writes);
+        Assert.All(writes, p => Assert.Equal(9, p[1]));
+        Assert.All(maps, i => Assert.Equal(OverlayState.On, ecu.Peek().Tables[i].State));
+        Assert.All(page.Maps, map => Assert.False(map.HasUnsent));
+    }
+
+    [CarAvaloniaFact]
+    public async Task AnInterruptedEditStaysMarkedUnsentUntilTheRemainingGroupsAreSent()
+    {
+        Assert.True(TuneScreen.Available, "This test needs the local car bin and XDF.");
+        var (page, ecu, _) = await Attached();
+        Raise(page, 0, 1);
+        await page.SendSelectedAsync();
+        Raise(page, 0, 1);
+        var count = 0;
+        ecu.FailWhen = request => request is [0x6D, 9, ..] && ++count >= 2 ? new TimeoutException() : null;
+        await page.SendSelectedAsync();
+        ecu.FailWhen = null;
+        await page.TickAsync();
+        Assert.True(page.Maps[0].HasUnsent);
+        Assert.True(page.Maps[0].IsOn);
+        await page.SendSelectedAsync();
+        Assert.False(page.Maps[0].HasUnsent);
+        Assert.True(page.Maps[0].IsOn);
+    }
+
+    [AvaloniaFact]
     public async Task AnEditIsUnsentUntilSend_ThenLive()
     {
         if (!TuneScreen.Available)
@@ -136,6 +199,31 @@ public sealed class LiveTuningTests : IDisposable
 
         Assert.All(ecu.Peek().Tables, t => Assert.Equal(OverlayState.Free, t.State));
         Assert.Equal("flashed · unsent changes", page.Maps[1].StateText);
+    }
+
+    [AvaloniaFact]
+    public async Task ALeanerLambdaCell_IsSent()                                // protocol 2's richer-only rule is gone
+    {
+        if (!TuneScreen.Available)
+        {
+            return;
+        }
+
+        var (page, ecu, _) = await Attached();
+        page.Selected = page.Maps[2];
+        var values = page.Editor!.Values;
+        var (row, col) = (from r in Enumerable.Range(0, values.Rows) from c in Enumerable.Range(0, values.Cols)
+                          where values.Raw[r, c] > 128 select (r, c)).First();
+        page.Editor.Selection = new CellRange(row, col, row, col);
+        // A step moves λ as shown: +1 raises it (leaner), the raw byte going down.
+        Assert.True(page.Editor.Apply(new EditRequest(EditKind.Step, 1)), page.Editor.Message);
+        var sent = ecu.Requests.Count;
+
+        await page.SendSelectedAsync();
+
+        Assert.Null(page.Problem);
+        Assert.True(ecu.Requests.Count > sent);
+        Assert.Equal(OverlayState.On, ecu.Peek().Tables[2].State);
     }
 
     [AvaloniaFact]
