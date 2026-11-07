@@ -84,6 +84,19 @@ Put a second bin next to yours and see every value that differs.
 
 Time pulls, roll-ons and standing starts from the same data stream.
 
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/performance-run.png" alt="A third-gear pull in progress at 5005 rpm after 9.9 seconds, against a saved morning run, with knock retard per cylinder and the live ignition, VANOS, AFR target and intake air"></td>
+    <td width="50%"><img src="docs/screenshots/performance-compare.png" alt="Two saved pulls compared: the morning run peaks at 116 kW at the wheels and the afternoon run, with 15 °C warmer intake air, at 111 kW"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>A pull in progress</sub></td>
+    <td align="center"><sub>Two saved runs compared</sub></td>
+  </tr>
+</table>
+
+<sub>Both runs are simulated: a stock M54B25 in 3rd, its rise worked out from BMW's torque figures, with the engine readings following a real car's map and log.</sub>
+
 - Full-throttle pull in 2nd, 3rd or 4th over an rpm band: times across the band, estimated wheel power and torque, knock retard per cylinder, intake air temperature at the start and the end.
 - Knock check in 4th gear, roll-ons from 60 to 100 and 80 to 120 km/h, and standing starts with 0 to 100, 0 to 200 and 100 to 200 km/h times.
 - Setup items: speed calibration per gear (with an optional correction from a phone's GPS speed), car values for the power estimate (mass, tyres, gearbox), a pedal check and a link test.
