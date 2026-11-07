@@ -72,6 +72,23 @@ public class OverlayClientTests
     }
 
     [Fact]
+    public void Send_ToAnOnMap_PatchesItInPlace()
+    {
+        var (ecu, client, detection) = Running();
+        Assert.Null(client.Send(0, IgnitionBlock(detection.Flash[0]), detection.Flash[0], client.Status()).Refused);
+        var again = IgnitionBlock(IgnitionBlock(detection.Flash[0]));
+        var loads = ecu.Requests.Count(r => r is [0x6D, 0x01, ..]);
+
+        Assert.Null(client.Send(0, again, detection.Flash[0], client.Status()).Refused);
+
+        var entry = client.Status().Tables[0];
+        Assert.Equal((OverlayState.On, OverlayContract.Crc32(again)), (entry.State, entry.ContentCrc32));
+        Assert.Equal(again, client.ReadCopy(0, entry));
+        Assert.Equal(loads, ecu.Requests.Count(r => r is [0x6D, 0x01, ..]));   // no second load
+        Assert.Contains(ecu.Requests, r => r is [0x6D, 0x09, ..]);
+    }
+
+    [Fact]
     public void Send_ALeanerLambdaCell_IsSent()                              // the edit limits of protocol 2 are gone
     {
         var (_, client, detection) = Running();
