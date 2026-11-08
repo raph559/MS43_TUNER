@@ -8,7 +8,7 @@
 
 A Windows desktop app, with a command-line tool next to it, for BMW's M54B22, M54B25 and M54B30 engines,<br>
 on stock MS430069-family software or on MS43X001, the community firmware from the MS4X project.<br>
-Live tuning needs MS43X001 with this project's live-tuning overlay, built from source on your own bin.
+Live tuning needs MS43X001 with the live-tuning overlay, built on your own bin from [MS43X001_CUSTOM](https://github.com/raph559/MS43X001_CUSTOM).
 
 [![CI](https://github.com/raph559/MS43_TUNER/actions/workflows/ci.yml/badge.svg)](https://github.com/raph559/MS43_TUNER/actions/workflows/ci.yml)
 [![License: GPL-3.0-only](https://img.shields.io/badge/license-GPL--3.0--only-blue.svg)](LICENSE)
@@ -132,11 +132,11 @@ Time pulls, roll-ons and standing starts from the same data stream.
 | **Cable** | A K+DCAN USB cable, or another K-line interface that holds 125000 baud reliably, set up as a COM port |
 | **Car** | A BMW with the Siemens MS43 ECU (M54B22, M54B25 or M54B30 engine) |
 | **ECU software** | MS43X001, or stock MS430069-family software with the MS4X extended logging patch: logging uses the MS4X logging command (`0B B0`) |
-| **Live tuning** | An MS43X001 bin with the live-tuning overlay, built from [`firmware/overlay`](firmware/overlay) on your own bin |
+| **Live tuning** | An MS43X001 bin with the live-tuning overlay, built on your own bin from [MS43X001_CUSTOM](https://github.com/raph559/MS43X001_CUSTOM) |
 | **Flashing** | MS4X Flasher, to flash the bins you edit |
 | **Building** | The .NET 10 SDK, only to build from source |
 
-MS43 Tuner is developed on one car, an E46 M54B25 running MS43X001. The B22, B25 and B30 logging definitions for stock software come from MS4X; reports from other cars and engines are welcome.
+MS43 Tuner is developed in [MS43_EMULATOR](https://github.com/raph559/MS43_EMULATOR), which runs the real MS43X001 code, and on one car: an E46 M54B25 running a custom build of MS43X001 with the live-tuning overlay ([MS43X001_CUSTOM](https://github.com/raph559/MS43X001_CUSTOM)). The B22, B25 and B30 logging definitions for stock software come from MS4X; reports from other cars and engines are welcome.
 
 ## Install
 
@@ -252,7 +252,6 @@ src/MS43Logger.Cli/                 the command-line tool
 tests/MS43Logger.Core.Tests/        xUnit tests for the core
 tests/MS43Logger.AvaloniaApp.Tests/ headless UI tests
 definitions/                        bundled MS4X logging definitions and the MS43X001 live cursor rules
-firmware/overlay/                   the live-tuning overlay's source and its build
 docs/firmware/                      firmware notes: the map-use rules and the overlay
 docs/screenshots/                   images for this README
 scripts/                            release packaging and the live-inputs generator
@@ -281,9 +280,9 @@ Bins are never committed. Keep your own bins and XDF out of issues and pull requ
 
 ### The live-tuning overlay
 
-The overlay's source is in [`firmware/overlay`](firmware/overlay), under GPL-3.0 like MS43X001, which it modifies. Its build takes your own MS43X001 bin and writes a patched copy next to it; no bin is published. MS43X001 itself is by the MS4X project and is built on Siemens's MS430069 software.
+The overlay has its own repository, [MS43X001_CUSTOM](https://github.com/raph559/MS43X001_CUSTOM), with its full history, under GPL-3.0 like MS43X001, which it modifies. Its build takes your own MS43X001 bin and adds only the overlay's code; no bin is published. MS43X001 itself is by the MS4X project and is built on Siemens's MS430069 software.
 
-It has been tested in an emulator that runs the real firmware, on scripted drives (starts, idle, full load, overrun, blips), and in one car. It has not been validated more widely. Keep your original bin, and flash the overlay bin only if you can flash back.
+It has been tested in [MS43_EMULATOR](https://github.com/raph559/MS43_EMULATOR), which runs the real firmware, on scripted drives (starts, idle, full load, overrun, blips), and in one car. It has not been validated more widely. Keep your original bin, and flash the overlay bin only if you can flash back.
 
 Sources for the logger:
 
@@ -307,7 +306,7 @@ Bug reports, logs from other engines and pull requests are welcome. Read [CONTRI
 
 MS43 Tuner's own code and documentation are licensed under the GNU General Public License v3.0 only (GPL-3.0-only). See [LICENSE](LICENSE).
 
-The live-tuning overlay in [`firmware/overlay`](firmware/overlay) is GPL-3.0 as a modification of MS43X001. The ADX logging definitions in [`definitions/`](definitions) are by the MS4x Dev Team and bundled with credit: the MS43X001 one is GPL-3.0; the three Extended Log ones have no stated license, are not covered by the GPL, and will be removed if MS4X asks. The MS43X001 XDF and bins are not in the repository. See [NOTICE.md](NOTICE.md).
+The live-tuning overlay ([MS43X001_CUSTOM](https://github.com/raph559/MS43X001_CUSTOM)) is GPL-3.0 as a modification of MS43X001. The ADX logging definitions in [`definitions/`](definitions) are by the MS4x Dev Team and bundled with credit: the MS43X001 one is GPL-3.0; the three Extended Log ones have no stated license, are not covered by the GPL, and will be removed if MS4X asks. The MS43X001 XDF and bins are not in the repository. See [NOTICE.md](NOTICE.md).
 
 ## Disclaimer
 
