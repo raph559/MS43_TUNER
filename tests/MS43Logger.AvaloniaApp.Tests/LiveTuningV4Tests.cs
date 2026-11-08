@@ -13,7 +13,7 @@ namespace MS43Logger.AvaloniaApp.Tests;
 
 public sealed class LiveTuningV4Tests
 {
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task CatalogueSelectionShowsActualMemoryAndLoadsAnotherMapAfterRemoval()
     {
         Assert.True(TuneScreen.Available, "The pinned car and XDF are required for this acceptance test.");
@@ -60,7 +60,7 @@ public sealed class LiveTuningV4Tests
         finally { shell.LiveTuning.Dispose(); window.Close(); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task LimiterSendsOnlyOnRequestAndRejectsUnrepresentableRpm()
     {
         Assert.True(TuneScreen.Available);
@@ -118,7 +118,7 @@ public sealed class LiveTuningV4Tests
         finally { shell.LiveTuning.Dispose(); window.Close(); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task CopyLimiterUsesConfirmedValuesAndLeavesOtherCalibrationUntouched()
     {
         Assert.True(TuneScreen.Available);

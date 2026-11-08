@@ -2,9 +2,13 @@
 
 All notable changes to MS43 Tuner are recorded in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-Nothing has been released yet, so everything is under "Unreleased". Until the first release the entries are grouped by area of the app instead of by kind of change. The entries are grouped by area of the application.
+0.1.0 is the first release. Its entries are grouped by area of the app instead of by kind of change; from the next release on they are grouped by kind of change.
 
 ## [Unreleased]
+
+## [0.1.0] - 2026-11-08
+
+The first release: logging, the Tune and Compare tabs, live tuning and the Fun tab for MS43X001 with the live-tuning overlay ([MS43X001_CUSTOM](https://github.com/raph559/MS43X001_CUSTOM), up to V10.3), and road performance tests.
 
 ### Logging
 
@@ -81,4 +85,5 @@ Nothing has been released yet, so everything is under "Unreleased". Until the fi
 - The Definition and Port pickers in the header open again: only the header's background drags the window.
 - Clicking a row in the Tune rail or the Compare list no longer moves the list: the clicked row stays where it was while Recent grows or the list is rebuilt.
 
-[Unreleased]: https://github.com/raph559/MS43_LOGGER/commits/main
+[Unreleased]: https://github.com/raph559/MS43_TUNER/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/raph559/MS43_TUNER/releases/tag/v0.1.0

@@ -8,7 +8,7 @@ namespace MS43Logger.AvaloniaApp.Tests;
 
 public sealed class LiveTuningV5Tests
 {
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task MoreThanFiveMapsShowTheirTrackingCost_AndRemainSelectableAfterPolling()
     {
         Assert.True(TuneScreen.Available);

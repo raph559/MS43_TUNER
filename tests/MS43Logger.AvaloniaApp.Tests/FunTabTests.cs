@@ -48,7 +48,7 @@ public sealed class FunTabTests
 
     private static LiveScalarRow Row(FunViewModel fun, string label) => fun.ScalarRows.Single(r => r.Label == label);
 
-    [AvaloniaTheory]
+    [CarAvaloniaTheory]
     [InlineData(6, new[] { "lc", "nls", "ral", "hardcut" })]
     [InlineData(7, new[] { "lc", "nls", "ral", "hardcut" })]
     [InlineData(8, new[] { "lc", "nls", "ral", "hardcut", "pops" })]
@@ -72,7 +72,7 @@ public sealed class FunTabTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaTheory]
+    [CarAvaloniaTheory]
     [InlineData(false, new[] { "lc", "nls", "ral", "hardcut" })]
     [InlineData(true, new[] { "lc", "nls", "ral", "hardcut", "pops" })]
     public async Task OfflineFeaturesFollowTheBin(bool v8Bin, string[] keys)
@@ -95,7 +95,7 @@ public sealed class FunTabTests
 
     // Owner, 2026-10-28: every feature stays in the list; one the bin or the ECU does not have is greyed, says why, and
     // offers nothing to edit (the car file has no overlay, so its pops bytes are not pops settings).
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task AFeatureTheBinLacksIsListedGreyedWithItsReason()
     {
         var (window, shell, fun, _) = await Open();
@@ -135,7 +135,7 @@ public sealed class FunTabTests
         shell.Fun.Dispose(); shell.LiveTuning.Dispose();
     }
 
-    [AvaloniaFact] // RF5
+    [CarAvaloniaFact] // RF5
     public async Task AGroupWhoseXdfConstantsAreMissingIsNotListed()
     {
         var (window, shell, _, _) = await Open();
@@ -150,7 +150,7 @@ public sealed class FunTabTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task WithAStockEcuTheBarSaysWhyLiveIsUnavailable()
     {
         var (window, shell, fun, _) = await Open();
@@ -163,7 +163,7 @@ public sealed class FunTabTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task LiveEditInFunSendsWhatTheLivePageSends()
     {
         var (w1, s1, fun, ecu1) = await Open(8, v8Bin: true);
@@ -186,7 +186,7 @@ public sealed class FunTabTests
         finally { Close(w1, s1); Close(w2, s2); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task LiveEditInFunShowsInTheLivePage()
     {
         var (window, shell, fun, _) = await Open(6);
@@ -200,7 +200,7 @@ public sealed class FunTabTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task OutOfRangePopsIsRefusedInFunAsOnThePage()
     {
         var (window, shell, fun, ecu) = await Open(8, v8Bin: true);
@@ -216,7 +216,7 @@ public sealed class FunTabTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact] // RF4
+    [CarAvaloniaFact] // RF4
     public async Task ChoosingInFunLeavesTheLivePageAlone()
     {
         var (window, shell, fun, _) = await Open(8, v8Bin: true);
@@ -230,7 +230,7 @@ public sealed class FunTabTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact] // RF1, RF2
+    [CarAvaloniaFact] // RF1, RF2
     public async Task ConnectingAndDisconnectingSwitchesWhatTheRowsEdit()
     {
         var (window, shell, fun, _) = await Open(v8Bin: true);
@@ -257,7 +257,7 @@ public sealed class FunTabTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task HardcutSendsThroughTheLimiter()
     {
         var (window, shell, fun, ecu) = await Open(6);
@@ -273,7 +273,7 @@ public sealed class FunTabTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task OfflineEditIsTheSameBytesAsTuneAndOneUndoStep()
     {
         var (window, shell, fun, _) = await Open();
@@ -291,7 +291,7 @@ public sealed class FunTabTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact] // RF3
+    [CarAvaloniaFact] // RF3
     public async Task OfflineOutOfRangeIsRefusedAndUndone()
     {
         var (window, shell, fun, _) = await Open(v8Bin: true);
@@ -307,7 +307,7 @@ public sealed class FunTabTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task OfflineHardcutWritesTheBinAndRefusesABadRpm()
     {
         var (window, shell, fun, _) = await Open();
@@ -327,7 +327,7 @@ public sealed class FunTabTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task TheListShowsEachSwitch()
     {
         var (window, shell, fun, _) = await Open(v8Bin: true);
@@ -347,7 +347,7 @@ public sealed class FunTabTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact] // review C1, C2
+    [CarAvaloniaFact] // review C1, C2
     public async Task OfflineChecksOnlyFunEdits_AndARefusalLeavesNoRedo()
     {
         var (window, shell, fun, _) = await Open(v8Bin: true);
@@ -370,7 +370,7 @@ public sealed class FunTabTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact] // review I1
+    [CarAvaloniaFact] // review I1
     public async Task ConnectedTypingSurvivesTheLivePagesTick()
     {
         var (window, shell, fun, _) = await Open(6);
@@ -386,7 +386,7 @@ public sealed class FunTabTests
         finally { Close(window, shell); }
     }
 
-    [AvaloniaFact] // review I2, I4
+    [CarAvaloniaFact] // review I2, I4
     public async Task WriteToBinNeedsASend_AndTheHardcutUndoRevertsAll()
     {
         var (window, shell, fun, _) = await Open(6);

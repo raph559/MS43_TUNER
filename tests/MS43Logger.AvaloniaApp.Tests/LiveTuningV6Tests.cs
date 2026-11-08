@@ -8,7 +8,7 @@ namespace MS43Logger.AvaloniaApp.Tests;
 
 public sealed class LiveTuningV6Tests
 {
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task ScalarGroupsEditPrivately_SendTogether_AndCopyOnlyConfirmedOwnedBytes()
     {
         Assert.True(TuneScreen.Available);
@@ -85,7 +85,7 @@ public sealed class LiveTuningV6Tests
         finally { shell.LiveTuning.Dispose(); window.Close(); }
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task ScalarSelectionAndMemoryCostFollowTheV6Catalogue_ThenDisappearOnV5()
     {
         Assert.True(TuneScreen.Available);

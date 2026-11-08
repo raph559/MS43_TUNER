@@ -140,9 +140,9 @@ MS43 Tuner is developed in [MS43_EMULATOR](https://github.com/raph559/MS43_EMULA
 
 ## Install
 
-Nothing has been released yet. Releases will appear on the [Releases](https://github.com/raph559/MS43_TUNER/releases) page, each with two zips for win-x64: `MS43Tuner-<version>-win-x64.zip` with the desktop app and `MS43Tuner-CLI-<version>-win-x64.zip` with the command-line tool. Both will be self-contained single-file builds, so you will not need to install .NET: unzip and run `MS43Logger.AvaloniaApp.exe`. The builds are not code-signed, so Windows SmartScreen may ask before the first start.
+Download the latest release from the [Releases](https://github.com/raph559/MS43_TUNER/releases) page. Each release has two zips for win-x64: `MS43Tuner-<version>-win-x64.zip` with the desktop app and `MS43Tuner-CLI-<version>-win-x64.zip` with the command-line tool. Both are self-contained single-file builds, so you do not need to install .NET: unzip and run `MS43Logger.AvaloniaApp.exe`. The builds are not code-signed, so Windows SmartScreen may ask before the first start.
 
-Until then, build it from source:
+Or build it from source:
 
 ```powershell
 git clone https://github.com/raph559/MS43_TUNER.git

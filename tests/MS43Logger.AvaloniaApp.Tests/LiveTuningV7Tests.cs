@@ -8,7 +8,7 @@ namespace MS43Logger.AvaloniaApp.Tests;
 
 public sealed class LiveTuningV7Tests
 {
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task WordCurvesAndTablesEditSendAndCopyAsWholeLittleEndianCells()
     {
         Assert.True(TuneScreen.Available);

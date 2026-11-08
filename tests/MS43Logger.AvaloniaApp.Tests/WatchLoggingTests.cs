@@ -134,7 +134,7 @@ public sealed class WatchLoggingTests
         live.Disconnect();
     }
 
-    [AvaloniaFact]
+    [CarAvaloniaFact]
     public async Task AStoppedLiveTuningSessionQuietsTheOverlay()
     {
         Assert.True(TuneScreen.Available);
