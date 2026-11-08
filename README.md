@@ -92,12 +92,12 @@ The extra features, one page each, every one off until you turn it on. With the 
 Put a second bin next to yours and see every value that differs.
 
 <p align="center">
-  <img src="docs/screenshots/compare.png" width="72%" alt="Compare tab: the difference B minus A for the ignition map, cell by cell, with the items that differ listed on the left"><br>
-  <sub>B − A for the ignition map, in units</sub>
+  <img src="docs/screenshots/compare.png" width="72%" alt="Compare tab: the difference A minus B for the ignition map, cell by cell, with the items that differ listed on the left"><br>
+  <sub>A − B for the ignition map, in units</sub>
 </p>
 
 - Opens a second bin (B) against the one you are tuning (A) and lists only the items that differ, with how many cells differ in each.
-- Shows B − A in units, raw counts or percent, or either file on its own, with a colour scale for where B is higher or lower.
+- Shows A − B in units, raw counts or percent, or either file on its own, with a colour scale for where A is higher or lower. Percent is relative to B.
 - Copies cells or whole items from B into A. The copy is an ordinary edit: undo it, or save A as usual.
 - Lists the bytes that differ outside every XDF item, so nothing is hidden.
 
@@ -169,7 +169,7 @@ dotnet run --project src/MS43Logger.AvaloniaApp
 **Compare two bins**
 
 1. With a bin open, go to Compare, choose Open B… and pick the bin to compare with. The open bin is A, and its XDF is used for both files.
-2. Pick an item from the list of differences. Switch between B − A, A and B, and between units, raw and percent.
+2. Pick an item from the list of differences. Switch between A − B, A and B, and between units, raw and percent.
 3. Use Copy B into A to take values from B, or Edit in Tune to jump to the item.
 
 **Run a pull**
@@ -252,7 +252,7 @@ src/MS43Logger.Cli/                 the command-line tool
 tests/MS43Logger.Core.Tests/        xUnit tests for the core
 tests/MS43Logger.AvaloniaApp.Tests/ headless UI tests
 definitions/                        bundled MS4X logging definitions and the MS43X001 live cursor rules
-docs/firmware/                      firmware notes: the map-use rules and the overlay
+docs/firmware/                      firmware evidence for the map-use rules
 docs/screenshots/                   images for this README
 scripts/                            release packaging and the live-inputs generator
 ```

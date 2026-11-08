@@ -6,6 +6,29 @@ All notable changes to MS43 Tuner are recorded in this file. The format is based
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-09
+
+### Changed
+
+- The app works with live-tuning overlay V10.4 only. V10.4 is V10.3 with three firmware fixes: the pops spark angle is limited to +30.0 °BTDC (it took up to +72), a stalled engine is never blipped, and a pops window can no longer be cut short as it opens.
+- Typing "-" on a map that can go below zero starts a negative number ("-" then Enter still steps down one); "-5" used to set +5.
+- With a map shown in raw, a typed value or an Add is in raw counts.
+- Copy from B is refused when B is other firmware.
+- Pasting reads thousands groups ("1,234.5", "1 234,5") and leaves "n/a" cells as they are.
+- The performance torque is labelled as crank torque, from wheel power.
+
+### Fixed
+
+- Saving a bin flushes it to disk before it replaces the old file, and a failed `.bak` copy is tried again on the next save.
+- The Fun tab no longer reports a send that never went out, and the Live tuning page no longer stops refreshing when the flashed limiter is unknown.
+- A live patch whose reply was lost is checked before it is sent again.
+- An unreadable settings file is kept beside the new one, and the Tune tab says so.
+- The CLI keeps logging through a single poll timeout.
+
+### Removed
+
+- Support for older live-tuning overlays (V2 to V10.3). An ECU or a bin with another version is named and refused, and nothing is sent to it. Flash the V10.4 bin to tune live.
+
 ## [0.1.0] - 2026-11-08
 
 The first release: logging, the Tune and Compare tabs, live tuning and the Fun tab for MS43X001 with the live-tuning overlay ([MS43X001_CUSTOM](https://github.com/raph559/MS43X001_CUSTOM), up to V10.3), and road performance tests.
@@ -38,7 +61,7 @@ The first release: logging, the Tune and Compare tabs, live tuning and the Fun t
 
 ### Live tuning
 
-- A Live tuning tab for an ECU running the live-tuning overlay bin (MS43LAB plan 6; proven in the emulator, not yet on a real ECU): the RON98 ignition, idle ignition, RON98 λ target and both part-load cam targets, edited with the Tune tab's tools and the live cursor.
+- A Live tuning tab for an ECU running the live-tuning overlay bin (proven in the emulator, not yet on a real ECU): the RON98 ignition, idle ignition, RON98 λ target and both part-load cam targets, edited with the Tune tab's tools and the live cursor.
 - The app finds the overlay with the read-only DS2 command 06 before it sends anything; without it the page is read-only and says why. The base of every edit is the ECU's own flashed maps.
 - Edits stay in the app until Send, which uploads only the changed cells and switches the map on. A/B for all maps and per map, Free, and an always-visible Revert all, which leaves the edits in the app.
 - A status every second keeps the overlay alive. After a key cycle or a stall, whatever had been sent is sent again and the live maps go back on once the engine runs. A λ cell leaner than flashed is refused before anything is sent.
@@ -66,7 +89,7 @@ The first release: logging, the Tune and Compare tabs, live tuning and the Fun t
 
 ### Look and feel
 
-- Night and Day themes on one design system (docs/superpowers/specs/2026-10-20-ms43-restyle-system.md): colour tokens, shared control styles, an ink focus ring and a stroke icon set, with moon and sun buttons and a cross-fade between themes.
+- Night and Day themes on one design system ([docs/design-system.md](docs/design-system.md)): colour tokens, shared control styles, an ink focus ring and a stroke icon set, with moon and sun buttons and a cross-fade between themes.
 - A header with a file menu that is also the window's title bar: drag to move, double-click to maximize, and Minimize, Maximize and Close buttons that stay usable over dialogs. A status bar and in-window dialogs.
 - Settings: theme, readouts, trend length, log folder, CSV on connect, map values, cursor trail, reopening the last bin, the `.bak` and the edit log. Changes apply at once and are saved.
 - Animations only while Windows' animation effects are on: hover fades, the tab underline, screens, dialogs, popups, banners, switches, the rail, the map selection gliding between cells, and segmented controls whose raised pill slides to the new choice. Live values never animate.
@@ -85,5 +108,6 @@ The first release: logging, the Tune and Compare tabs, live tuning and the Fun t
 - The Definition and Port pickers in the header open again: only the header's background drags the window.
 - Clicking a row in the Tune rail or the Compare list no longer moves the list: the clicked row stays where it was while Recent grows or the list is rebuilt.
 
-[Unreleased]: https://github.com/raph559/MS43_TUNER/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/raph559/MS43_TUNER/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/raph559/MS43_TUNER/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/raph559/MS43_TUNER/releases/tag/v0.1.0

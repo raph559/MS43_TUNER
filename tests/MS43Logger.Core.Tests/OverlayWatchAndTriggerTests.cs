@@ -38,4 +38,50 @@ public sealed class OverlayWatchAndTriggerTests
         var bad = frame.ToArray(); bad[^1] ^= 1;
         Assert.Null(OverlayV9.ParseLogReply(bad, out _));
     }
+
+    private static byte[] Group(int table, byte config)
+    {
+        // The flashed bytes of the X001 group, with the activation byte changed; RAL's byte 7 is its neighbour.
+        var image = FakeOverlayEcu.Image(); var flash = image.AsSpan(0x7132C + (table - 124) * 8, 8).ToArray();
+        flash[0] = config; return flash;
+    }
+
+    [Fact]
+    public void TriggersAreValid()
+    {
+        var flash = Group(124, 1);
+        Assert.Null(OverlayV10.ValidateCopy(124, Group(124, 0x97), flash));
+        Assert.Null(OverlayV10.ValidateCopy(125, Group(125, 0x80), Group(125, 1)));
+        Assert.Null(OverlayV10.ValidateCopy(126, Group(126, 0x97), Group(126, 0)));
+        Assert.Equal(OverlayReason.Range, OverlayV10.ValidateCopy(126, Group(126, 2), Group(126, 0)));
+        Assert.Equal(OverlayReason.Range, OverlayV10.ValidateCopy(124, Group(124, 0xA0), flash));
+        var neighbour = Group(126, 0x97); neighbour[7] ^= 1;
+        Assert.Equal(OverlayReason.Range, OverlayV10.ValidateCopy(126, neighbour, Group(126, 0)));
+        Assert.Equal(0x97, OverlayV9.TriggersFor(124).Single(t => t.Label == "A/C on + clutch").Value);
+        Assert.Equal(0x82, OverlayV9.TriggersFor(124).Single(t => t.Label == "ASC off + clutch").Value);
+        Assert.Equal(0x82, OverlayV8.Triggers.Single(t => t.Label == "ASC off").Value);
+        Assert.Equal(["Off", "“−” pressed", "ASC off + “−”", "A/C on + “−”"], OverlayV9.TriggersFor(126).Select(t => t.Label));
+    }
+
+    [Fact] // a stock bin's own rules (no overlay): the activation bytes take no trigger
+    public void TheStockRulesTakeNoTrigger() =>
+        Assert.Equal(OverlayReason.Range, OverlayV8.ValidateCopy(124, Group(124, 0x97), Group(124, 1)));
+
+    [Fact]
+    public void VersionInReadsTheHeader()
+    {
+        var image = FakeOverlayEcu.Image();
+        Assert.Equal(0, OverlayHeader.VersionIn(image));
+        "LTOV"u8.CopyTo(image.AsSpan(0x4B544)); image[0x4B548] = 10; image[0x4B549] = 3;
+        Assert.Equal(10, OverlayHeader.VersionIn(image));
+        Assert.Equal(3, OverlayHeader.MinorIn(image));
+    }
+
+    [Fact]
+    public void AnAcTriggerGoesLive()
+    {
+        var ecu = CurrentOverlayTests.Ecu(); var client = new OverlayClient(ecu); var detection = client.Detect();
+        var copy = detection.Flash[124].ToArray(); copy[0] = 0x97;
+        Assert.Null(client.Send(124, copy, detection.Flash[124], client.Status()).Refused);
+    }
 }

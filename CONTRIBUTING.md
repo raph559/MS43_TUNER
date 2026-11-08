@@ -1,6 +1,6 @@
 # Contributing to MS43 Tuner
 
-Thanks for helping. MS43 Tuner is a Windows desktop app and a CLI for BMW E46 cars with the Siemens MS43 engine ECU: it logs live data over DS2 on the K-line, reads and edits bins through TunerPro XDF definitions, compares two bins and runs performance tests. Bug reports, fixes, tests, documentation and features are all welcome.
+Thanks for helping. MS43 Tuner is a Windows desktop app and a CLI for BMW cars with the Siemens MS43 engine ECU: it logs live data over DS2 on the K-line, reads and edits bins through TunerPro XDF definitions, compares two bins and runs performance tests. Bug reports, fixes, tests, documentation and features are all welcome.
 
 Please read the [rules](#the-rules) before you start: two of them protect people's cars.
 
@@ -19,9 +19,9 @@ Please read the [rules](#the-rules) before you start: two of them protect people
 1. **Never write ECU flash.** The app reads the ECU over DS2 and saves edited bin files on the PC. Flashing a bin, and its checksum, is done with MS4X Flasher. A change that adds flash writing will not be merged.
 2. **Never commit bins, XDF files or personal calibration data.** Put your own bins and XDF in `testdata/local/`, which git ignores; `*.xdf`, `*.bin` and `*.bak` are ignored everywhere. A bin saved under another extension is not, so check `git status` before each commit. The same goes for CSV logs, saved results or screenshots that carry your car's data: leave them out unless you mean to publish them.
 3. **No absolute local paths** in any committed file, such as a path into your own user folder. Use repository-relative paths such as `docs/firmware/map-use/ve.md`.
-4. **Test first.** Write the test, run it and watch it fail, then make the change that passes it.
-5. **The UI follows the design system** in docs/superpowers/specs/2026-10-20-ms43-restyle-system.md: colour tokens for Night and Day, type, controls, states and layout. Use the existing tokens and control styles instead of new colours or one-off styles.
-6. **UI copy rules** (section 9 of the same spec):
+4. **Add tests.** A fix comes with a test that fails without it; a feature comes with tests of what it does.
+5. **The UI follows the design system** in [docs/design-system.md](docs/design-system.md): colour tokens for Night and Day, type, controls, states and layout. Use the existing tokens and control styles instead of new colours or one-off styles.
+6. **UI copy rules** (section 9 of the design system):
    - Sentence case for every label, button, heading and message. No all caps.
    - No em dash and no en dash anywhere. Write ranges in words: "3.0 to 39.0".
    - The ellipsis character "…" (U+2026), never three dots. It ends a command that opens a dialog or picker ("Open bin…") and a status in progress ("Connecting…").
@@ -30,9 +30,9 @@ Please read the [rules](#the-rules) before you start: two of them protect people
    - One name per thing: bin, XDF, item, cell, breakpoint, channel, definition (section 9.3).
    - Every message says what happened, then what to do.
 
-### How larger work has been done
+### Larger changes
 
-Each feature so far started with a design spec in the source contract and a step-by-step plan in the source contract. For a large change, opening an issue with a short design first saves rework.
+For a large change, opening an issue with a short design first saves rework.
 
 Evidence about the firmware lives in `docs/firmware/map-use/`. A change to the map-use rules in `definitions/ms43x001_map_use.json` should record its code addresses and say whether each fact was observed or inferred, as the existing rules do.
 
@@ -76,11 +76,19 @@ powershell -ExecutionPolicy Bypass -File scripts/Publish-Windows.ps1
 | `src/MS43Logger.AvaloniaApp` | the desktop app (Avalonia 11): Live, Tune, Compare and Performance |
 | `src/MS43Logger.Cli` | the CLI: logging, `rate`, `show` and `diff` |
 | `tests/MS43Logger.Core.Tests` | xUnit tests for Core |
-| `tests/MS43Logger.AvaloniaApp.Tests` | UI tests on Avalonia.Headless, including the gate tests (styling, glyphs, accessible names, nothing clipped at 1024 × 680, keyboard reach) |
+| `tests/MS43Logger.AvaloniaApp.Tests` | UI tests on Avalonia.Headless, including checks for styling, glyphs, accessible names, clipping at 1024 × 680 and keyboard access |
 | `definitions/` | bundled ADX logging definitions (see [NOTICE.md](NOTICE.md)) and the project's JSON data |
-| `docs/superpowers/` | design specs and plans |
+| `docs/design-system.md` | the UI's design system: tokens, controls and copy rules |
 | `docs/firmware/map-use/` | firmware notes behind the map-use rules |
 | `scripts/` | release packaging and data generation |
+
+The current live-tuning implementation is in [`src/MS43Logger.Core/LiveTuning`](src/MS43Logger.Core/LiveTuning):
+
+- `OverlayProtocol` handles session framing, patches and version checks; `OverlaySessionClient` handles session state and retries.
+- `OverlayMemory` handles RAM allocation and directory status; `OverlayCatalogue` holds map IDs and addresses.
+- `OverlaySettings` defines fields and validates settings; `OverlayTriggers` names switch choices; `OverlayWatch` handles watch requests and log replies.
+
+The public `OverlayV3` through `OverlayV10` entry points remain for compatibility. Their historical catalogues and validation rules intentionally differ in places. Current code should use the responsibility-based helpers. Protocol and catalogue changes are covered by `CurrentOverlayTests`, `OverlayAllocationTests`, `OverlayPopsTests` and `OverlayWatchAndTriggerTests`.
 
 ## Test
 
@@ -128,7 +136,26 @@ Open an issue with the **Feature request** form: the problem you are trying to s
 3. Write the test first, then the change.
 4. For a UI change, add screenshots of the same view in Night and in Day.
 5. Add a line under "Unreleased" in [CHANGELOG.md](CHANGELOG.md) for anything a user would notice.
-6. Write commit messages as the history does: a short subject in sentence case that says what changes ("Add compare: item-by-item bin diff, CLI diff and Compare tab"), and a body that says why and what was checked.
+6. Use `type(scope): summary` for commit subjects and pull request titles, for example `docs(build): clarify prerequisites`. Choose the type that fits the change: `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `build`, `ci`, `chore` or `revert`. Use the body to explain why and what was checked.
+
+### Commit subjects and PR titles
+
+The scope names the affected subsystem. Common scopes are `logging`, `protocol`, `tuning`, `compare`,
+`performance`, `ui` and `theme`. Use `deps` for package updates and `actions` for workflow dependencies.
+Other scopes are fine when they describe the change. Use lowercase letters and digits, with hyphens between words.
+
+For example:
+
+- `feat(tuning): add live-map editing`
+- `fix(protocol): reject a stale revision`
+- `chore(deps): bump System.IO.Ports`
+- `ci(actions): bump actions/checkout`
+
+The summary must be nonempty, on one line, without leading or trailing whitespace. Use `!` after the scope
+only for a breaking change, such as `feat(protocol)!: require a new session format`.
+The [PR title check](.github/workflows/pr-title.yml) validates the format when a PR opens, reopens, changes title
+or receives commits. Dependabot uses `chore(deps):` for NuGet updates and `ci(actions):` for Actions updates.
+Match the final commit subject to the PR title when squashing.
 
 The pull request template repeats this checklist:
 
@@ -137,7 +164,20 @@ The pull request template repeats this checklist:
 - [ ] The full suite passes (`dotnet test MS43Logger.sln`)
 - [ ] No bins, XDF files, personal data or absolute local paths in the diff
 - [ ] Nothing here writes ECU flash
-- [ ] UI and text follow the design system and its copy rules (the source contract, section 9 for copy)
+- [ ] UI and text follow the design system and its copy rules (`docs/design-system.md`, section 9 for copy)
+
+### Commit bodies
+
+Use a body when the subject leaves useful context out. Describe the problem, the resulting behavior and why
+the change is needed. For protocol or firmware changes, name the affected version and the byte, address or
+register contract when it helps explain the change.
+
+State which checks ran for this change and their limits: missing fixtures, a partial suite, emulator checks
+or remaining vehicle validation. Keep results tied to the source version they tested. Record later car results
+in the current documentation or release notes.
+
+An import or snapshot should say what it brings in. Preserve credits and validation limits, and leave copied
+chat requests and private planning links out of the message. A small, focused change can have an empty body.
 
 ## License of contributions
 

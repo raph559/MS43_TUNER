@@ -21,4 +21,4 @@
 - [ ] The full suite passes (`dotnet test MS43Logger.sln`)
 - [ ] No bins, XDF files, personal data or absolute local paths in the diff
 - [ ] Nothing here writes ECU flash
-- [ ] UI and text follow the design system and its copy rules (the source contract, section 9 for copy)
+- [ ] UI and text follow the design system and its copy rules (`docs/design-system.md`, section 9 for copy)
