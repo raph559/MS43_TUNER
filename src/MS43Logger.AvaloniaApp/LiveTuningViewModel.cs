@@ -122,7 +122,7 @@ public sealed class LiveTuningViewModel : ViewModelBase, IDisposable
             if (_session?.Detection?.Problem == "not found") return "No live-tuning overlay on this ECU.";
             if (_session?.Detection?.Problem is not null) return "Live-tuning overlay not supported.";
             if (!HasVerifiedCatalogue) return "Checking live-map support…";
-            return IsV6 ? $"{Maps.Count(m => m.Map.ScalarGroup is null)} supported maps + {Maps.Count(m => m.Map.ScalarGroup is not null)} settings groups · load while RAM fits"
+            return IsV6 ? $"{Maps.Count(m => m.Map.ScalarGroup is null && !m.Map.Reserved)} supported maps + {Maps.Count(m => m.Map.ScalarGroup is not null)} settings groups · load while RAM fits"
                 : IsV5 ? $"{Maps.Count} supported maps · load while RAM fits"
                 : IsV4 ? $"{Maps.Count} supported maps · choose up to 5" : $"{Maps.Count} supported maps";
         }
@@ -879,7 +879,8 @@ public sealed class LiveTuningViewModel : ViewModelBase, IDisposable
         var selected = Selected;
         var query = MapSearch.Trim();
         var words = XdfCatalog.Words(query);
-        var wanted = Maps.Where(row => !_loadedOnly || row.State is OverlayState.Loaded or OverlayState.Ready or OverlayState.On)
+        var wanted = Maps.Where(row => !row.Map.Reserved)
+            .Where(row => !_loadedOnly || row.State is OverlayState.Loaded or OverlayState.Ready or OverlayState.On)
             .Select(row => (Row: row, Rank: query.Length == 0 ? 0 : Rank(row, query, words)))
             .Where(pair => pair.Rank < 4)
             .OrderBy(pair => pair.Rank)

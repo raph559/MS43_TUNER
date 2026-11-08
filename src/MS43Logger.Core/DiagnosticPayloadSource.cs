@@ -6,10 +6,9 @@ using MS43Logger.Core.LiveTuning;
 namespace MS43Logger.Core;
 
 /// <summary>
-/// The logger's source with the ECU's diagnosis read between two polls, for the log's columns (V10.1 plan, Task 4, as the
-/// V10.1 review reshaped it): the stored faults and the task queues when logging starts and every 20 s, and on a V10 ECU
+/// The logger's source with the ECU's diagnosis read between two polls, for the log's columns: the stored faults and the task queues when logging starts and every 20 s, and on a V10 ECU
 /// (<paramref name="overlayState"/>) the feature flags FDF8 every 0.5 s, and while a pops window runs (and once after it)
-/// pops' own state at 0x41FBC: its lowest rpm and V10.1's count of the stabs begun. At most one DS2 06 exchange goes out between two
+/// pops' own state at 0x41FBC: its lowest rpm. At most one DS2 06 exchange goes out between two
 /// polls, never retried, and none while <paramref name="active"/> says no (no log open, or a Performance run recording):
 /// the fault round is spread over polls (the queue flags, the layout check once a session, the count, the list, a record
 /// each). A read that fails keeps the last value and the poll goes on; three state reads in a row with no answer wait
@@ -22,11 +21,11 @@ public sealed class DiagnosticPayloadSource(IPayloadSource inner, IDs2Line line,
     public const int FaultsEveryMilliseconds = 20_000, StateEveryMilliseconds = 500, StateFreshMilliseconds = 1_000, StateTimeoutsToWait = 3;
     public const int FlagsAddress = 0xFDF8;
 
-    /// <summary>Pops' state: POPS_LEFT (word, 10 ms ticks), POPS_MIN (the window's lowest 807F), POPS_STABS (V10.1, the stabs begun).</summary>
+    /// <summary>Pops state: POPS_LEFT (word, 10 ms ticks) and POPS_MIN (the window's lowest 807F).</summary>
     public const int PopsAddress = 0x41FBC;
 
     public static IReadOnlyList<string> CsvHeader { get; } =
-        ["faults", "queues", "fdf8", "pops_window", "pops_stabs", "pops_low_rpm", "pops_used", "blip", "guard"];
+        ["faults", "queues", "fdf8", "pops_window", "pops_low_rpm", "pops_used", "blip", "guard"];
 
     /// <summary>The columns before any source has read anything, as wide as the header.</summary>
     public static IReadOnlyList<string> EmptyCsvValues { get; } = CsvHeader.Select(_ => string.Empty).ToArray();
@@ -37,7 +36,7 @@ public sealed class DiagnosticPayloadSource(IPayloadSource inner, IDs2Line line,
     private readonly List<EcuFault> _found = new();
     private long? _faultsDue, _stateDue, _stateAt, _popsAt;
     private bool _windowSeen, _popsPending;
-    private byte _popsLowest, _popsStabs;
+    private byte _popsLowest;
     private int _stateTimeouts, _queueWord, _count;
     private Step? _step;
     private bool? _layout;                                        // null until checked: once a session
@@ -69,7 +68,7 @@ public sealed class DiagnosticPayloadSource(IPayloadSource inner, IDs2Line line,
     }
 
     /// <summary>
-    /// The values of <see cref="CsvHeader"/>: FDF8 in hex, 0 or 1 for each bit, the stabs begun and the lowest rpm of the
+    /// The values of <see cref="CsvHeader"/>: FDF8 in hex, 0 or 1 for each bit, the lowest rpm of the
     /// pops window (kept after it while the read is fresh), the blip 0 off, 1 rising, 2 holding.
     /// </summary>
     public IReadOnlyList<string> CsvValues()
@@ -84,7 +83,6 @@ public sealed class DiagnosticPayloadSource(IPayloadSource inner, IDs2Line line,
             return
             [
                 _faults, _queues, flags is { } w ? w.ToString("X4", CultureInfo.InvariantCulture) : string.Empty, Bit(flags, 3),
-                pops ? _popsStabs.ToString(CultureInfo.InvariantCulture) : string.Empty,
                 pops ? (_popsLowest * 32).ToString(CultureInfo.InvariantCulture) : string.Empty,
                 Bit(flags, 4), blip, Bit(flags, 13),
             ];
@@ -109,8 +107,8 @@ public sealed class DiagnosticPayloadSource(IPayloadSource inner, IDs2Line line,
         _popsPending = false;
         try
         {
-            var pops = ReadOnce(PopsAddress, 4);
-            lock (_gate) (_popsLowest, _popsStabs, _popsAt) = (pops[2], pops[3], now);
+            var pops = ReadOnce(PopsAddress, 3);
+            lock (_gate) (_popsLowest, _popsAt) = (pops[2], now);
         }
         catch (Exception error) when (Failed(error))
         {
@@ -127,7 +125,7 @@ public sealed class DiagnosticPayloadSource(IPayloadSource inner, IDs2Line line,
             lock (_gate) (_flags, _stateAt) = (word, now);
             _stateTimeouts = 0;
             var window = (word & 1 << 3) != 0;
-            _popsPending = window || _windowSeen;                // during a window, and once after it for its final count
+            _popsPending = window || _windowSeen;                // during a window, and once after it
             _windowSeen = window;
         }
         catch (TimeoutException)

@@ -26,7 +26,7 @@ public sealed class V10GroupsTests
     {
         var (window, shell) = await TuneScreen.OpenAsync(select: null, time: new ManualTicker());
         Put(shell, 0x4B544, [(byte)'L', (byte)'T', (byte)'O', (byte)'V', (byte)binVersion, (byte)minor]);
-        var groups = minor >= 2 ? V10Groups.DefaultsV102 : minor >= OverlayV10.V101Minor ? V10Groups.DefaultsV101 : V10Groups.Defaults;
+        var groups = minor >= OverlayV10.V103Minor ? V10Groups.DefaultsV103 : minor >= 2 ? V10Groups.DefaultsV102 : minor >= OverlayV10.V101Minor ? V10Groups.DefaultsV101 : V10Groups.Defaults;
         Put(shell, 0x4FF80, binVersion >= 10 ? groups : groups.AsSpan(0, 8));
         shell.SelectedTab = tab;
         var before = shell.Tune.Document!.Image.ToArray();
@@ -528,6 +528,41 @@ public sealed class V10GroupsTests
                 fun.ScalarRows.Select(r => r.Label));
             Choose(fun, FunFeatures.Blip);
             Assert.Equal(BlipLabels.Concat(GearLabels).Append("Blip lead").Concat(RatioLabels), fun.ScalarRows.Select(r => r.Label));
+        }
+        finally { Close(window, shell); }
+    }
+
+    [AvaloniaFact] // V10.3: no stabs anywhere. Group 139 is in the verified catalogue but never listed, and pops shows alone.
+    public async Task AV103EcuShowsNoStabs()
+    {
+        var (window, shell, _, _) = await Open(10, ShellViewModel.LiveTuningTab, minor: OverlayV10.V103Minor);
+        var page = shell.LiveTuning;
+        try
+        {
+            Assert.True(page.HasVerifiedCatalogue);
+            Assert.True(Row(page, OverlayV10.Stabs).Map.Reserved);
+            Assert.DoesNotContain(page.FilteredMaps, row => row.Map.Index == OverlayV10.Stabs);
+            Assert.DoesNotContain(page.FilteredMaps, row => row.Title.Contains("stab", StringComparison.OrdinalIgnoreCase));
+            page.Selected = Row(page, OverlayV8.Pops);
+            Assert.DoesNotContain(page.ScalarFields, f => f.Description.Contains("stab", StringComparison.OrdinalIgnoreCase));
+            shell.SelectedTab = ShellViewModel.FunTab;
+            Choose(shell.Fun, FunFeatures.Pops);
+            Assert.NotEmpty(shell.Fun.ScalarRows);
+            Assert.DoesNotContain(shell.Fun.ScalarRows, r => r.Label is "Load time" or "Stab size" or "Stab length" or "Gap" or "Rise allowed during stabs");
+        }
+        finally { Close(window, shell); }
+    }
+
+    [AvaloniaFact]
+    public async Task AV103BinOfflineShowsNoStabsInFun()
+    {
+        var (window, shell, _, _) = await Open(null, ShellViewModel.FunTab, minor: OverlayV10.V103Minor);
+        var fun = shell.Fun;
+        try
+        {
+            Choose(fun, FunFeatures.Pops);
+            Assert.Equal(8, fun.ScalarRows.Count);
+            Assert.DoesNotContain(fun.ScalarRows, r => r.Label is "Load time" or "Stab size" or "Stab length" or "Gap" or "Rise allowed during stabs");
         }
         finally { Close(window, shell); }
     }

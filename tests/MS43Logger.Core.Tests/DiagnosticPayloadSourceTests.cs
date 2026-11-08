@@ -5,9 +5,9 @@ using MS43Logger.Core.LiveTuning;
 namespace MS43Logger.Core.Tests;
 
 /// <summary>
-/// The log's diagnostic columns (V10.1 plan, Task 4, as the V10.1 review reshaped them): the stored faults and the task
+/// The log's diagnostic columns: the stored faults and the task
 /// queues when logging starts and every 20 s, and on a V10 ECU FDF8 every 0.5 s, with at most one DS2 06 exchange
-/// between two polls and none while the log is off. A read that fails keeps the last value and the poll goes on (RF4).
+/// between two polls and none while the log is off. A read that fails keeps the last value and the poll goes on.
 /// </summary>
 public sealed class DiagnosticPayloadSourceTests
 {
@@ -112,7 +112,7 @@ public sealed class DiagnosticPayloadSourceTests
         Assert.DoesNotContain(line.Reads, a => a is 0xFD2C or 0xFD2E);              // the payload carries those bits
     }
 
-    [Fact] // RF4, the review: a log that is off, or a Performance run that is recording, gets the bare poll
+    [Fact] // a log that is off, or a Performance run that is recording, gets the bare poll
     public void NothingMoreIsReadWhileTheLogIsOff()
     {
         var line = new MemoryLine().WithLayout();
@@ -128,12 +128,11 @@ public sealed class DiagnosticPayloadSourceTests
         Assert.Contains(FaultMemory.QueueFlagsAddress, line.Reads);
     }
 
-    /// <summary>Pops' state at 0x41FBC: POPS_LEFT (word), POPS_MIN (807F units), POPS_STABS (V10.1's stab count).</summary>
-    private static void Pops(MemoryLine line, ushort left, byte lowest, byte stabs)
+    /// <summary>Pops' state at 0x41FBC: POPS_LEFT (word) and POPS_MIN (807F units).</summary>
+    private static void Pops(MemoryLine line, ushort left, byte lowest)
     {
         line.Word(DiagnosticPayloadSource.PopsAddress, left);
         line.Memory[DiagnosticPayloadSource.PopsAddress + 2] = lowest;
-        line.Memory[DiagnosticPayloadSource.PopsAddress + 3] = stabs;
     }
 
     [Fact]
@@ -141,41 +140,41 @@ public sealed class DiagnosticPayloadSourceTests
     {
         var line = new MemoryLine().WithLayout();
         line.Word(0xFDF8, 0x4000 | 1 << 3 | 1 << 4 | 1 << 7 | 1 << 13);
-        Pops(line, left: 150, lowest: 125, stabs: 3);
+        Pops(line, left: 150, lowest: 125);
         var source = new DiagnosticPayloadSource(new Poll(), line, overlayState: true);
         PollUntil(source, line, 500);
-        Assert.Equal(["faults", "queues", "fdf8", "pops_window", "pops_stabs", "pops_low_rpm", "pops_used", "blip", "guard"],
+        Assert.Equal(["faults", "queues", "fdf8", "pops_window", "pops_low_rpm", "pops_used", "blip", "guard"],
             DiagnosticPayloadSource.CsvHeader);
-        Assert.Equal(["none", "none", "6098", "1", "3", "4000", "1", "0", "1"], source.CsvValues());
+        Assert.Equal(["none", "none", "6098", "1", "4000", "1", "0", "1"], source.CsvValues());
         line.Word(0xFDF8, 0x4000 | 1 << 8);
-        Pops(line, left: 0, lowest: 124, stabs: 5);
-        PollUntil(source, line, 1_000);                                             // the window's end: its count is read once more
-        Assert.Equal(["4100", "0", "5", "3968", "0", "1", "0"], source.CsvValues().Skip(2));
+        Pops(line, left: 0, lowest: 124);
+        PollUntil(source, line, 1_000);                                             // the window's end: its state is read once more
+        Assert.Equal(["4100", "0", "3968", "0", "1", "0"], source.CsvValues().Skip(2));
         line.Word(0xFDF8, 0x4000 | 1 << 8 | 1 << 12);
         PollUntil(source, line, 1_500);
-        Assert.Equal("2", source.CsvValues()[7]);                                   // blip: 0 off, 1 rising, 2 holding
+        Assert.Equal("2", source.CsvValues()[6]);                                   // blip: 0 off, 1 rising, 2 holding
     }
 
-    [Fact] // the V10.1 review's minor: FDF8.7 at 2 Hz shows about one stab in five, so the log reads the count instead
-    public void TheStabCountComesWithTheWindowOnly()
+    [Fact] // pops' state is read during a window and once after it, never without one
+    public void PopsStateComesWithTheWindowOnly()
     {
         var line = new MemoryLine().WithLayout();
         line.Word(0xFDF8, 0x4000);
         var source = new DiagnosticPayloadSource(new Poll(), line, overlayState: true);
         PollUntil(source, line, 3_000);
         Assert.DoesNotContain(DiagnosticPayloadSource.PopsAddress, line.Reads);    // no window, no read
-        Assert.Equal(("", ""), (source.CsvValues()[4], source.CsvValues()[5]));
+        Assert.Equal("", source.CsvValues()[4]);
         line.Word(0xFDF8, 0x4000 | 1 << 3);
         PollUntil(source, line, 5_000);                                             // a 2 s window: a read after each FDF8 read
         Assert.InRange(Count(line, DiagnosticPayloadSource.PopsAddress), 3, 4);
         line.Word(0xFDF8, 0x4000);
         var during = Count(line, DiagnosticPayloadSource.PopsAddress);
         PollUntil(source, line, 8_000);
-        Assert.Equal(during + 1, Count(line, DiagnosticPayloadSource.PopsAddress)); // once more for the final count, then none
-        Assert.Equal(("", ""), (source.CsvValues()[4], source.CsvValues()[5]));    // and over a second old: empty
+        Assert.Equal(during + 1, Count(line, DiagnosticPayloadSource.PopsAddress)); // once more after the window, then none
+        Assert.Equal("", source.CsvValues()[4]);                                    // and over a second old: empty
     }
 
-    [Fact] // the V10.1 review's minor: 20 paths have no P-code, so their name stands in for P0000
+    [Fact] // 20 paths have no P-code, so their name stands in for P0000
     public void CodesWithoutAPCodeAreNamed()
     {
         var line = new MemoryLine().WithLayout().Stored((124, 0x28), (12, 0x24), (156, 0x21));
@@ -184,7 +183,7 @@ public sealed class DiagnosticPayloadSourceTests
         Assert.Equal("P1567 t_es tam_can", source.Faults);
     }
 
-    [Fact] // the review: one lost reply never leaves a stale state in the log
+    [Fact] // one lost reply never leaves a stale state in the log
     public void TheStateCellsEmptyOnceTheLastGoodReadIsASecondOld()
     {
         var line = new MemoryLine().WithLayout(); line.Word(0xFDF8, 0x4000 | 1 << 3);
@@ -198,7 +197,7 @@ public sealed class DiagnosticPayloadSourceTests
         Assert.All(source.CsvValues().Skip(2), value => Assert.Equal("", value));
     }
 
-    [Fact] // RF4: only three state reads in a row with no answer wait 20 s
+    [Fact] // Only three state reads in a row with no answer wait 20 s
     public void ThreeStateTimeoutsInARowWait20s()
     {
         var line = new MemoryLine { TimesOut = address => address == 0xFDF8 }.WithLayout();
@@ -214,7 +213,7 @@ public sealed class DiagnosticPayloadSourceTests
         Assert.Equal(6, Count(line, 0xFDF8));
     }
 
-    [Fact] // RF4
+    [Fact]
     public void AFailedStepEndsTheRoundAndKeepsTheValues()
     {
         var line = new MemoryLine().WithLayout().Stored((124, 0x28));
@@ -233,7 +232,7 @@ public sealed class DiagnosticPayloadSourceTests
         Assert.Equal(41_000 / 60 + 1, poll.Calls);
     }
 
-    [Fact] // the review: FD84 means what it means on MS43X001 only
+    [Fact] // FD84 means what it means on MS43X001 only
     public void AnotherLayoutSaysUnsupportedForBothAndIsNotReadAgain()
     {
         var line = new MemoryLine();
@@ -245,7 +244,7 @@ public sealed class DiagnosticPayloadSourceTests
         Assert.Equal(reads, line.Reads.Count);
     }
 
-    [Fact] // RF4: an ECU that answers no DS2 06 costs one timed-out read per 20 s, the queue flags'
+    [Fact] // An ECU that answers no DS2 06 costs one timed-out read per 20 s, the queue flags'
     public void AnEcuThatAnswersNoMemoryReadCostsOneTimeoutPer20s()
     {
         var line = new MemoryLine { TimesOut = _ => true };
