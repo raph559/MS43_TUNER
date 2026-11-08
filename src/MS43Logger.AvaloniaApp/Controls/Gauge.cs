@@ -10,7 +10,7 @@ using MS43Logger.AvaloniaApp.Theme;
 namespace MS43Logger.AvaloniaApp.Controls;
 
 /// <summary>
-/// A dial of the Dials band: a 270° Track arc with a Now arc up to the value and a Now
+/// A dial of the Dials band (system 8, mockup live-b-dials): a 270° Track arc with a Now arc up to the value and a Now
 /// tip across the track (Ink3 once the link is not live), Ink3 major ticks and Edge minor ticks, Data 12 Ink3 labels, the
 /// rev-limit band as an Ink2 arc outside the track with its value, a cased zero mark on a scale that crosses zero, and the
 /// reading inside. No face fill, no needle. The geometry follows the mockup's 220 px (large) and 184 px (small) dials and
@@ -173,7 +173,7 @@ public sealed class Gauge : Control
 
         if (ZeroAt is double zeroAt && zeroAt > Minimum && zeroAt < Maximum)
         {
-            // The zero mark crosses the track with a Pane casing, so it holds 3:1 on the Now arc.
+            // The zero mark crosses the track with a Pane casing, so it holds 3:1 on the Now arc (system 8).
             var angle = Angle(zeroAt);
             context.DrawLine(new Pen(pane, 4), Polar(angle, track - 12), Polar(angle, track + 6));
             context.DrawLine(new Pen(ink2, 2), Polar(angle, track - 12), Polar(angle, track + 6));
@@ -228,7 +228,7 @@ public sealed class Gauge : Control
         return geometry;
     }
 
-    // A UI line with its numbers in Bahnschrift, centred on a point and set on one baseline: "× 1000 rpm".
+    // A UI line with its numbers in Bahnschrift (system 3.1), centred on a point and set on one baseline: "× 1000 rpm".
     private static void Mixed(DrawingContext context, string text, FontFamily data, FontFamily ui, double size, IBrush brush, Point centre)
     {
         var runs = System.Text.RegularExpressions.Regex.Split(text, @"(\d+)").Where(part => part.Length > 0).Select(part =>

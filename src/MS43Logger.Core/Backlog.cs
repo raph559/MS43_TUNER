@@ -1,7 +1,7 @@
 namespace MS43Logger.Core;
 
 /// <summary>
-/// The samples handed to the screen and not shown yet. Without a pause between polls, a source that answers
+/// The samples handed to the screen and not shown yet. Without a pause between polls (owner, 2026-10-28), a source that answers
 /// at once would pile them up in memory: <see cref="Enter"/> waits while <c>limit</c> are waiting, so the logger slows to the
 /// screen's pace and no sample is dropped. A real line, about 25 samples a second, never fills it.
 /// </summary>

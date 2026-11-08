@@ -10,7 +10,7 @@ using MS43Logger.Core.Tuning;
 namespace MS43Logger.AvaloniaApp.Controls;
 
 /// <summary>
-/// A curve (or an axis) as a chart: square points filled with their cell's map colour and an Ink2 edge,
+/// A curve (or an axis) as a chart (system 5.13): square points filled with their cell's map colour and an Ink2 edge,
 /// the selected point framed in Ink1, an Ink2 line and axes, a hairline grid at round ticks. The round dot is kept for
 /// the live cursor.
 /// </summary>
@@ -177,7 +177,7 @@ public sealed class CurveChart : Control
         var ys = Enumerable.Range(0, count).Select(i => vertical ? values.Physical[i, 0] : values.Physical[0, i]).ToArray();
         var axis = vertical ? values.Y : values.X;
 
-        // An axis's breakpoints are numbered 1 to n, as its grid's rows are.
+        // An axis's breakpoints are numbered 1 to n (system 5.13), as its grid's rows are.
         var numbered = vertical && Editor?.NumberRows == true;
         var xs = numbered ? Enumerable.Range(1, count).Select(i => (double)i).ToArray()
             : axis.Values.Count == count && axis.Values.All(double.IsFinite) && axis.Values.Distinct().Count() == count

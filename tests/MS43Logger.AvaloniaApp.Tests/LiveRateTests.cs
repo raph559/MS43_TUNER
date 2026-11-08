@@ -7,7 +7,7 @@ using MS43Logger.Core.Tests;
 namespace MS43Logger.AvaloniaApp.Tests;
 
 /// <summary>
-/// Faster logging: the logger polls without a pause, every sample goes to the bars, dials, gear, CSV and
+/// Faster logging (owner, 2026-10-28): the logger polls without a pause, every sample goes to the bars, dials, gear, CSV and
 /// Performance, the numbers change at most five times a second (the latest one shown), and the knock bars hold their highest
 /// value for a second so a one-sample knock cannot flash by.
 /// </summary>

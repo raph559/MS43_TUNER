@@ -33,7 +33,7 @@ public static class BundledDefinitions
 
     /// <summary>
     /// Lower-case hex SHA-256 of the embedded file, stored with a saved result so its raw payloads can be decoded again
-    /// with the same definition.
+    /// with the same definition (performance spec 8).
     /// </summary>
     public static string Sha256(string variant)
     {

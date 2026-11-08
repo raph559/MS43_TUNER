@@ -9,7 +9,7 @@ using MS43Logger.AvaloniaApp.Theme;
 namespace MS43Logger.AvaloniaApp.Controls;
 
 /// <summary>
-/// A readout's range bar in the Tiles band: a Track bar with a Now fill (Ink3 once the link is not live),
+/// A readout's range bar in the Tiles band (system 8): a Track bar with a Now fill (Ink3 once the link is not live),
 /// the rev-limit zone hatched in Ink2 with an Ink1 limit tick, a zero mark for a scale that crosses zero, and the scale's
 /// labels under it in Data 12 Ink3. Marks that sit on the fill carry a 1 px Pane casing on each side. The fill clamps at
 /// the ends; the reading above it prints the true value.
@@ -58,7 +58,7 @@ public sealed class ReadoutBar : Control
 
     public double BarHeight { get => GetValue(BarHeightProperty); set => SetValue(BarHeightProperty, value); }
 
-    /// <summary>Samples are arriving: the fill is Now; otherwise Ink3, since orange means now.</summary>
+    /// <summary>Samples are arriving: the fill is Now; otherwise Ink3, since orange means now (system 1.4).</summary>
     public bool IsLive { get => GetValue(IsLiveProperty); set => SetValue(IsLiveProperty, value); }
 
     /// <summary>Where the value's end of the fill sits, 0 to 1 along the bar; 0 without a value.</summary>
@@ -84,7 +84,7 @@ public sealed class ReadoutBar : Control
         {
             if (limit is double start)
             {
-                // The hatch of the storage limit on Tune: 1.5 px Ink2 stripes every 4 px.
+                // The hatch of the storage limit on Tune (system 10.2): 1.5 px Ink2 stripes every 4 px.
                 using (context.PushClip(new Rect(start, bar.Top, width - start, bar.Height)))
                 {
                     var stripe = new Pen(ThemeBrushes.Get(this, "Ink2Brush"), 1.5);
@@ -129,7 +129,7 @@ public sealed class ReadoutBar : Control
         }
     }
 
-    // A 2 px line across the bar with a 1 px Pane casing on each side, reaching past the bar by the overhang.
+    // A 2 px line across the bar with a 1 px Pane casing on each side (system 8), reaching past the bar by the overhang.
     private static void Mark(DrawingContext context, double x, double overhang, IBrush brush, IBrush casing, Rect bar)
     {
         context.DrawRectangle(casing, null, new Rect(x - 2, bar.Top - overhang, 4, bar.Height + 2 * overhang));

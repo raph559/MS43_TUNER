@@ -66,7 +66,7 @@ The first release: logging, the Tune and Compare tabs, live tuning and the Fun t
 
 ### Look and feel
 
-- Night and Day themes on one design system (docs/superpowers/specs/2026-10-20-ms43-restyle-system.md): colour tokens, shared control styles, an ink focus ring and a stroke icon set, with moon and sun buttons and a cross-fade between themes.
+- Night and Day themes on one design system ([docs/superpowers/specs/2026-10-20-ms43-restyle-system.md](docs/superpowers/specs/2026-10-20-ms43-restyle-system.md)): colour tokens, shared control styles, an ink focus ring and a stroke icon set, with moon and sun buttons and a cross-fade between themes.
 - A header with a file menu that is also the window's title bar: drag to move, double-click to maximize, and Minimize, Maximize and Close buttons that stay usable over dialogs. A status bar and in-window dialogs.
 - Settings: theme, readouts, trend length, log folder, CSV on connect, map values, cursor trail, reopening the last bin, the `.bak` and the edit log. Changes apply at once and are saved.
 - Animations only while Windows' animation effects are on: hover fades, the tab underline, screens, dialogs, popups, banners, switches, the rail, the map selection gliding between cells, and segmented controls whose raised pill slides to the new choice. Live values never animate.

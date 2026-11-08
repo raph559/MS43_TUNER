@@ -6,7 +6,7 @@ using Avalonia.Controls;
 namespace MS43Logger.AvaloniaApp.Controls;
 
 /// <summary>
-/// The pinned tiles' grid: tiles at least 150 px wide fill each row, and the last row's tiles share its
+/// The pinned tiles' grid (system 8): tiles at least 150 px wide fill each row, and the last row's tiles share its
 /// width. The frame is the view's (a 1 px Hairline, 12 px radius); each tile draws its own left and top Hairline.
 /// </summary>
 public sealed class TileGrid : Panel

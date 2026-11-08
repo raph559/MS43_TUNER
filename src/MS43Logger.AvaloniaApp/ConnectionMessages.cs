@@ -12,7 +12,7 @@ public enum LiveAction
     RescanPorts,
 }
 
-/// <summary>A banner's sentence and the action beside it.</summary>
+/// <summary>A banner's sentence (system 7.2) and the action beside it.</summary>
 public sealed record ConnectionMessage(string Text, LiveAction Action = LiveAction.None);
 
 /// <summary>What the stopped-logging message names: the port, the CSV file (null when none was written), the samples

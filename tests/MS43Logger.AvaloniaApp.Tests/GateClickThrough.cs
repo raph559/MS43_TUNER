@@ -14,7 +14,7 @@ using MS43Logger.Core.Tuning;
 namespace MS43Logger.AvaloniaApp.Tests;
 
 /// <summary>
-/// The click-through scripts of the gate: every button, menu item, switch and segment of a screen,
+/// The click-through scripts of the gate (plan Task 15): every button, menu item, switch and segment of a screen,
 /// pressed headlessly with its effect asserted. Connect is the one control not pressed: it opens a real serial port.
 /// </summary>
 internal static class GateClickThrough
@@ -517,7 +517,7 @@ internal static class GateClickThrough
         return Task.FromResult<GateClicks?>(c);
     }
 
-    // The Performance tab: the rail; each test's Run side, a pull run through to its result and
+    // The Performance tab (performance spec 9.1, 9.2): the rail; each test's Run side, a pull run through to its result and
     // the setup steps; then the saved results, two compared, one opened, renamed and deleted. Samples reach the tab through
     // Live, as from the car; Connect itself is the shell's and is not pressed.
     private static Task<GateClicks?> PerformanceAsync(bool night)
@@ -568,7 +568,7 @@ internal static class GateClickThrough
         c.Note(handle, "the rail's edge: an arrow key moves it 16 px and saves the width; dragged as the Compare list's (CompareRailTests, the same RailSizer)");
         performance.SetRailWidth(null, save: true);
 
-        // A pull while disconnected: its gear, band and baseline; Arm is off and says why under it.
+        // A pull while disconnected: its gear, band and baseline; Arm is off and says why under it (system 5.9).
         Assert.Equal("pull", performance.SelectedEntry.Key);
         c.Press("Gear2", "picks 2nd and its band, 1500 to 6400 rpm", () => run.SelectedGear == 2 && run.StartRpm == "1500" && run.EndRpm == "6400");
         c.Press("Gear4", "picks 4th, 1500 to 4500 rpm", () => run.SelectedGear == 4 && run.StartRpm == "1500" && run.EndRpm == "4500");
@@ -588,7 +588,7 @@ internal static class GateClickThrough
         c.Note(arm, "Arm pull is off while disconnected, the reason in the line under it: \"Connect to the car to run a test.\"");
         c.Audit(window, NotShell);
 
-        // Connected with the pedal not calibrated: the way to the Pedal step.
+        // Connected with the pedal not calibrated: the way to the Pedal step (spec 4.4).
         PerfFeed.Connect(shell);
         var perfLogging = shell.Live.EnableCsvLogging;
         c.Press("LogButton", "starts or stops the CSV log while connected (LogSwitchTests)", () => shell.Live.EnableCsvLogging != perfLogging);
@@ -694,7 +694,7 @@ internal static class GateClickThrough
         run.MassKg = "1480";
         run.TyreSize = "205/55 R16";
 
-        // The saved results.
+        // The saved results (spec 9.1).
         performance.IsResultsMode = true;
         Dispatcher.UIThread.RunJobs();
         Assert.Equal(3, results.Rows.Count);

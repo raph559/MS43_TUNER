@@ -11,7 +11,7 @@ public static partial class RunMath
 {
     private const double Gravity = 9.81;
 
-    /// <summary>First upward crossing of level, linear between the samples around it; null if never.</summary>
+    /// <summary>First upward crossing of level, linear between the samples around it (spec 4.6); null if never.</summary>
     public static double? CrossingTime(IReadOnlyList<double> t, IReadOnlyList<double> v, double level)
     {
         CheckLengths(t, v);
@@ -36,7 +36,7 @@ public static partial class RunMath
     }
 
     /// <summary>
-    /// Time at v = 0 from a least-squares line through the points with low ≤ v ≤ high, taken up to the first
+    /// Time at v = 0 from a least-squares line through the points with low ≤ v ≤ high (spec 6.4), taken up to the first
     /// point above high so a later slowdown through the band cannot bend the line; null with under 3 points or a slope ≤ 0.
     /// </summary>
     public static double? BackExtrapolatedStart(IReadOnlyList<double> t, IReadOnlyList<double> v, double low = 3, double high = 20)
@@ -93,7 +93,7 @@ public static partial class RunMath
     }
 
     /// <summary>
-    /// dv/dt at each point from a least-squares quadratic over |t - t_i| ≤ halfWindow; NaN where fewer than
+    /// dv/dt at each point from a least-squares quadratic over |t - t_i| ≤ halfWindow (spec 7); NaN where fewer than
     /// minPoints distinct times. Points need not be in time order, and several may share one time.
     /// </summary>
     public static double[] Derivative(IReadOnlyList<double> t, IReadOnlyList<double> v, double halfWindow = 0.35, int minPoints = 5)
@@ -207,7 +207,7 @@ public static partial class RunMath
     public static double AirDensity(double pressureKpa, double intakeC) => pressureKpa * 1000 / (287.05 * (intakeC + 273.15));
 
     /// <summary>
-    /// Wheel power (kW) and torque at the crank speed (Nm) per sample. kmhPerRpm is km/h per rpm in this gear.
+    /// Wheel power (kW) and torque at the crank speed (Nm) per sample (spec 7). kmhPerRpm is km/h per rpm in this gear.
     /// Every entry is NaN when the tyre size cannot be read or the ratio is not positive, and NaN where the rpm slope is
     /// unknown; torque is NaN at 0 rpm.
     /// </summary>
@@ -229,7 +229,7 @@ public static partial class RunMath
         // Engine rad/s per m/s of road speed: the gearing that makes the flywheel part of the mass.
         var engine = 2 * Math.PI / 60 * 3.6 / kmhPerRpm;
         var effectiveMass = car.MassKg + car.WheelInertia / (radius * radius) + car.EngineInertia * engine * engine;
-        // Acceleration from the rpm slope, never from VS: its whole-km/h steps are too coarse.
+        // Acceleration from the rpm slope, never from VS: its whole-km/h steps are too coarse (spec 4.5, 7).
         var rpmSlope = Derivative(t, rpm);
         for (var i = 0; i < rpm.Count; i++)
         {

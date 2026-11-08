@@ -3,14 +3,14 @@ using System.Runtime.CompilerServices;
 namespace MS43Logger.Core.Performance;
 
 /// <summary>
-/// One sample in the tests' terms, at <see cref="At"/> on the run clock. A channel or bit the sample
+/// One sample in the tests' terms (performance spec 4.3b), at <see cref="At"/> on the run clock. A channel or bit the sample
 /// lacks is null, never zero. <see cref="Ignition"/> and <see cref="KnockRetard"/> have six entries (null where missing) or
 /// are empty when the definition logs none; <see cref="KnockRetard"/> is positive degrees of retard. Pedal and throttle are
-/// in the definition's degrees; a test makes them a percentage of the calibrated full-pedal value.
-/// <see cref="TorqueIntervention"/> is DSC (ASC) acting on the engine torque. <see cref="InjectorDuty"/> is in
-/// percent and <see cref="DmeTorque"/> the DME's own engine torque in Nm; <see cref="MalfunctionLamp"/> is the EML
+/// in the definition's degrees; a test makes them a percentage of the calibrated full-pedal value (spec 4.4).
+/// <see cref="TorqueIntervention"/> is DSC (ASC) acting on the engine torque (spec 6.4). <see cref="InjectorDuty"/> is in
+/// percent and <see cref="DmeTorque"/> the DME's own engine torque in Nm (spec 6.1); <see cref="MalfunctionLamp"/> is the EML
 /// light. <see cref="Retries"/> is how many requests the logger sent again for this sample, null when the source does not
-/// say.
+/// say (spec 6.6).
 /// </summary>
 public sealed record PerfFrame(TimeSpan At, double? Rpm, double? SpeedKmh, int? Gear, double? Pedal, double? Throttle,
     double? CoolantC, double? OilC, double? IntakeC, double? PressureKpa, double? BatteryV,
@@ -20,7 +20,7 @@ public sealed record PerfFrame(TimeSpan At, double? Rpm, double? SpeedKmh, int? 
     bool? Clutch, bool? Brake, bool? OverheatLamp, bool? CatalystHeating, bool? TorqueIntervention = null,
     double? InjectorDuty = null, double? DmeTorque = null, bool? MalfunctionLamp = null, int? Retries = null);
 
-/// <summary>Turns a decoded sample of either definition family into a <see cref="PerfFrame"/>.</summary>
+/// <summary>Turns a decoded sample of either definition family into a <see cref="PerfFrame"/> (performance spec 4.3b).</summary>
 public static class PerfChannels
 {
     private static readonly ConditionalWeakTable<AdxDefinition, Layout> Layouts = new();
@@ -48,7 +48,7 @@ public static class PerfChannels
                 ? value * channel.Scale + 0d
                 : null;
 
-        // Gear is the floor of GEAR: its fraction is N's high bits; 0 means neutral or unknown.
+        // Gear is the floor of GEAR: its fraction is N's high bits (spec 4.1); 0 means neutral or unknown.
         var gear = Get(layout.Gear) is { } decodedGear ? (int)Math.Clamp(Math.Floor(decodedGear), 0, 255) : (int?)null;
 
         return new PerfFrame(at, Get(layout.Rpm), Get(layout.Speed), gear, Get(layout.Pedal), Get(layout.Throttle),
@@ -79,8 +79,8 @@ public static class PerfChannels
             }
         }
 
-        // Each test needs what its ready checks and its start and end conditions read; coolant is needed wherever
-        // full throttle is used, since a missing reading would pass the warm-up check unseen.
+        // Each test needs what its ready checks and its start and end conditions read (spec 6); coolant is needed wherever
+        // full throttle is used, since a missing reading would pass the warm-up check unseen (spec 5).
         var pullType = kind is PerfTestKind.Pull or PerfTestKind.KnockCheck or PerfTestKind.RollOn;
         Need(pullType || kind is PerfTestKind.SpeedCalibration, layout.Rpm is not null, "engine speed");
         Need(kind is PerfTestKind.RollOn or PerfTestKind.StandingStart or PerfTestKind.SpeedCalibration, layout.Speed is not null, "vehicle speed");

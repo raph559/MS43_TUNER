@@ -4,10 +4,10 @@ using System.Text.Json.Serialization;
 namespace MS43Logger.Core.Performance;
 
 /// <summary>
-/// A saved run as it is stored, one JSON file per result: who and what (name, description, direction),
+/// A saved run as it is stored, one JSON file per result (performance spec 8): who and what (name, description, direction),
 /// the test and the inputs its figures were computed with, the tune, the conditions, the figures, and every sample of the
 /// window plus the 2 s before it by column, so <see cref="RunAnalysis.Analyse"/> can recompute it later. Name, description
-/// and direction are the only parts the user edits.
+/// and direction are the only parts the owner edits.
 /// </summary>
 public sealed class PerfResult
 {
@@ -23,7 +23,7 @@ public sealed class PerfResult
 
     public string Description { get; set; } = "";
 
-    /// <summary>"A", "B" or null: which way the road was driven, so slope can be told apart.</summary>
+    /// <summary>"A", "B" or null: which way the road was driven, so slope can be told apart (spec 7).</summary>
     public string? Direction { get; set; }
 
     public DateTimeOffset Created { get; init; }

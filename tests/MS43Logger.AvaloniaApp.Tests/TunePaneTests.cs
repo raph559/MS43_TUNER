@@ -81,7 +81,7 @@ public sealed class TunePaneTests : IDisposable
         Assert.Contains("Undo: Step 2 cells of ip_iga_ron98_pl__n__maf up", texts);
     }
 
-    // The horizontal bar was drawn over the grid's last row.
+    // The owner: the horizontal bar was drawn over the grid's last row.
     [AvaloniaFact]
     public async Task TheScrollBarDoesNotCoverTheLastRow()
     {
@@ -198,7 +198,7 @@ public sealed class TunePaneTests : IDisposable
             return;
         }
 
-        // Ink3 on the pressed overlay is 3.79:1 Night and 4.20:1 Day, under 4.5:1: the count rises to Ink2.
+        // Ink3 on the pressed overlay is 3.79:1 Night and 4.20:1 Day, under 4.5:1 (system 1.2): the count rises to Ink2.
         var (window, _) = await TuneScreen.OpenAsync();
         var row = Find.Named<ListBox>(window, "RailList").GetVisualDescendants().OfType<ListBoxItem>().First(item => item.Content is RailCategory);
         var count = row.GetVisualDescendants().OfType<TextBlock>().Last();

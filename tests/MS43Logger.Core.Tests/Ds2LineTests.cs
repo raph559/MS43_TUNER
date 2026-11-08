@@ -143,7 +143,7 @@ public class Ds2LineTests
     }
 
     [Fact]
-    public async Task RequestsAndPolls_NeverInterleave()
+    public async Task RequestsAndPolls_NeverInterleave()                   // Review Focus 1
     {
         var (session, port) = Connected(_ => new byte[] { 0x12, 0x04, 0xA0, 0xB6 });
         var answers = new List<(byte[] Write, byte[] Answer)>();

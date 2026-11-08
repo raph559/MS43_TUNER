@@ -7,10 +7,10 @@ namespace MS43Logger.Core.LiveTuning;
 /// </summary>
 public sealed record OverlayHeader(int Version, int CodeStart, int CodeEnd, int DataEnd, int TableCount, int Minor = 0)
 {
-    /// <summary>The name the app shows: "10.4" for version 10, minor 4; "9" for a version without a minor.</summary>
+    /// <summary>The name the app shows: "8", or "8.5" for V8 with the wider pops throttle opening.</summary>
     public string Label => Minor == 0 ? Version.ToString(System.Globalization.CultureInfo.InvariantCulture) : $"{Version}.{Minor}";
 
-    /// <summary>Reads the signature and version; detection refuses any version but V10.4.</summary>
+    /// <summary>Reads the signature and version; detection decides whether the version is supported.</summary>
     public static OverlayHeader? Parse(ReadOnlySpan<byte> bytes)
     {
         if (bytes.Length < 16 || bytes[0] != 'L' || bytes[1] != 'T' || bytes[2] != 'O' || bytes[3] != 'V')
@@ -24,7 +24,7 @@ public sealed record OverlayHeader(int Version, int CodeStart, int CodeEnd, int 
     /// <summary>The overlay version a bin carries in its header at file 0x4B544, or 0 when it has no overlay.</summary>
     public static int VersionIn(ReadOnlySpan<byte> image) => HasOverlay(image) ? image[0x4B548] : 0;
 
-    /// <summary>The minor version of the header's word (its high byte): 4 on V10.4.</summary>
+    /// <summary>The minor version of the header's word (its high byte): 5 on V8.5, else 0.</summary>
     public static int MinorIn(ReadOnlySpan<byte> image) => HasOverlay(image) ? image[0x4B549] : 0;
 
     private static bool HasOverlay(ReadOnlySpan<byte> image) =>

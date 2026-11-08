@@ -104,7 +104,7 @@ public partial class MainWindow : Window
             Classes.Set("compactheader", ClientSize.Width < CompactHeaderBelow);
             Classes.Set("tight", ClientSize.Width < 1200);
 
-            // Below 760 px of height Live's pinned tiles give their room to the list.
+            // Below 760 px of height Live's pinned tiles give their room to the list (system 8).
             Classes.Set("short", ClientSize.Height < 760);
         }
     }
@@ -158,7 +158,7 @@ public partial class MainWindow : Window
     // 1280 px of header and the 146 px of window buttons, and the fifth tab's room.
     private const double CompactHeaderBelow = 1536;
 
-    // The theme cross-fade: the window as it looks now is laid over it, the theme changes underneath, and the
+    // The theme cross-fade (system 10.3): the window as it looks now is laid over it, the theme changes underneath, and the
     // picture fades out in 280 ms. Without Windows' animation effects the theme simply changes.
     private void CaptureTheme()
     {
@@ -251,7 +251,7 @@ public partial class MainWindow : Window
 
         line.Inlines = inlines;
 
-        // A long log name trims the line's end; the tooltip keeps all of it (nothing is clipped).
+        // A long log name trims the line's end; the tooltip keeps all of it (system 8: nothing is clipped).
         ToolTip.SetTip(line, string.Concat(Shell.Live.StatusParts.Select(part => part.Text)));
     }
 
@@ -325,7 +325,7 @@ public partial class MainWindow : Window
     {
         if (!_closeConfirmed && (Shell.Tune.Document is { IsModified: true } || Shell.Performance.Run.HasUnsavedResult))
         {
-            // Ask first; close again once the edits and a finished run are saved or knowingly dropped.
+            // Ask first; close again once the edits and a finished run are saved or knowingly dropped (performance spec 2).
             e.Cancel = true;
             Dispatcher.UIThread.Post(async () =>
             {
@@ -364,7 +364,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Performance has no undo history: Ctrl Z and Ctrl Y there never reach another screen's, and a
+        // Performance has no undo history: Ctrl Z and Ctrl Y there never reach another screen's (performance spec 9.1), and a
         // field keeps them for its own text.
         if (Shell.IsPerformance && e.Key is Key.Z or Key.Y)
         {
@@ -381,7 +381,7 @@ public partial class MainWindow : Window
                 e.Handled = true;
                 await SaveAsAsync();
                 break;
-            // Performance's Save is the result's, never the bin's.
+            // Performance's Save is the result's, never the bin's (minor review, finding 31).
             case Key.S when Shell.IsPerformance:
                 e.Handled = true;
                 if (Shell.Performance.Run.CanSave)
@@ -419,7 +419,7 @@ public partial class MainWindow : Window
                 OpenSettings(NavigationMethod.Tab);
                 break;
             case Key.K:
-                // The search field of the tab in front: channels on Live, items on Tune and Compare.
+                // The search field of the tab in front (system 5.3): channels on Live, items on Tune and Compare.
                 e.Handled = true;
                 if (Shell.IsTune && this.GetVisualDescendants().OfType<TuneView>().FirstOrDefault() is { } tuneView && Shell.Tune.HasDocument)
                 {
@@ -433,7 +433,7 @@ public partial class MainWindow : Window
                     break;
                 }
 
-                // The tab's one search is the results': Run gives way to it.
+                // The tab's one search is the results' (performance spec 9.1): Run gives way to it.
                 if (Shell.IsPerformance && this.GetVisualDescendants().OfType<PerformanceView>().FirstOrDefault() is { } performanceView)
                 {
                     performanceView.OpenResultsOnSearch();

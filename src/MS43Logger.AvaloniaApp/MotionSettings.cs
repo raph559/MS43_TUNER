@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 namespace MS43Logger.AvaloniaApp;
 
 /// <summary>
-/// Whether the app may animate: Windows' "Animation effects" setting (SPI_GETCLIENTAREAANIMATION), true
+/// Whether the app may animate (system 10.3): Windows' "Animation effects" setting (SPI_GETCLIENTAREAANIMATION), true
 /// elsewhere. With it off the edit flash is skipped and the live trail is drawn without its width falloff.
 /// </summary>
 public static class MotionSettings

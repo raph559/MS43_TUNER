@@ -1,7 +1,7 @@
 namespace MS43Logger.AvaloniaApp.Tests;
 
 /// <summary>
-/// A main window over throw-away settings. <c>new MainWindow()</c> reads and writes the user's real
+/// A main window over throw-away settings. <c>new MainWindow()</c> reads and writes the owner's real
 /// <c>%AppData%/MS43Tuner/settings.json</c>, which tests must never touch.
 /// </summary>
 internal static class TestShell

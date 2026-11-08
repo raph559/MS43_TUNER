@@ -8,7 +8,7 @@ using Avalonia.Media;
 namespace MS43Logger.AvaloniaApp.Controls;
 
 /// <summary>
-/// Two runs against rpm or time on the Tune curve's frame, grid and axes: A in Ink1 2 px solid,
+/// Two runs against rpm or time (performance spec 9.2) on the Tune curve's frame, grid and axes: A in Ink1 2 px solid,
 /// B in Ink2 1.5 px dashed, so shape carries the difference, with a legend line at the top left. A run still being
 /// recorded draws A in Ink2 and ends it in the Now dot, an Ink3 ring once samples stop. Traces are data, never orange.
 /// </summary>
@@ -70,7 +70,7 @@ public sealed class RunChart : Control
 
     /// <summary>
     /// Fixed ends of the axes, each null to fit the data: a run being recorded keeps its axes for the run, so the chart never
-    /// rescales with each sample; a stored chart fits its traces.
+    /// rescales with each sample (minor review, finding 49); a stored chart fits its traces.
     /// </summary>
     public double? XMinimum { get => GetValue(XMinimumProperty); set => SetValue(XMinimumProperty, value); }
 
@@ -248,7 +248,7 @@ public sealed class RunChart : Control
     }
 
     // The legend laid out over the plot: a label that does not fit is trimmed in the middle, the shorter one kept whole while
-    // it fits in half the room. The full names stay in the A − B panel.
+    // it fits in half the room (minor review, finding 48). The full names stay in the A − B panel.
     private List<LegendItem> LegendItems(Rect plot, Typeface ui, IBrush ink)
     {
         var named = new[] { (Label: LabelA, IsA: true), (Label: LabelB, IsA: false) }.Where(pair => !string.IsNullOrEmpty(pair.Label)).ToList();

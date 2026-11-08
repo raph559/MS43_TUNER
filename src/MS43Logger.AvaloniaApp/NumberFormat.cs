@@ -4,7 +4,7 @@ using System.Globalization;
 namespace MS43Logger.AvaloniaApp;
 
 /// <summary>
-/// One number formatter for Live's readings: fixed decimals in the invariant culture, the ASCII minus, no
+/// One number formatter for Live's readings (system 3.3): fixed decimals in the invariant culture, the ASCII minus, no
 /// digit grouping, "n/a" for a missing value and never "-0".
 /// </summary>
 public static class NumberFormat

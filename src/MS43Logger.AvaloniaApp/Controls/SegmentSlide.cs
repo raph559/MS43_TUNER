@@ -14,8 +14,9 @@ using Avalonia.VisualTree;
 namespace MS43Logger.AvaloniaApp.Controls;
 
 /// <summary>
-/// Slides a shared selection marker beneath <c>Border.seg</c> controls while the motion layer is enabled.
-/// Without that layer, segments fill immediately.
+/// A segmented control's raised pill that slides to the new choice (system 5.4, 10.3). The motion layer turns it on for
+/// every <c>Border.seg</c>: the segments' own fill goes clear and one pill under them moves to the checked segment, so a
+/// pick reads as a move, not a blink. Without the motion layer the segments fill themselves at once, as before.
 /// </summary>
 public static class SegmentSlide
 {

@@ -21,7 +21,7 @@ public sealed class PerformanceGroup(string title) : PerformanceEntry
 }
 
 /// <summary>
-/// A test of the rail with its one-line summary and, when the definition lacks a channel it needs, why
+/// A test of the rail (performance spec 9.1) with its one-line summary and, when the definition lacks a channel it needs, why
 /// it is off. <see cref="Kind"/> is null for Car, which holds values and runs nothing.
 /// </summary>
 public sealed class PerformanceTestEntry(string key, string title, string summary, PerfTestKind? kind) : PerformanceEntry
@@ -57,14 +57,14 @@ public sealed class PerformanceTestEntry(string key, string title, string summar
 }
 
 /// <summary>
-/// The Performance tab: the tests on a rail grouped Pulls, Acceleration and Setup, the chosen test's
+/// The Performance tab (performance spec 9.1): the tests on a rail grouped Pulls, Acceleration and Setup, the chosen test's
 /// Run side and the Results library. It reads the samples Live already receives (<see cref="Push"/>, from
 /// <see cref="MainWindowViewModel.SampleShown"/>) and never asks the car for one of its own; a run goes on while another tab
 /// is shown.
 /// </summary>
 public sealed class PerformanceViewModel : ViewModelBase, ISidePanel
 {
-    // A reading above the calibrated full pedal raises it once it has held this long; the settings keep
+    // A reading above the calibrated full pedal raises it once it has held this long (performance spec 4.4); the settings keep
     // 10 to 130.
     private static readonly TimeSpan PedalHold = TimeSpan.FromSeconds(0.5);
     private const double MaxFullPedal = 130;
@@ -87,7 +87,7 @@ public sealed class PerformanceViewModel : ViewModelBase, ISidePanel
         ArgumentNullException.ThrowIfNull(tune);
         _live = live;
         _tune = tune;
-        // Beside settings.json, so tests on a temp settings folder never touch the user's results.
+        // Beside settings.json, so tests on a temp settings folder never touch the owner's results (spec 8).
         Store = new PerfResultStore(Path.Combine(tune.Settings.Folder, "results"), live.Time);
 
         // Spec 9.1's order.
@@ -124,7 +124,7 @@ public sealed class PerformanceViewModel : ViewModelBase, ISidePanel
             }
         };
 
-        // A 3rd gear pull ends below the open bin's rev limit.
+        // A 3rd gear pull ends below the open bin's rev limit (spec 6.1).
         tune.DocumentOpened += (_, _) => Run.BinOpened();
         RefreshAvailability();
         Results.Refresh();
@@ -185,7 +185,7 @@ public sealed class PerformanceViewModel : ViewModelBase, ISidePanel
         }
     }
 
-    /// <summary>True while the tab is shown. Runs never depend on it: samples reach them on every tab.</summary>
+    /// <summary>True while the tab is shown. Runs never depend on it: samples reach them on every tab (review focus 1).</summary>
     public bool IsVisible
     {
         get => _isVisible;
@@ -195,7 +195,7 @@ public sealed class PerformanceViewModel : ViewModelBase, ISidePanel
             {
                 // Another window or a hand edit may have changed the folder.
                 Results.Refresh();
-                // The run view skipped its updates while hidden.
+                // The run view skipped its updates while hidden (minor review, finding 21).
                 Run.TabShown();
             }
         }
@@ -208,7 +208,7 @@ public sealed class PerformanceViewModel : ViewModelBase, ISidePanel
     /// <summary>Asks before a result is deleted ("Delete the result "Baseline"?"); a null asker or false keeps the file.</summary>
     public Func<string, Task<bool>>? AskToDelete { get; set; }
 
-    /// <summary>Live's warm-up banners, shown at the top of the pane too.</summary>
+    /// <summary>Live's warm-up banners, shown at the top of the pane too (performance spec 5).</summary>
     public ObservableCollection<WarmUpBannerViewModel> WarmUp => _live.WarmUpBanners;
 
     /// <summary>The Performance rail's width as dragged, or null for the layout's own.</summary>
@@ -265,7 +265,7 @@ public sealed class PerformanceViewModel : ViewModelBase, ISidePanel
     }
 
     // A reading above the calibration raises it once readings above it have held for 0.5 s, to the lowest of them, so one
-    // glitch never lowers every later pedal share.
+    // glitch never lowers every later pedal share (performance spec 4.4; minor review, findings 17 and 24).
     private void RaiseFullPedal(PerfFrame frame)
     {
         if (Settings.FullPedal is not { } full || frame.Pedal is not { } pedal || !(pedal > full) || pedal > MaxFullPedal)
@@ -304,7 +304,7 @@ public sealed class PerformanceViewModel : ViewModelBase, ISidePanel
     /// <summary>What the samples are decoded with while connected; otherwise the chosen variant's definition, null if unreadable.</summary>
     internal AdxDefinition? Definition => _live.IsConnected && _live.CurrentDefinition is { } current ? current : Bundled(_live.SelectedVariant);
 
-    /// <summary>The car values, speed calibration and full-pedal value as they are now.</summary>
+    /// <summary>The car values, speed calibration and full-pedal value as they are now (spec 7, 6.5, 4.4).</summary>
     internal AnalysisInputs CurrentInputs() => new(
         new CarValues(Settings.TestMassKg, Settings.TyreSize, Settings.Automatic),
         new Dictionary<int, double>(Settings.KmhPerRpm),
@@ -358,7 +358,7 @@ public sealed class PerformanceViewModel : ViewModelBase, ISidePanel
 }
 
 /// <summary>
-/// The run clock of the performance tests: a sample's request time on the logger's monotonic clock,
+/// The run clock of the performance tests (performance spec 4.2): a sample's request time on the logger's monotonic clock,
 /// or, for a sample without one, its arrival time since the first such sample. Never the clock at arrival.
 /// </summary>
 internal sealed class RunClock
@@ -385,7 +385,7 @@ internal sealed class RunClock
 /// </summary>
 public sealed record FigureRow(string Key, string Label, string Value, string Unit, string? Detail, string? Delta, string? Against = null)
 {
-    /// <summary>The run did not reach it: the reading is "n/a" in UI text.</summary>
+    /// <summary>The run did not reach it: the reading is "n/a" in UI text (system 3.3).</summary>
     public bool IsMissing => Value == "n/a";
 
     /// <summary>"-0.13 s against 3rd pull 14:05"; null without a baseline figure.</summary>
@@ -403,11 +403,11 @@ public sealed record FlagRow(string Code, string Message, FlagSeverity Severity)
 
     public bool IsInfo => Severity == FlagSeverity.Info;
 
-    /// <summary>Invalid and cold runs take the red stripe and icon; suspect ones the amber.</summary>
+    /// <summary>Invalid and cold runs take the red stripe and icon; suspect ones the amber (performance spec 5).</summary>
     public bool IsWarn => Severity is FlagSeverity.Invalid or FlagSeverity.Cold;
 }
 
-/// <summary>The words and numbers the run and the results views share (invariant, no grouping, n/a when missing).</summary>
+/// <summary>The words and numbers the run and the results views share (system 3.3: invariant, no grouping, n/a when missing).</summary>
 internal static class ResultText
 {
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
@@ -458,7 +458,7 @@ internal static class ResultText
 
     /// <summary>
     /// Each cylinder's worst knock retard ("knock-max-1" to "knock-max-6", the knock check's), for the six bars of a stored
-    /// result; null when the run has none.
+    /// result (performance spec 6.2, 9.2); null when the run has none.
     /// </summary>
     public static IReadOnlyList<double?>? KnockByCylinder(RunFigures figures)
     {
@@ -482,7 +482,7 @@ internal static class ResultText
 
     /// <summary>
     /// "Knock retard: cylinder 4 at 1.6 °CRK." naming every cylinder at or past <paramref name="from"/>, under the knock bars of
-    /// a run and of a stored result alike (never colour alone); null when none is.
+    /// a run and of a stored result alike (spec 9.2: never colour alone); null when none is.
     /// </summary>
     public static string? KnockLine(IReadOnlyList<double?> knock, double from)
     {
@@ -496,7 +496,7 @@ internal static class ResultText
     public static IReadOnlyList<FlagRow> Flags(RunFigures figures) =>
         figures.Flags.Select(flag => new FlagRow(flag.Code, flag.Message, flag.Severity)).ToArray();
 
-    /// <summary>"+3", "-0.13": the sign always shown, the ASCII minus.</summary>
+    /// <summary>"+3", "-0.13": the sign always shown, the ASCII minus (system 3.3).</summary>
     public static string Signed(double value, int decimals)
     {
         var text = NumberFormat.Format(value, decimals);
@@ -516,7 +516,7 @@ internal static class ResultText
             $"battery {Unit(start.BatteryV, 1, "V")}",
             $"RON adaptation {NumberFormat.Format(start.RonAdaptation, 2)}");
 
-    /// <summary>"Tune: CAR.bin · 43X001 · saved, no edits", or "No bin open".</summary>
+    /// <summary>"Tune: CAR.bin · 43X001 · saved, no edits", or "No bin open" (spec 8).</summary>
     public static string TuneLine(TuneIdentity? tune)
     {
         if (tune is null)
@@ -545,7 +545,7 @@ internal static class ResultText
 
     /// <summary>
     /// "Speed calibration: 3rd 22.3 km/h per 1000 rpm, speed not GPS-checked. Car: 1480 kg with driver, 205/55 R16." for a
-    /// test in <paramref name="gear"/>; the car part alone without a gear. The GPS check is the gear's own; inputs
+    /// test in <paramref name="gear"/>; the car part alone without a gear. The GPS check is the gear's own (spec 6.5); inputs
     /// saved before it was kept say nothing of GPS.
     /// </summary>
     public static string InputsLine(AnalysisInputs inputs, int? gear)

@@ -13,7 +13,7 @@ using MS43Logger.Core.Tuning;
 namespace MS43Logger.AvaloniaApp.Tests;
 
 /// <summary>
-/// As in TunerPro, several maps can be edited at the same time. A map, curve or axis
+/// The owner: "just like TunerPro it should be possible to edit multiple maps at the same time". A map, curve or axis
 /// opens in a window of its own, any number at once, each edited on its own through the bin's one undo history.
 /// </summary>
 public class MapWindowTests
@@ -229,7 +229,7 @@ public class MapWindowTests
         Assert.True(map.IsClosed);
     }
 
-    // between "Open bin" and the new bin being read (the save prompt, then the file picker, which only blocks the
+    // Review: between "Open bin" and the new bin being read (the save prompt, then the file picker, which only blocks the
     // main window) an edit in a map window went into the old bin and was dropped without a question.
     [AvaloniaFact]
     public async Task TheWindowsTakeNoEditsWhileAnotherBinIsChosen()
@@ -266,7 +266,7 @@ public class MapWindowTests
         Assert.False(map.IsClosed);
     }
 
-    // the main window's prompts are drawn inside it, and an owned map window stays above it, so the save prompt on
+    // Review: the main window's prompts are drawn inside it, and an owned map window stays above it, so the save prompt on
     // closing could sit hidden under a map. While a prompt is open the map windows step aside.
     [AvaloniaFact]
     public async Task MapWindowsStepAsideForTheMainWindowsPrompts()
@@ -401,7 +401,7 @@ public class MapWindowTests
         Assert.Equal(Ignition, Assert.Single(tune.MapWindows).Table.Title);
     }
 
-    // with the rail at its top, the first click moves a Recent row to the top of Recent and the row above slides
+    // Review: with the rail at its top, the first click moves a Recent row to the top of Recent and the row above slides
     // under the pointer; the second press opened that one. The window is the map the first click picked.
     [AvaloniaFact]
     public async Task DoubleClickingARecentRowOpensThatMap()
@@ -432,7 +432,7 @@ public class MapWindowTests
         Assert.Same(target, tune.SelectedItem);
     }
 
-    // a right press selected the row, the rail rebuilt under the pointer and the menu then opened on another row,
+    // Review: a right press selected the row, the rail rebuilt under the pointer and the menu then opened on another row,
     // or not at all. The menu is the pressed row's, and the main pane keeps its map.
     [AvaloniaFact]
     public async Task RightClickingARailRowOffersOpenInWindowForThatRow()
@@ -471,7 +471,7 @@ public class MapWindowTests
         Assert.Same(other, Assert.Single(tune.MapWindows).Table);
     }
 
-    // Shift F10 and the menu key raise the request on the focused row, which the menu never heard.
+    // Review: Shift F10 and the menu key raise the request on the focused row, which the menu never heard.
     [AvaloniaFact]
     public async Task TheRowMenuOpensFromTheKeyboard()
     {

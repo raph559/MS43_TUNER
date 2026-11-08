@@ -227,7 +227,7 @@ public sealed class LiveStateTests : IDisposable
 
         Save("idle");
 
-        // Logging, with the mockups' sample values moving a little.
+        // Logging, with the mockups' sample values (system 11.1) moving a little.
         live.EnableCsvLogging = true;
         live.CsvPath = Log;
         live.BeginSession();
@@ -254,7 +254,7 @@ public sealed class LiveStateTests : IDisposable
         Dispatcher.UIThread.RunJobs();
         Assert.True(Find.Named<DockPanel>(window, "CsvRow").IsEffectivelyEnabled);
 
-        // Connecting: the CSV switch, path and Browse cannot change under the session being opened.
+        // Connecting: the CSV switch, path and Browse cannot change under the session being opened (system 7.2).
         shell.Live.IsConnecting = true;
         Dispatcher.UIThread.RunJobs();
 

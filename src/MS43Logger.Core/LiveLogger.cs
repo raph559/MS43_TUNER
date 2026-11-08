@@ -18,7 +18,7 @@ public interface IPayloadSource
 /// <param name="Time">The wall clock once the reply was decoded; for display and file names only.</param>
 /// <param name="Payload">The frame's data bytes as polled; channels' raw values are read from it.</param>
 /// <param name="RequestedAt">When the request went out, on the run's monotonic clock (zero at the run's start): the closest
-/// stamp to when the DME latched the values, so test math uses it.</param>
+/// stamp to when the DME latched the values, so test math uses it (performance spec 4.2).</param>
 /// <param name="RepliedAt">When the reply had been read, on the same clock.</param>
 /// <param name="Retries">Requests the source sent again inside the poll after a timeout; <paramref name="RequestedAt"/> is the
 /// one that got the reply.</param>
@@ -36,8 +36,10 @@ public sealed record LiveSample(
     uint? WatchedAddress = null);
 
 /// <summary>
-/// Polls, decodes and publishes samples. Retries the first two consecutive timeouts after 50 ms; the third
-/// timeout or any other error stops the loop. An optional pause follows each sample; the default is zero.
+/// The polling loop: poll, decode, publish, pause. Same rules as before the move out of the window:
+/// up to 3 timeouts in a row are retried after 50 ms, any other error stops the loop, and a pause, none by default, follows
+/// every sample (owner, 2026-10-28: the 20 ms it was protected neither the cable nor the CPU, and the emulator's car file
+/// answers and keeps its schedule without it).
 /// </summary>
 public sealed class LiveLogger
 {
@@ -117,7 +119,7 @@ public sealed class LiveLogger
                 var payload = source.PollPayload();
                 var repliedAt = System.Diagnostics.Stopwatch.GetElapsedTime(started);
                 // A source that retried inside the call stamps the request that got the reply: the first one timed out
-                // about a listen timeout before the values were latched.
+                // about a listen timeout before the values were latched (performance spec 4.2).
                 if (source.LastRequestTimestamp is { } sent
                     && System.Diagnostics.Stopwatch.GetElapsedTime(started, sent) is var resent && resent > requestedAt && resent <= repliedAt)
                 {

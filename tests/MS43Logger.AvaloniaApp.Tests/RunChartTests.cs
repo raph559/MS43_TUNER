@@ -87,7 +87,7 @@ public sealed class RunChartTests
     private static bool Near(Color expected, Color actual, int tolerance) =>
         Math.Abs(expected.R - actual.R) <= tolerance && Math.Abs(expected.G - actual.G) <= tolerance && Math.Abs(expected.B - actual.B) <= tolerance;
 
-    // ReadoutBandTests.OrangePixels: close to Now.
+    // ReadoutBandTests.OrangePixels: close to Now (system 1.4).
     private static bool Orange(Color colour) => colour.R > 200 && colour.G is > 80 and < 150 && colour.B < 80;
 
     // Warn at Night is #FF6259; Now's blue channel stays under 30, so the two never mix up.
@@ -220,8 +220,8 @@ public sealed class RunChartTests
         Assert.Equal(default, chart.PlotRect);
     }
 
-    // The icon takes the knock flag's colour, Caution, as the run's and the stored result's knock line do:
-    // one colour for one event.
+    // The icon takes the knock flag's colour, Caution, as the run's and the stored result's knock line do (minor review,
+    // finding 34): one colour for one event.
     [AvaloniaFact]
     public void CylinderBarsCautionFromOneAndAHalf()
     {
@@ -267,7 +267,8 @@ public sealed class RunChartTests
         Assert.True(Near(Ink2, frame[bars.BarRect(0).Center.X, bottom], 8), $"cylinder 1 is not filled: {frame[bars.BarRect(0).Center.X, bottom]}");
     }
 
-    // A fixed range holds the axes while the trace grows: the live chart never rescales with each sample.
+    // A fixed range holds the axes while the trace grows: the live chart never rescales with each sample (minor review,
+    // finding 49).
     [AvaloniaFact]
     public void FixedRangesHoldTheAxes()
     {
@@ -284,7 +285,7 @@ public sealed class RunChartTests
     }
 
     // Long run names are trimmed in the middle to the plot's width, so the legend never runs past the chart; short ones stay
-    // whole.
+    // whole (minor review, finding 48).
     [AvaloniaFact]
     public void TheLegendIsTrimmedToThePlot()
     {

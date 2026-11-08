@@ -42,7 +42,7 @@ public partial class TuneView : UserControl
             }
         };
 
-        // The slider asks; the value editor writes, one undo step per step, jump or released drag.
+        // The slider asks; the value editor writes, one undo step per step, jump or released drag (system 5.14).
         var slider = this.FindControl<ValueSlider>("ValueSlider")!;
         slider.StepRequested += (_, steps) => ViewModel?.Value?.StepBy(steps);
         slider.JumpRequested += (_, toHigh) => ViewModel?.Value?.JumpTo(toHigh);
@@ -335,7 +335,7 @@ public partial class TuneView : UserControl
 
     private async void UseAnotherXdf_Click(object? sender, RoutedEventArgs e) => await OpenXdfAsync();
 
-    // The banner's way out of what went wrong.
+    // The banner's way out of what went wrong (system 7.1).
     private async void ErrorAction_Click(object? sender, RoutedEventArgs e)
     {
         switch (ViewModel?.ErrorAction)

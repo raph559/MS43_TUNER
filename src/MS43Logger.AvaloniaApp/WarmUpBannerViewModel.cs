@@ -4,7 +4,7 @@ using MS43Logger.Core.Performance;
 namespace MS43Logger.AvaloniaApp;
 
 /// <summary>
-/// One warm-up or condition banner on Live and Performance: red with the warning icon for danger (a cold
+/// One warm-up or condition banner on Live and Performance (performance spec 5): red with the warning icon for danger (a cold
 /// engine, the overheat lamp), amber for caution (cold or hot oil, hot coolant), grey with the info icon for a note.
 /// </summary>
 public sealed class WarmUpBannerViewModel : ViewModelBase

@@ -5,7 +5,7 @@ using MS43Logger.Core.Tests;
 
 namespace MS43Logger.AvaloniaApp.Tests;
 
-/// <summary>The Performance tab's results library and compare.</summary>
+/// <summary>The Performance tab's results library and compare (performance spec 8, 9.1, 9.2).</summary>
 public sealed class PerformanceResultsTests : IDisposable
 {
     private static readonly AnalysisInputs Inputs = new(new CarValues(1480, "205/55 R16", false), new Dictionary<int, double>(), SyntheticRuns.FullPedal);
@@ -205,7 +205,7 @@ public sealed class PerformanceResultsTests : IDisposable
     }
 
     // Each run's doubts show beside the deltas, so a cold, invalid or knocking run never gets bare B − A figures; notes stay
-    // in the result itself.
+    // in the result itself (final review, finding 5).
     [AvaloniaFact]
     public void CompareShowsEachRunsFlags()
     {
@@ -230,7 +230,7 @@ public sealed class PerformanceResultsTests : IDisposable
         Assert.DoesNotContain(comparison.FlagsA, flag => flag.IsInfo);
     }
 
-    // Back to the list keeps what was typed into an opened result: it is written to the file.
+    // Back to the list keeps what was typed into an opened result: it is written to the file (minor review, finding 30).
     [AvaloniaFact]
     public void ClosingAnOpenedResultKeepsItsEdits()
     {
@@ -256,7 +256,8 @@ public sealed class PerformanceResultsTests : IDisposable
         Assert.Equal("Not renamed: a result needs a name", results.Error);
     }
 
-    // A ticked row stays ticked and in view while the search changes, so A and B can each be found by search.
+    // A ticked row stays ticked and in view while the search changes, so A and B can each be found by search (minor review,
+    // finding 63).
     [AvaloniaFact]
     public void SearchKeepsTheTicks()
     {
@@ -277,7 +278,7 @@ public sealed class PerformanceResultsTests : IDisposable
         Assert.Equal(2, results.PickedCount);
     }
 
-    // The rpm of each run's peak goes beside its peak, not in a row of its own reading "0 rpm".
+    // The rpm of each run's peak goes beside its peak, not in a row of its own reading "0 rpm" (minor review, finding 69).
     [AvaloniaFact]
     public void ThePeakRpmShowsBesideThePeak()
     {
@@ -297,7 +298,7 @@ public sealed class PerformanceResultsTests : IDisposable
         Assert.Matches(@"^A \d+ Nm at \d+ rpm, B \d+ Nm at \d+ rpm$", Assert.Single(deltas, delta => delta.Key == "peak-torque").Pair);
     }
 
-    // Two gears are named, and their times are not subtracted.
+    // Two gears are named, and their times are not subtracted (minor review, finding 26).
     [AvaloniaFact]
     public void DifferentGearsLeaveTheTimesOut()
     {
@@ -320,7 +321,8 @@ public sealed class PerformanceResultsTests : IDisposable
         Assert.NotEqual("n/a", Assert.Single(comparison.Deltas, delta => delta.Key == "time").A);
     }
 
-    // An empty table list says why, from the comparison, and one saved image is a plain line, not a mismatch.
+    // An empty table list says why, from the comparison, and one saved image is a plain line, not a mismatch (minor review,
+    // findings 12, 13 and 25).
     [AvaloniaFact]
     public void TablesSayWhyNoneIsListed()
     {
@@ -356,7 +358,7 @@ public sealed class PerformanceResultsTests : IDisposable
         Assert.Equal("Before", Assert.Single(results.Rows).Name);
     }
 
-    // A trace neither run has is said plainly, and its segment is off with the reason.
+    // A trace neither run has is said plainly, and its segment is off with the reason (minor review, finding 37).
     [AvaloniaFact]
     public void ATraceNeitherRunHasIsOff()
     {
@@ -379,7 +381,7 @@ public sealed class PerformanceResultsTests : IDisposable
         Assert.Null(comparison.NoTraceText);
     }
 
-    // An opened result is titled with its name, the test beside it; Save changes waits for a change.
+    // An opened result is titled with its name, the test beside it; Save changes waits for a change (minor review, finding 46).
     [AvaloniaFact]
     public void AnOpenedResultIsTitledWithItsName()
     {

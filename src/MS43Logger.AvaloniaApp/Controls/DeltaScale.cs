@@ -7,7 +7,7 @@ using MS43Logger.AvaloniaApp.Theme;
 namespace MS43Logger.AvaloniaApp.Controls;
 
 /// <summary>
-/// The A − B key under the Compare grid: a 10 px bar with an Edge border showing only the diverging
+/// The A − B key under the Compare grid (system 2.5, 5.15): a 10 px bar with an Edge border showing only the diverging
 /// mixes the item uses, from its lowest A − B to its highest, through the Pane colour at zero.
 /// </summary>
 public sealed class DeltaScale : Control

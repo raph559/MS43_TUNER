@@ -126,7 +126,7 @@ public sealed class SettingsTests : IDisposable
             .Single(scrollBar => scrollBar.TemplatedParent == scroller && scrollBar.Orientation == Avalonia.Layout.Orientation.Vertical);
         var thumb = bar.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.Thumb>().Single(part => part.TemplatedParent == bar);
 
-        // What the user sees: the drawn thumb against the dialog surface (its padding, right of the bar), 3:1 like any
+        // What the owner sees: the drawn thumb against the dialog surface (its padding, right of the bar), 3:1 like any
         // non-text cue.
         using var frame = Screens.Capture(window)!;
         var drawn = Pixel(frame, thumb.TranslatePoint(new Point(thumb.Bounds.Width / 2, thumb.Bounds.Height / 2), window)!.Value);

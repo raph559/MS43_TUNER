@@ -7,7 +7,7 @@ using MS43Logger.AvaloniaApp.Theme;
 namespace MS43Logger.AvaloniaApp.Controls;
 
 /// <summary>
-/// The colour scale: an 8 px bar of the map ramp, from MapRamp so the stops live in one place, or of
+/// The colour scale (system 2.1, 2.5): an 8 px bar of the map ramp, from MapRamp so the stops live in one place, or of
 /// the A - B pair (DivBelow, Pane, DivAbove), with its low, middle and high values in Data 12 under it.
 /// </summary>
 public sealed class ColourScale : Control

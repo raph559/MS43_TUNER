@@ -94,7 +94,7 @@ public sealed class WatchedCursorTests
         Assert.Null(shell.Tune.Editor!.Live);
     }
 
-    [CarAvaloniaFact]
+    [CarAvaloniaFact] // RF4
     public async Task SwitchingMapsSendsOneWatchAndShowsNoOldCell()
     {
         Assert.True(TuneScreen.Available);

@@ -10,7 +10,7 @@ namespace MS43Logger.Core.Tests;
 /// </summary>
 internal static class SyntheticRuns
 {
-    /// <summary>The pedal reading a test treats as fully pressed; percentages are relative to it.</summary>
+    /// <summary>The pedal reading a test treats as fully pressed; percentages are relative to it (performance spec 4.4).</summary>
     public const double FullPedal = 100;
 
     private static readonly DateTimeOffset Start = new(2026, 10, 21, 12, 0, 0, TimeSpan.Zero);
@@ -135,7 +135,7 @@ internal static class SyntheticRuns
                 }
                 : new List<(string, long)>
                 {
-                    // GEAR is byte 0x05 / 32: the gear sits above N's 13 bits.
+                    // GEAR is byte 0x05 / 32: the gear sits above N's 13 bits (performance spec 4.1).
                     ("N", n | (long)gear << 13),
                     ("VS", Math.Clamp((long)Math.Round(speedKmh), 0, 255)),
                     ("PVS", Raw("PVS", pedal)),

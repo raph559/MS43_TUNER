@@ -6,7 +6,7 @@ using Avalonia.Media;
 namespace MS43Logger.AvaloniaApp.Controls;
 
 /// <summary>
-/// One icon of the app's set: a geometry on a 16 px grid stroked at 1.5 px with flat caps and mitre joins,
+/// One icon of the app's set (system 6): a geometry on a 16 px grid stroked at 1.5 px with flat caps and mitre joins,
 /// so its terminals are cut square like Bahnschrift's strokes. It takes the text colour of the control around it.
 /// </summary>
 public sealed class StrokeIcon : Control

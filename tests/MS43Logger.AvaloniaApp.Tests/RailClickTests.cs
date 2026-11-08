@@ -35,7 +35,7 @@ public class RailClickTests
         }
     }
 
-    // Clicking in the rail moved its rows. Picking an item adds it to Recent at the top and rebuilds the
+    // The owner: clicking in the rail moved its rows. Picking an item adds it to Recent at the top and rebuilds the
     // rail, so every row under Recent slid down; the clicked row now stays where it was on screen.
     [AvaloniaFact]
     public async Task TheClickedRowStaysWhereItWas()

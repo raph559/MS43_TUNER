@@ -10,7 +10,7 @@ using Avalonia.VisualTree;
 namespace MS43Logger.AvaloniaApp.Views;
 
 /// <summary>
-/// The Performance tab: the test rail with Run / Results, the chosen test's Run side and the results
+/// The Performance tab (performance spec 9.1): the test rail with Run / Results, the chosen test's Run side and the results
 /// library with its comparison. The view only forwards presses; every state lives in <see cref="PerformanceViewModel"/>.
 /// </summary>
 public partial class PerformanceView : UserControl
@@ -81,7 +81,7 @@ public partial class PerformanceView : UserControl
         }
     }
 
-    // A group heading is a heading, not a row: no focus, no hover and no press. Containers are
+    // A group heading is a heading, not a row: no focus, no hover and no press (minor review, finding 40). Containers are
     // reused, so a test's row is made a row again.
     private static void ShapeRow(Control container)
     {
@@ -98,7 +98,7 @@ public partial class PerformanceView : UserControl
         }
     }
 
-    // A run's flags named beside Save result while they sit below the fold.
+    // A run's flags named beside Save result while they sit below the fold (minor review, finding 43).
     private void ShowFlagSummary() =>
         FlagSummary.IsVisible = ViewModel?.Run.FlagSummary is not null && _flagsViewport is { } seen && seen.Bottom < FlagInView;
 
@@ -139,7 +139,7 @@ public partial class PerformanceView : UserControl
         });
     }
 
-    // On the Results side the rail marks no test, so pressing the one last shown shows its Run side
+    // On the Results side the rail marks no test (minor review, finding 44), so pressing the one last shown shows its Run side
     // as pressing any other does.
     private void Tests_Tapped(object? sender, TappedEventArgs e)
     {
@@ -175,7 +175,7 @@ public partial class PerformanceView : UserControl
 
     private void SaveCalibration_Click(object? sender, RoutedEventArgs e) => ViewModel?.Run.SaveCalibration();
 
-    // "Calibrate the pedal first" comes with the way to it.
+    // "Calibrate the pedal first" comes with the way to it (spec 4.4).
     private void CalibratePedal_Click(object? sender, RoutedEventArgs e)
     {
         if (ViewModel is { } performance && performance.Entries.OfType<PerformanceTestEntry>().FirstOrDefault(entry => entry.Key == "pedal") is { } pedal)
@@ -184,7 +184,7 @@ public partial class PerformanceView : UserControl
         }
     }
 
-    // The line saying another test is on comes with the way to that test.
+    // The line saying another test is on comes with the way to that test (minor review, finding 29).
     private void ShowRunningTest_Click(object? sender, RoutedEventArgs e) => ViewModel?.Run.ShowRunningTest();
 
     private void Compare_Click(object? sender, RoutedEventArgs e) => ViewModel?.Results.Compare();
@@ -203,7 +203,7 @@ public partial class PerformanceView : UserControl
         }
     }
 
-    // Rename opens the result on its name, selected, where the description is edited too.
+    // Rename opens the result on its name, selected, where the description is edited too (spec 9.1).
     private void RenameResult_Click(object? sender, RoutedEventArgs e)
     {
         if (ViewModel is not { } performance || (sender as Control)?.DataContext is not ResultRow row)

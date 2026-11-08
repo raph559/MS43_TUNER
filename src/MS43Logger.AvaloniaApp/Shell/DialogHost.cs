@@ -15,7 +15,7 @@ using Avalonia.VisualTree;
 namespace MS43Logger.AvaloniaApp.Shell;
 
 /// <summary>
-/// Shows one modal dialog inside the main window: a scrim over the whole window and the dialog card
+/// Shows one modal dialog inside the main window (system 5.9): a scrim over the whole window and the dialog card
 /// centred on it. Esc closes it, Enter presses its primary button, Tab stays inside it, and focus goes back to where
 /// it was. While a dialog is open the window's shortcuts stand still (MainWindow checks <see cref="IsOpen"/>).
 /// </summary>

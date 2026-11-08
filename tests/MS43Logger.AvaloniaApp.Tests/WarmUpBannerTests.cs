@@ -9,7 +9,7 @@ using MS43Logger.Core.Tests;
 
 namespace MS43Logger.AvaloniaApp.Tests;
 
-/// <summary>The warm-up banners at the top of Live.</summary>
+/// <summary>The warm-up banners at the top of Live (performance spec 5, 9.3).</summary>
 public sealed class WarmUpBannerTests : IDisposable
 {
     private const string ColdCoolant = "Coolant 64 °C: engine not at operating temperature (80 °C). Do not use full throttle; results will not be valid.";

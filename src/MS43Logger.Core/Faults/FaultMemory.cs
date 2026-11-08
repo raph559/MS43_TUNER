@@ -16,7 +16,7 @@ public sealed record EcuFault(int Path, string? Name, byte Ds2Code, int Type, st
 }
 
 /// <summary>
-/// Read-only MS43X001 fault memory over DS2 command 06. List A, the
+/// The MS43X001 fault memory, read only, over DS2 command 06 (the emulator's plan 3 reference facts [obs; ver]). List A, the
 /// stored paths oldest first, is at DPP2:9974h with its count at 81BBh; each path's 12-byte state record is at 91DAh + 12 x
 /// path. Physical: 41974h, 401BBh, 411DAh. The layout is recognised by each path's DS2 code at its descriptor in flash
 /// (0ED08Eh + 22 x path), checked on the first ten; another layout reads nothing.

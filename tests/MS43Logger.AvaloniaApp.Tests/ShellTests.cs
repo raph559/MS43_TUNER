@@ -36,7 +36,7 @@ public class ShellTests
         Screens.Save(window, "shell-night");
     }
 
-    // Performance is the fourth tab, after Compare, with no shortcut of its own.
+    // Performance is the fourth tab, after Compare, with no shortcut of its own (performance spec 9.1).
     [AvaloniaFact]
     public void TabsAreLiveTuneLiveTuningFunCompareAndPerformance()
     {

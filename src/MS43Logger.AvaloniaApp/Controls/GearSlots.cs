@@ -8,7 +8,7 @@ using MS43Logger.AvaloniaApp.Theme;
 namespace MS43Logger.AvaloniaApp.Controls;
 
 /// <summary>
-/// The gear cell's slots: 1 to 5 in Data 24 over a 3 px Track line; the engaged gear in Ink1 SemiBold over a
+/// The gear cell's slots (system 8): 1 to 5 in Data 24 over a 3 px Track line; the engaged gear in Ink1 SemiBold over a
 /// Now line (Ink3 once the link is not live). With no gear (neutral, clutch in, no value) no slot is lit and "n/a"
 /// follows the slots, so the state never rests on colour alone.
 /// </summary>

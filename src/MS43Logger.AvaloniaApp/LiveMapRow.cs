@@ -4,7 +4,7 @@ using MS43Logger.Core.LiveTuning;
 namespace MS43Logger.AvaloniaApp;
 
 /// <summary>
-/// One of the five live maps in the Live tuning list: its state as the ECU's last status gives it,
+/// One of the five live maps in the Live tuning list (live tuning spec 4): its state as the ECU's last status gives it,
 /// whether the page holds changes the ECU does not have, and its own on/off switch.
 /// </summary>
 public sealed class LiveMapRow : ViewModelBase

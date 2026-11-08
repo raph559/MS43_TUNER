@@ -53,7 +53,7 @@ public sealed class DialogTests : IDisposable
         Assert.Equal("Saving adds the changes to its edit log.", ConfirmDialog.SaveDetail(keepBackup: false, appendEditLog: true));
         Assert.Null(ConfirmDialog.SaveDetail(keepBackup: false, appendEditLog: false));
 
-        // The prompt reads the settings as it opens, so it never promises a.bak that Save will not write.
+        // The prompt reads the settings as it opens, so it never promises a .bak that Save will not write.
         var settings = AppSettings.Load(_folder);
         settings.KeepBackup = false;
         var (window, shell) = TestShell.Create(settings);

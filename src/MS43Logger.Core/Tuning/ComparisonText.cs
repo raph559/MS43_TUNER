@@ -82,6 +82,6 @@ public static class ComparisonText
         return text.ToString();
     }
 
-    // No digit grouping: "11907 bytes".
+    // No digit grouping (system 3.3): "11907 bytes".
     private static string Count(int value) => value.ToString(CultureInfo.InvariantCulture);
 }

@@ -70,7 +70,7 @@ public sealed class BinImage
         return ranges;
     }
 
-    /// <summary>Writes element <paramref name="index"/> (row-major) of <paramref name="data"/>; a value or position it cannot hold throws, and nothing changes.</summary>
+    /// <summary>Writes element <paramref name="index"/> (row-major) of <paramref name="data"/>; nothing changes when the value or position is invalid.</summary>
     public void WriteElement(XdfData data, int index, long raw)
     {
         var offset = ElementOffset(data, index);

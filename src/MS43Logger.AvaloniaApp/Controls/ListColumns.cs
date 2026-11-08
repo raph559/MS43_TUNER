@@ -5,7 +5,7 @@ using Avalonia.Controls;
 namespace MS43Logger.AvaloniaApp.Controls;
 
 /// <summary>
-/// The Live list's two columns: side by side with a 24 px gap, each as tall as the room it is given, so each
+/// The Live list's two columns (system 5.6): side by side with a 24 px gap, each as tall as the room it is given, so each
 /// list scrolls on its own; <see cref="Stacked"/> (below 1200 px) puts the second under the first at their full heights,
 /// for one scroll area around both.
 /// </summary>

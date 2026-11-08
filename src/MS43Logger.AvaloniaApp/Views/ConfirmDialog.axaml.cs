@@ -23,7 +23,7 @@ public partial class ConfirmDialog : UserControl
         line.IsVisible = detail is not null;
     }
 
-    /// <summary>The prompt's second line, from the Saving settings: it never promises a.bak or a log line that Save will not write.</summary>
+    /// <summary>The prompt's second line, from the Saving settings: it never promises a .bak or a log line that Save will not write.</summary>
     public static string? SaveDetail(bool keepBackup, bool appendEditLog) => (keepBackup, appendEditLog) switch
     {
         (true, true) => "Saving keeps a .bak of the file as it was and adds the changes to its edit log.",

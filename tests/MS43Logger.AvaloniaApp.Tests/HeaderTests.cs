@@ -27,7 +27,7 @@ public sealed class HeaderTests : IDisposable
         }
     }
 
-    // The definition could not be changed: a press on a picker in the header started a window drag, which
+    // The owner could not change the definition: a press on a picker in the header started a window drag, which
     // swallowed the release that opens the list. Only the header's empty background (and plain text) drags the window.
     [AvaloniaFact]
     public void OnlyTheHeadersBackgroundDragsTheWindow()
@@ -377,7 +377,7 @@ public sealed class HeaderTests : IDisposable
         Assert.False(Find.Named<Control>(window, "ReadoutsSeg").IsEffectivelyVisible);
     }
 
-    // A test needs the link, so Connect is also the primary action on Performance.
+    // A test needs the link, so Connect is also the primary action on Performance (performance spec 9.1).
     [AvaloniaFact]
     public void ConnectIsPrimaryOnlyOnLiveAndPerformance()
     {

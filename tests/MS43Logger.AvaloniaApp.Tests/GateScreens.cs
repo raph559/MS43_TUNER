@@ -11,7 +11,7 @@ using MS43Logger.Core.Tuning;
 
 namespace MS43Logger.AvaloniaApp.Tests;
 
-/// <summary>A screen in one of its states, opened the way the user reaches it.</summary>
+/// <summary>A screen in one of its states, opened the way the owner reaches it.</summary>
 internal sealed record GateState(string Screen, string State, Func<Task<GateWindow?>> Open)
 {
     public string Name => $"{Screen}-{State}";
@@ -23,9 +23,9 @@ internal sealed record GateState(string Screen, string State, Func<Task<GateWind
 internal sealed record GateWindow(Window Window, ShellViewModel Shell, ManualTime Time);
 
 /// <summary>
-/// Every screen and state the restyle's gate checks: Tune's item kinds and its first run, Live's
+/// Every screen and state the restyle's gate checks (plan Task 15): Tune's item kinds and its first run, Live's
 /// states, Compare's views, Settings with and without a save failure, the save prompt, the connection log and the
-/// Performance tab's run, results and compare states. States that need the user's car files are left out when the files
+/// Performance tab's run, results and compare states. States that need the owner's car files are left out when the files
 /// are missing.
 /// </summary>
 internal static class GateScreens
@@ -72,8 +72,8 @@ internal static class GateScreens
             shell.Live.ShowConnectionLog();
         }));
 
-        // The Performance tab: a pull ready to arm, running with cylinder 4 knocking, its result,
-        // the saved results, two of them compared, and a pull waiting on a cold engine (the red and amber banners).
+        // The Performance tab (performance spec 9.1, 9.2): a pull ready to arm, running with cylinder 4 knocking, its result,
+        // the saved results, two of them compared, and a pull waiting on a cold engine (spec 5: the red and amber banners).
         yield return new GateState("performance", "run", () => Performance(shell => Warm(shell)));
         yield return new GateState("performance", "running", () => Performance(shell =>
         {
@@ -116,8 +116,8 @@ internal static class GateScreens
     }
 
     /// <summary>
-    /// Closes a state's window. A state's finished run is a picture, not the user's: it is dropped first, or the close would
-    /// ask about it and leave the window open, holding the keyboard while the next state is checked.
+    /// Closes a state's window. A state's finished run is a picture, not the owner's: it is dropped first, or the close would
+    /// ask about it (performance spec 2) and leave the window open, holding the keyboard while the next state is checked.
     /// </summary>
     public static void Close(GateWindow opened)
     {
@@ -216,7 +216,7 @@ internal static class GateScreens
         }, saved: settings);
     }
 
-    // Connected to the ms43x definition, the header showing the logger's rate (over 15 samples/s).
+    // Connected to the ms43x definition, the header showing the logger's rate (spec 6.6: over 15 samples/s).
     private static void Connect(ShellViewModel shell)
     {
         PerfFeed.Connect(shell);
@@ -233,7 +233,7 @@ internal static class GateScreens
     // A 3rd gear pull from 1700 to 6500 rpm in 6 s, cylinder 4 retarding 1.6 degrees from 5000 to 5600 rpm.
     private static IReadOnlyList<LiveSample> Pull() => SyntheticRuns.Pull(PerfFeed.Ms43x, 3, 1700, 6500, 6.0, knockCyl4: 1.6);
 
-    // Logging with the mockups' sample values at the logger's 38 samples/s, connected, in Tiles or Dials.
+    // Logging with the mockups' sample values (system 11.1) at the logger's 38 samples/s, connected, in Tiles or Dials.
     private static void Logging(ShellViewModel shell, ManualTime time, bool dials)
     {
         var live = shell.Live;

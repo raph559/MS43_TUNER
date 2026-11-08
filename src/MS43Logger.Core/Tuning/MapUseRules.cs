@@ -43,7 +43,7 @@ public sealed record UseMember(long Data, string Name, string Label, IReadOnlyLi
 public sealed record MapUseRule(string Id, string Title, string Selection, string? Inferred, string Evidence, string? Caveat, string Blend, string? IndexSelector,
     IReadOnlyList<UseCase> Cases, IReadOnlyList<UseMember> Members);
 
-/// <summary>Firmware-specific map-selection rules and their evidence from definitions/*_map_use.json.</summary>
+/// <summary>When the ECU of one firmware uses which map, from definitions/*_map_use.json (hand-written, with its evidence).</summary>
 public sealed class MapUseRules
 {
     private static readonly Dictionary<string, string> BundledFiles = new(StringComparer.OrdinalIgnoreCase)

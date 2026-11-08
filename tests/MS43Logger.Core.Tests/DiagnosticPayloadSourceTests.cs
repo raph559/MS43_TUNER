@@ -5,9 +5,9 @@ using MS43Logger.Core.LiveTuning;
 namespace MS43Logger.Core.Tests;
 
 /// <summary>
-/// The log's diagnostic columns: the stored faults and the task
+/// The log's diagnostic columns (V10.1 plan, Task 4, as the V10.1 review reshaped them): the stored faults and the task
 /// queues when logging starts and every 20 s, and on a V10 ECU FDF8 every 0.5 s, with at most one DS2 06 exchange
-/// between two polls and none while the log is off. A read that fails keeps the last value and the poll goes on.
+/// between two polls and none while the log is off. A read that fails keeps the last value and the poll goes on (RF4).
 /// </summary>
 public sealed class DiagnosticPayloadSourceTests
 {
@@ -112,7 +112,7 @@ public sealed class DiagnosticPayloadSourceTests
         Assert.DoesNotContain(line.Reads, a => a is 0xFD2C or 0xFD2E);              // the payload carries those bits
     }
 
-    [Fact] // a log that is off, or a Performance run that is recording, gets the bare poll
+    [Fact] // RF4, the review: a log that is off, or a Performance run that is recording, gets the bare poll
     public void NothingMoreIsReadWhileTheLogIsOff()
     {
         var line = new MemoryLine().WithLayout();
@@ -174,7 +174,7 @@ public sealed class DiagnosticPayloadSourceTests
         Assert.Equal("", source.CsvValues()[4]);                                    // and over a second old: empty
     }
 
-    [Fact] // 20 paths have no P-code, so their name stands in for P0000
+    [Fact] // the V10.1 review's minor: 20 paths have no P-code, so their name stands in for P0000
     public void CodesWithoutAPCodeAreNamed()
     {
         var line = new MemoryLine().WithLayout().Stored((124, 0x28), (12, 0x24), (156, 0x21));
@@ -183,7 +183,7 @@ public sealed class DiagnosticPayloadSourceTests
         Assert.Equal("P1567 t_es tam_can", source.Faults);
     }
 
-    [Fact] // one lost reply never leaves a stale state in the log
+    [Fact] // the review: one lost reply never leaves a stale state in the log
     public void TheStateCellsEmptyOnceTheLastGoodReadIsASecondOld()
     {
         var line = new MemoryLine().WithLayout(); line.Word(0xFDF8, 0x4000 | 1 << 3);
@@ -197,7 +197,7 @@ public sealed class DiagnosticPayloadSourceTests
         Assert.All(source.CsvValues().Skip(2), value => Assert.Equal("", value));
     }
 
-    [Fact] // Only three state reads in a row with no answer wait 20 s
+    [Fact] // RF4: only three state reads in a row with no answer wait 20 s
     public void ThreeStateTimeoutsInARowWait20s()
     {
         var line = new MemoryLine { TimesOut = address => address == 0xFDF8 }.WithLayout();
@@ -213,7 +213,7 @@ public sealed class DiagnosticPayloadSourceTests
         Assert.Equal(6, Count(line, 0xFDF8));
     }
 
-    [Fact]
+    [Fact] // RF4
     public void AFailedStepEndsTheRoundAndKeepsTheValues()
     {
         var line = new MemoryLine().WithLayout().Stored((124, 0x28));
@@ -232,7 +232,7 @@ public sealed class DiagnosticPayloadSourceTests
         Assert.Equal(41_000 / 60 + 1, poll.Calls);
     }
 
-    [Fact] // FD84 means what it means on MS43X001 only
+    [Fact] // the review: FD84 means what it means on MS43X001 only
     public void AnotherLayoutSaysUnsupportedForBothAndIsNotReadAgain()
     {
         var line = new MemoryLine();
@@ -244,7 +244,7 @@ public sealed class DiagnosticPayloadSourceTests
         Assert.Equal(reads, line.Reads.Count);
     }
 
-    [Fact] // An ECU that answers no DS2 06 costs one timed-out read per 20 s, the queue flags'
+    [Fact] // RF4: an ECU that answers no DS2 06 costs one timed-out read per 20 s, the queue flags'
     public void AnEcuThatAnswersNoMemoryReadCostsOneTimeoutPer20s()
     {
         var line = new MemoryLine { TimesOut = _ => true };

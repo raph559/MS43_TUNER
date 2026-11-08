@@ -10,7 +10,7 @@ using MS43Logger.AvaloniaApp.Theme;
 namespace MS43Logger.AvaloniaApp.Controls;
 
 /// <summary>
-/// The value slider: a 4 px track with square ends across the control, Ink2 from the span's start to the
+/// The value slider (system 5.14): a 4 px track with square ends across the control, Ink2 from the span's start to the
 /// value and Edge beyond it; each XDF end on the span a short Ink2 tick with a 1 px Pane casing; a 20 px Ink1 thumb with a
 /// 2 px Pane ring, which is also the gap of the focus ring; the span's ends labelled under the track. The thumb overhangs
 /// the ends by its radius, as in the mockup, so the track reaches the − and + buttons' gap. It writes nothing itself: it
@@ -27,7 +27,7 @@ public sealed class ValueSlider : Control
     public static readonly StyledProperty<string?> MinLabelProperty = AvaloniaProperty.Register<ValueSlider, string?>(nameof(MinLabel));
     public static readonly StyledProperty<string?> MaxLabelProperty = AvaloniaProperty.Register<ValueSlider, string?>(nameof(MaxLabel));
 
-    // The 32 px band every control has, the track on its centre line, then the end labels 2 px under it.
+    // The 32 px band every control has (system 5), the track on its centre line, then the end labels 2 px under it.
     private const double Band = 32;
     private const double TrackY = 16;
     private const double ThumbRadius = 10;
@@ -135,7 +135,7 @@ public sealed class ValueSlider : Control
         Label(context, MaxLabel, data, ui, ink3, Bounds.Width, alignRight: true);
     }
 
-    // An end label, "8160 rpm": the number in Bahnschrift, the unit in Segoe UI, as every number in a UI line.
+    // An end label, "8160 rpm": the number in Bahnschrift, the unit in Segoe UI, as every number in a UI line (system 3.1).
     private static void Label(DrawingContext context, string? text, Typeface data, Typeface ui, IBrush brush, double x, bool alignRight)
     {
         if (string.IsNullOrEmpty(text))

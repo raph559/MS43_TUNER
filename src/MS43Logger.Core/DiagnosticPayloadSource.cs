@@ -6,7 +6,8 @@ using MS43Logger.Core.LiveTuning;
 namespace MS43Logger.Core;
 
 /// <summary>
-/// The logger's source with the ECU's diagnosis read between two polls, for the log's columns: the stored faults and the task queues when logging starts and every 20 s, and on a V10 ECU
+/// The logger's source with the ECU's diagnosis read between two polls, for the log's columns (V10.1 plan, Task 4, as the
+/// V10.1 review reshaped it): the stored faults and the task queues when logging starts and every 20 s, and on a V10 ECU
 /// (<paramref name="overlayState"/>) the feature flags FDF8 every 0.5 s, and while a pops window runs (and once after it)
 /// pops' own state at 0x41FBC: its lowest rpm. At most one DS2 06 exchange goes out between two
 /// polls, never retried, and none while <paramref name="active"/> says no (no log open, or a Performance run recording):
@@ -21,7 +22,7 @@ public sealed class DiagnosticPayloadSource(IPayloadSource inner, IDs2Line line,
     public const int FaultsEveryMilliseconds = 20_000, StateEveryMilliseconds = 500, StateFreshMilliseconds = 1_000, StateTimeoutsToWait = 3;
     public const int FlagsAddress = 0xFDF8;
 
-    /// <summary>Pops state: POPS_LEFT (word, 10 ms ticks) and POPS_MIN (the window's lowest 807F).</summary>
+    /// <summary>Pops' state: POPS_LEFT (word, 10 ms ticks) and POPS_MIN (the window's lowest 807F). V10.3 took out the stabs and their count.</summary>
     public const int PopsAddress = 0x41FBC;
 
     public static IReadOnlyList<string> CsvHeader { get; } =

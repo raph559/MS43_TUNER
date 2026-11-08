@@ -31,7 +31,7 @@ public class LoggerCoreTests
         Assert.DoesNotContain(definition.Values, value => value.Id == "CHSTATE");
     }
 
-    // Tests read clutch, brake and warm-up bits by id; a bit the definition lacks is unknown, never off.
+    // Tests read clutch, brake and warm-up bits by id; a bit the definition lacks is unknown, never off (performance spec 4.3).
     [Fact]
     public void BitmasksDecodeFromThePayload()
     {
@@ -201,7 +201,7 @@ public class LoggerCoreTests
         session.Disconnect();
 
         Assert.Equal(payload, loggedPayload);
-        // The reply answered the second request, sent once the first had timed out.
+        // The reply answered the second request, sent once the first had timed out (final review, finding 2).
         Assert.Equal(2, session.LastAttempts);
         Assert.True(System.Diagnostics.Stopwatch.GetElapsedTime(before, session.LastRequestTimestamp!.Value)
             >= TimeSpan.FromMilliseconds(monitorExchange.Response.ListenTimeout * 0.8));

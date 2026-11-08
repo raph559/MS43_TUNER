@@ -7,7 +7,7 @@ using MS43Logger.Core.Tuning;
 namespace MS43Logger.AvaloniaApp;
 
 /// <summary>
-/// One reading of Live's band: the first of its candidate channels the definition has, that channel's ADX
+/// One reading of Live's band (system 8): the first of its candidate channels the definition has, that channel's ADX
 /// title and unit, and the value of the last sample, null when the sample did not hold it.
 /// </summary>
 public class ReadoutViewModel : ViewModelBase
@@ -29,7 +29,7 @@ public class ReadoutViewModel : ViewModelBase
     /// <summary>The name used until a definition names the channel.</summary>
     public string Title { get; }
 
-    /// <summary>The band's rounding: rpm and speed whole, load and advance one decimal.</summary>
+    /// <summary>The band's rounding (system 3.3): rpm and speed whole, load and advance one decimal.</summary>
     public int Decimals { get; }
 
     /// <summary>ADX channel IDs this reading can show, first match wins (MS43X001 names, then stock names).</summary>
@@ -78,7 +78,7 @@ public class ReadoutViewModel : ViewModelBase
 
     /// <summary>
     /// Takes a reading; its number shows now or at the next <see cref="ShowLatest"/>: the numbers change at most five times a
-    /// second, while the bars follow every sample.
+    /// second (owner, 2026-10-28), while the bars follow every sample.
     /// </summary>
     public void SetValue(double? value, bool show)
     {
@@ -124,7 +124,7 @@ public class ReadoutViewModel : ViewModelBase
     }
 }
 
-/// <summary>One readout of the band with a scale: a bar in Tiles, a dial in Dials.</summary>
+/// <summary>One readout of the band with a scale: a bar in Tiles, a dial in Dials (system 8).</summary>
 public sealed class GaugeViewModel : ReadoutViewModel
 {
     private double? _redFrom;
@@ -185,7 +185,7 @@ public sealed class GaugeViewModel : ReadoutViewModel
 }
 
 /// <summary>
-/// One channel's samples over the trend window, by the time each arrived, for its sparkline. It holds up to
+/// One channel's samples over the trend window (system 5.6), by the time each arrived, for its sparkline. It holds up to
 /// 64 samples a second of the window; older ones drop out first.
 /// </summary>
 public sealed class SampleHistory

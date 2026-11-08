@@ -387,8 +387,8 @@ public sealed class LiveCursorController : ViewModelBase
     }
 
     /// <summary>
-    /// "Live 2480 rpm · 112.4 mg/stk · map 27.5 °CRK"; "map about" for an approximate value, since Bahnschrift
-    /// has no "≈"; then " (off the map)" or " (stale)".
+    /// "Live 2480 rpm · 112.4 mg/stk · map 27.5 °CRK" (system 7.1); "map about" for an approximate value, since Bahnschrift
+    /// has no "≈" (system 3.3); then " (off the map)" or " (stale)".
     /// </summary>
     private static string Format(CursorFix fix, XdfTable table, bool stale)
     {

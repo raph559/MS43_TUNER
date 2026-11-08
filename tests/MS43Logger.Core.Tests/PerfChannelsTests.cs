@@ -114,7 +114,7 @@ public class PerfChannelsTests
         Assert.Equal(TimeSpan.FromSeconds(1.5), f.At);
     }
 
-    // GEAR is byte 0x05 / 32 and carries N's high bits below the gear, so it reads 3.78 at 6400 rpm in 3rd.
+    // GEAR is byte 0x05 / 32 and carries N's high bits below the gear, so it reads 3.78 at 6400 rpm in 3rd (performance spec 4.1).
     [Fact]
     public void GearIsFloored()
     {
@@ -126,7 +126,7 @@ public class PerfChannelsTests
         Assert.Equal(0, Frame(Ms43x, LivePayloads.Build(Ms43x, ("N", 750L))).Gear);
     }
 
-    // Stock definitions log no knock per cylinder and no AFR target; those read as missing, never as zero.
+    // Stock definitions log no knock per cylinder and no AFR target; those read as missing, never as zero (performance spec 4.3b).
     [Fact]
     public void StockFrameHasNoKnock()
     {
@@ -167,8 +167,8 @@ public class PerfChannelsTests
         Assert.Equal((false, true, true, true), (stock.Clutch!.Value, stock.Brake!.Value, stock.OverheatLamp!.Value, stock.CatalystHeating!.Value));
     }
 
-    // DSC's torque intervention: ms43x TQINTVASR or TQINTVMSR (0x0F & 0xE0 reads 0x20 or 0x40), the stock
-    // STATE_TQ_INTV (0x03 & 0x02).
+    // DSC's torque intervention (spec 6.4): ms43x TQINTVASR or TQINTVMSR (0x0F & 0xE0 reads 0x20 or 0x40), the stock
+    // STATE_TQ_INTV (0x03 & 0x02) (final review, finding 4).
     [Fact]
     public void TorqueInterventionReadsOnBothFamilies()
     {
@@ -182,8 +182,8 @@ public class PerfChannelsTests
         Assert.Null(PerfChannels.Read(Ms43x, [], ReadOnlySpan<byte>.Empty, TimeSpan.Zero).TorqueIntervention);
     }
 
-    // Injector duty and the DME's torque per bin, the malfunction light for a limited pull, and the
-    // retries of the poll read on both families.
+    // Injector duty and the DME's torque per bin (spec 6.1), the malfunction light for a limited pull (spec 4.4), and the
+    // retries of the poll (spec 6.6) read on both families (minor review, findings 5, 6 and 56).
     [Fact]
     public void DutyTorqueLampAndRetriesRead()
     {

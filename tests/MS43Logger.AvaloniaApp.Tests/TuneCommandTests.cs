@@ -143,7 +143,7 @@ public sealed class TuneCommandTests : IDisposable
         window.KeyPress(Key.Z, RawInputModifiers.Control, PhysicalKey.Z, "z");
         Assert.Equal("Saved", shell.Tune.SaveStateText);
 
-        // Ctrl K focuses the search field of the tab in front.
+        // Ctrl K focuses the search field of the tab in front (system 5.3).
         window.KeyPress(Key.K, RawInputModifiers.Control, PhysicalKey.K, "k");
         Assert.True(Find.Named<TextBox>(window, "SearchBox").IsFocused);
 

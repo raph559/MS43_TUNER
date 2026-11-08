@@ -8,7 +8,7 @@ using MS43Logger.Core.Tuning;
 namespace MS43Logger.AvaloniaApp.Tests;
 
 /// <summary>
-/// Live tuning across the app's own reconnect: the ECU on a port that goes silent at a key-off and comes
+/// Live tuning across the app's own reconnect (final review C1): the ECU on a port that goes silent at a key-off and comes
 /// back, the app reconnecting by itself, and the page putting back what had been sent.
 /// </summary>
 public sealed class LiveTuningReconnectTests : IDisposable

@@ -10,7 +10,7 @@ public enum WarmUpLevel
 }
 
 /// <summary>
-/// One warm-up or condition warning. <see cref="Code"/> is "coolant-cold", "oil-cold", "oil-unreported",
+/// One warm-up or condition warning (performance spec 5). <see cref="Code"/> is "coolant-cold", "oil-cold", "oil-unreported",
 /// "coolant-hot", "oil-hot" or "overheat"; <see cref="Text"/> carries the latest reading in whole degrees.
 /// </summary>
 public sealed record WarmUpBanner(WarmUpLevel Level, string Code, string Text);
@@ -25,7 +25,7 @@ public sealed class WarmUpMonitor
     private const double OperatingC = 80;
     private const double ColdAgainC = 75;
     private static readonly TimeSpan WarmHold = TimeSpan.FromSeconds(10);
-    // What to do about a hot reading (what happened, then what to do).
+    // What to do about a hot reading (system 9.1: what happened, then what to do).
     private const string CoolDown = "Ease off and let it idle to cool.";
 
     private readonly ColdWatch _coolantCold = new();
@@ -43,7 +43,7 @@ public sealed class WarmUpMonitor
     /// <summary>Danger first, then caution, then info.</summary>
     public IReadOnlyList<WarmUpBanner> Banners => _banners;
 
-    /// <summary>Coolant below operating temperature: full throttle must wait.</summary>
+    /// <summary>Coolant below operating temperature: full throttle must wait (spec 5).</summary>
     public bool CoolantCold => _coolantCold.Cold;
 
     /// <summary>Oil below working temperature; false while oil is not reported.</summary>
@@ -51,7 +51,7 @@ public sealed class WarmUpMonitor
 
     /// <summary>
     /// No oil reading, a reading at or below -40 °C or at or above 150 °C, or one that stayed within 2 °C while the coolant
-    /// rose 20 °C warming up to operating temperature.
+    /// rose 20 °C warming up to operating temperature (spec 5).
     /// </summary>
     public bool OilUnreported => _oilMissing || _oilImplausible || _frozenOil.Frozen;
 
@@ -180,7 +180,7 @@ public sealed class WarmUpMonitor
         {
             if (_cold is null)
             {
-                // Warm at the first reading needs no wait: the 10 s hold guards a recovery from cold, not a fresh start.
+                // Warm at the first reading needs no wait (spec 5): the 10 s hold guards a recovery from cold, not a fresh start.
                 _cold = celsius < OperatingC;
                 return;
             }
@@ -224,7 +224,7 @@ public sealed class WarmUpMonitor
 
     /// <summary>
     /// Oil that stays within 2 °C of where the watch began while the coolant rises 20 °C from its lowest since then is a
-    /// frozen or modelled value; oil moving more than 2 °C begins the watch again and clears it. The rise counts
+    /// frozen or modelled value (spec 5, 11); oil moving more than 2 °C begins the watch again and clears it. The rise counts
     /// only below operating temperature, where it is a warm-up: on a warm engine the map thermostat swings the coolant 20 °C
     /// while the oil holds steady.
     /// </summary>

@@ -3,7 +3,7 @@ using Avalonia.Headless.XUnit;
 
 namespace MS43Logger.AvaloniaApp.Tests;
 
-/// <summary>The taskbar showed Windows' blank icon. The app's mark is the exe's icon and the window's.</summary>
+/// <summary>The owner: the taskbar showed Windows' blank icon. The app's mark is the exe's icon and the window's.</summary>
 public sealed class AppIconTests
 {
     private const string Icon = "src/MS43Logger.AvaloniaApp/Assets/ms43-tuner.ico";

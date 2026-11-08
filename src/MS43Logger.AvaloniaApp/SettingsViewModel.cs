@@ -3,7 +3,7 @@ using System.ComponentModel;
 namespace MS43Logger.AvaloniaApp;
 
 /// <summary>
-/// The Settings dialog. Every choice applies at once and is written to settings.json; there is no Apply
+/// The Settings dialog (system 5.12). Every choice applies at once and is written to settings.json; there is no Apply
 /// or Cancel. The status bar's Night / Day and Tiles / Dials switch the same settings, so both always agree.
 /// </summary>
 public sealed class SettingsViewModel : ViewModelBase

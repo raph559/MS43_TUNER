@@ -7,7 +7,7 @@ using Avalonia.Layout;
 namespace MS43Logger.AvaloniaApp.Controls;
 
 /// <summary>
-/// A table's axis line, its scrolling grid and its key line, top to bottom. The grid's scroll viewer takes the
+/// A table's axis line, its scrolling grid and its key line, top to bottom (system 8). The grid's scroll viewer takes the
 /// height it needs up to what the other rows leave, and the key line follows right under it: it never scrolls away, and
 /// it never floats far below a short curve.
 /// </summary>

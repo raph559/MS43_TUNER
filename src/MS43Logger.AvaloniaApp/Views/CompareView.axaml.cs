@@ -145,7 +145,7 @@ public partial class CompareView : UserControl
         }
     }
 
-    // The swap seen: each name slides from the other's row into its own, and the swap icon turns half a turn.
+    // The swap seen (system 10.3): each name slides from the other's row into its own, and the swap icon turns half a turn.
     private Task CrossOverAsync()
     {
         // The A and B rows are 32 px apart (their DockPanels' Height). Measured here, mid-swap, the list is still being laid out

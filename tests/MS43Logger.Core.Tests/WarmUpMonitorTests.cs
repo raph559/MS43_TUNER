@@ -66,7 +66,7 @@ public class WarmUpMonitorTests
     }
 
     // While a reading at 80 °C or more is held for its 10 s, the banner keeps its level but no longer says "not at temperature"
-    // under a reading above the target.
+    // under a reading above the target (final review, finding 1).
     [Fact]
     public void AReadingBeingHeldReadsAsNearlyThere()
     {
@@ -143,7 +143,7 @@ public class WarmUpMonitorTests
 
         var b = Assert.Single(m.Banners, x => x.Code == "oil-unreported");
         Assert.Equal(WarmUpLevel.Info, b.Level);
-        // A reading that never moves may be modelled, not measured.
+        // A reading that never moves may be modelled, not measured (minor review, finding 47).
         Assert.Equal("Oil temperature does not change: the ECU may not measure it.", b.Text);
         Assert.DoesNotContain("oil-cold", Codes());
         Assert.True(m.OilUnreported);
@@ -182,7 +182,7 @@ public class WarmUpMonitorTests
     }
 
     // On a warm engine the map thermostat swings the coolant 20 °C while the oil holds steady: that is no frozen reading. The
-    // rise only counts below operating temperature, where it is a warm-up.
+    // rise only counts below operating temperature, where it is a warm-up (minor review, finding 2).
     [Fact]
     public void AWarmCoolantSwingDoesNotFreezeTheOil()
     {
@@ -253,7 +253,7 @@ public class WarmUpMonitorTests
         m.Push(F(0, coolant: 117, oil: 90));
 
         var hot = Assert.Single(m.Banners);
-        // What happened, then what to do.
+        // What happened, then what to do (system 9.1; minor review, finding 47).
         Assert.Equal(("coolant-hot", WarmUpLevel.Caution, "Coolant 117 °C: running hot. Ease off and let it idle to cool."), (hot.Code, hot.Level, hot.Text));
 
         m.Push(F(1, coolant: 112, oil: 90));

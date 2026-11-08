@@ -6,7 +6,7 @@ using MS43Logger.Core.Tuning;
 
 namespace MS43Logger.AvaloniaApp.Views;
 
-/// <summary>The Live tuning tab. The view only forwards presses; every state lives in <see cref="LiveTuningViewModel"/>.</summary>
+/// <summary>The Live tuning tab (live tuning spec 4). The view only forwards presses; every state lives in <see cref="LiveTuningViewModel"/>.</summary>
 public partial class LiveTuningView : UserControl
 {
     public LiveTuningView()

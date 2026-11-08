@@ -5,7 +5,7 @@ using Avalonia.Controls.Documents;
 namespace MS43Logger.AvaloniaApp.Controls;
 
 /// <summary>
-/// A reading and its unit on one baseline: the numerals in the block's own face and size, then the unit
+/// A reading and its unit on one baseline (system 3): the numerals in the block's own face and size, then the unit
 /// after an en space as a Run.unit, styled as UI text. "n/a" stands alone. Styled as a TextBlock.
 /// </summary>
 public sealed class ReadingText : TextBlock

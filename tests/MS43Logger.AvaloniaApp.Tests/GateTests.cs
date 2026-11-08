@@ -16,12 +16,12 @@ using MS43Logger.AvaloniaApp.Controls;
 
 namespace MS43Logger.AvaloniaApp.Tests;
 
-/// <summary>The restyle's delivery gate: checks that run over the sources and over every screen.</summary>
+/// <summary>The restyle's delivery gate (plan Task 15): checks that run over the sources and over every screen.</summary>
 public sealed class GateTests
 {
     private const string App = "src/MS43Logger.AvaloniaApp";
 
-    // The keys kept so the views could build until they were rebuilt.
+    // The keys Task 3 kept so the views could build until they were rebuilt.
     private static readonly string[] LegacyKeys =
     [
         "AppBackgroundBrush", "DialBrush", "SunkenBrush", "RaisedBrush", "FaceBrush", "SurfaceBackgroundBrush", "InputBackgroundBrush",
@@ -31,7 +31,7 @@ public sealed class GateTests
         "DownBrush", "UpColor", "UpBrush", "DisplayFont",
     ];
 
-    // The classes kept as aliases. "num" stays a Run class (a number inside UI text); only elsewhere is it old.
+    // The classes Task 4 kept as aliases. "num" stays a Run class (a number inside UI text); only elsewhere is it old.
     private static readonly string[] LegacyClasses = ["display", "muted", "secondary", "heading", "readout", "ghost", "pill"];
 
     [Fact]
@@ -278,7 +278,7 @@ public sealed class GateTests
         control.GetVisualAncestors().OfType<ItemsControl>().FirstOrDefault(list => KeyboardNavigation.GetTabNavigation(list) == KeyboardNavigationMode.Once) ?? (Visual)control;
 
     // The system's ring (5.1: 2 px of Ink1 outside the control, never Fluent's default adorner), or the grid's and the
-    // slider's own ring, drawn on:focus-visible.
+    // slider's own ring, drawn on :focus-visible.
     private static bool ShowsRing(Control focused) =>
         focused.Classes.Contains(":focus-visible")
         && (focused is MapGrid or ValueSlider
@@ -319,7 +319,7 @@ public sealed class GateTests
         Assert.True(gaps.Count == 0, string.Join(Environment.NewLine, gaps));
     }
 
-    // Names cut short keep their full text in a tooltip.
+    // Names cut short keep their full text in a tooltip (system 8; final review, Important 3).
     [AvaloniaFact]
     public async Task TrimmedNamesKeepTheirFullText()
     {
@@ -374,7 +374,7 @@ public sealed class GateTests
         window.Close();
     }
 
-    // The gate's renders: every state in both themes, at 1440 x 900 and 1024 x 680.
+    // The gate's renders (plan Task 15, step 3): every state in both themes, at 1440 x 900 and 1024 x 680.
     [AvaloniaFact]
     public async Task GateScreensForReview()
     {

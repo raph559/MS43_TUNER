@@ -7,7 +7,7 @@ using MS43Logger.Core.Tuning;
 namespace MS43Logger.AvaloniaApp.Controls;
 
 /// <summary>
-/// An item's kind as its icon from the app's set: the Kind.* geometry drawn exactly as a StrokeIcon draws it,
+/// An item's kind as its icon from the app's set (system 6): the Kind.* geometry drawn exactly as a StrokeIcon draws it,
 /// in the text colour of the row around it.
 /// </summary>
 public sealed class ItemGlyph : Control

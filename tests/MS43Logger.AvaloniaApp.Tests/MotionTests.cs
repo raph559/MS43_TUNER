@@ -12,7 +12,7 @@ using MS43Logger.AvaloniaApp.Views;
 namespace MS43Logger.AvaloniaApp.Tests;
 
 /// <summary>
-/// The motion layer: loaded only while Windows' animation effects are on. The rest of the
+/// The motion layer (system 10.3, MOTION 2): loaded only while Windows' animation effects are on. The rest of the
 /// test run has it off (TestAppBuilder), so renders and colour checks see finished states.
 /// </summary>
 // In the app the motion layer is app-wide (App.ApplyMotion). Here it goes into each test window's own styles, so the
@@ -160,7 +160,7 @@ public sealed class MotionTests
 
     private static double Left(Visual control, Visual seg) => control.TranslatePoint(default, seg)!.Value.X;
 
-    // Picking a segment (Manual, Automatic) was not animated. The raised pill now slides to the new choice.
+    // The owner: picking a segment (Manual, Automatic) was not animated. The raised pill now slides to the new choice.
     [AvaloniaFact]
     public void TheSelectedSegmentSlides()
     {
@@ -207,7 +207,7 @@ public sealed class MotionTests
         return (toggle, Part(toggle, "SwitchKnobBounds"));
     }
 
-    // Switches (Changed only, Differs from B) were not animated. The 16 px knob slide was lost behind the
+    // The owner: switches (Changed only, Differs from B) were not animated. The 16 px knob slide was lost behind the
     // track turning from outline to fill at once; the fill now fades in with the slide.
     [AvaloniaFact]
     public void ASwitchFillsAsItsKnobSlides()

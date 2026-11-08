@@ -7,7 +7,7 @@ using MS43Logger.AvaloniaApp.Controls;
 namespace MS43Logger.AvaloniaApp.Shell;
 
 /// <summary>
-/// The app's mark: a 20 px dial, a 270 degree arc open at the bottom and a needle, drawn in the icon style
+/// The app's mark (system 5.1): a 20 px dial, a 270 degree arc open at the bottom and a needle, drawn in the icon style
 /// (1.5 px, flat caps). At rest the arc is Ink3 and the needle Ink2 at 0 rpm; while logging both are Now and the needle
 /// follows engine speed, redrawn with each reading and never tweened.
 /// </summary>

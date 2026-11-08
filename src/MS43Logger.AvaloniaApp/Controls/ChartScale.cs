@@ -8,7 +8,7 @@ using MS43Logger.AvaloniaApp.Theme;
 
 namespace MS43Logger.AvaloniaApp.Controls;
 
-/// <summary>The axis arithmetic and 12 px text the charts share: the Tune curve and the Performance run charts.</summary>
+/// <summary>The axis arithmetic and 12 px text the charts share (system 5.13): the Tune curve and the Performance run charts.</summary>
 internal static class ChartScale
 {
     /// <summary>

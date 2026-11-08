@@ -7,7 +7,7 @@ using Avalonia.Media;
 namespace MS43Logger.AvaloniaApp.Controls;
 
 /// <summary>
-/// A channel's trend in the Live list: the samples of the trend window placed by time, an Ink2 1.25 px line
+/// A channel's trend in the Live list (system 5.6): the samples of the trend window placed by time, an Ink2 1.25 px line
 /// and an Ink1 dot at the newest sample, both Ink3 once the values are frozen. Never orange: a row is data, not now. A
 /// flat channel stays flat because the vertical span is never less than its unit's minimum (5 °C, 1 V, 2 %, 100 rpm,
 /// 10 mg/stk, 2 kPa).

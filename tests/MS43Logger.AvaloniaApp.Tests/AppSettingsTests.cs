@@ -230,7 +230,7 @@ public sealed class AppSettingsTests : IDisposable
         }
     }
 
-    // A file from before the GPS check was kept per gear: its one flag holds for the gears it
+    // A file from before the GPS check was kept per gear (minor review, findings 9 and 23): its one flag holds for the gears it
     // had saved, and the old flag is not written again.
     [Theory]
     [InlineData(true)]

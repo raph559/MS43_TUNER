@@ -557,7 +557,7 @@ public sealed class CompareTests : IDisposable
         Assert.True(Find.Named<TextBox>(window, "CompareSearchBox").IsEffectivelyVisible);
     }
 
-    // A switch's choice ("Electrical cooling fan present, function and diagnosis active") was set in the 56 px
+    // The owner: a switch's choice ("Electrical cooling fan present, function and diagnosis active") was set in the 56 px
     // number style and cut off at the pane's edge. A choice is text: it wraps, at a size that reads.
     [AvaloniaFact]
     public async Task SwitchChoicesWrapAsText()
@@ -623,7 +623,7 @@ public sealed class CompareTests : IDisposable
         Assert.Equal(before!.Value, Assert.NotNull(Top()), 1);
     }
 
-    // An arrow reads as "was, now": B (the bin compared with) then A (the bin tuned), as A − B reads.
+    // The owner reads an arrow as "was, now": B (the bin compared with) then A (the bin tuned), as A − B reads.
     [AvaloniaFact]
     public async Task ValueRowsReadFromBToA()
     {

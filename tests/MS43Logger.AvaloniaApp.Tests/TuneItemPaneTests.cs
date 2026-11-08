@@ -576,7 +576,7 @@ public sealed class TuneItemPaneTests : IDisposable
         Check(Find.Named<TextBox>(window, "ValueInput"));
     }
 
-    // A press on the thumb only takes hold of it: off its centre it must not move the value.
+    // A press on the thumb only takes hold of it: off its centre it must not move the value (final review, Critical 1).
     [AvaloniaFact]
     public async Task PressingTheThumbWritesNothing()
     {

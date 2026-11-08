@@ -20,7 +20,7 @@ Please read the [rules](#the-rules) before you start: two of them protect people
 2. **Never commit bins, XDF files or personal calibration data.** Put your own bins and XDF in `testdata/local/`, which git ignores; `*.xdf`, `*.bin` and `*.bak` are ignored everywhere. A bin saved under another extension is not, so check `git status` before each commit. The same goes for CSV logs, saved results or screenshots that carry your car's data: leave them out unless you mean to publish them.
 3. **No absolute local paths** in any committed file, such as a path into your own user folder. Use repository-relative paths such as `docs/firmware/map-use/ve.md`.
 4. **Test first.** Write the test, run it and watch it fail, then make the change that passes it.
-5. **The UI follows the design system** in docs/superpowers/specs/2026-10-20-ms43-restyle-system.md: colour tokens for Night and Day, type, controls, states and layout. Use the existing tokens and control styles instead of new colours or one-off styles.
+5. **The UI follows the design system** in [docs/superpowers/specs/2026-10-20-ms43-restyle-system.md](docs/superpowers/specs/2026-10-20-ms43-restyle-system.md): colour tokens for Night and Day, type, controls, states and layout. Use the existing tokens and control styles instead of new colours or one-off styles.
 6. **UI copy rules** (section 9 of the same spec):
    - Sentence case for every label, button, heading and message. No all caps.
    - No em dash and no en dash anywhere. Write ranges in words: "3.0 to 39.0".
@@ -32,7 +32,7 @@ Please read the [rules](#the-rules) before you start: two of them protect people
 
 ### How larger work has been done
 
-Each feature so far started with a design spec in the source contract and a step-by-step plan in the source contract. For a large change, opening an issue with a short design first saves rework.
+Each feature so far started with a design spec in `docs/superpowers/specs/` and a step-by-step plan in `docs/superpowers/plans/`. For a large change, opening an issue with a short design first saves rework.
 
 Evidence about the firmware lives in `docs/firmware/map-use/`. A change to the map-use rules in `definitions/ms43x001_map_use.json` should record its code addresses and say whether each fact was observed or inferred, as the existing rules do.
 
@@ -137,7 +137,7 @@ The pull request template repeats this checklist:
 - [ ] The full suite passes (`dotnet test MS43Logger.sln`)
 - [ ] No bins, XDF files, personal data or absolute local paths in the diff
 - [ ] Nothing here writes ECU flash
-- [ ] UI and text follow the design system and its copy rules (the source contract, section 9 for copy)
+- [ ] UI and text follow the design system and its copy rules (`docs/superpowers/specs/2026-10-20-ms43-restyle-system.md`, section 9 for copy)
 
 ## License of contributions
 

@@ -45,7 +45,7 @@ public sealed class ShellViewModel : ViewModelBase
         live.Readouts = tune.Settings.Readouts;
         ApplyLiveSettings();
 
-        // The last port used is preselected while it is still plugged in; otherwise the first stays.
+        // The last port used is preselected while it is still plugged in (system 7.2); otherwise the first stays.
         if (tune.Settings.LastPort is { } port && live.AvailablePorts.Contains(port))
         {
             live.SelectedPort = port;
@@ -79,7 +79,7 @@ public sealed class ShellViewModel : ViewModelBase
                 if (!live.IsConnected)
                 {
                     tune.ClearLive();
-                    // A run ends incomplete with what it measured.
+                    // A run ends incomplete with what it measured (review focus 1).
                     Performance.LinkLost();
                 }
                 else if (live.SelectedPort is { Length: > 0 } connected && connected != tune.Settings.LastPort)
@@ -92,9 +92,10 @@ public sealed class ShellViewModel : ViewModelBase
 
         live.SampleShown += (_, sample) => tune.PushSample(sample, live.CurrentDefinition);
         live.SampleShown += (_, sample) => LiveTuning.Push(sample, live.CurrentDefinition);
-        // On every tab, so a run survives switching tabs; Live has already fed its warm-up monitor the same frame.
+        // On every tab, so a run survives switching tabs; Live has already fed its warm-up monitor the same frame (performance
+        // spec 5).
         live.SampleShown += (_, sample) => Performance.Push(sample, live.LastFrame, live.CurrentDefinition);
-        // A finished run to save takes the primary from Connect.
+        // A finished run to save takes the primary from Connect (minor review, findings 20 and 33).
         Performance.Run.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(PerformanceRunViewModel.CanSave))
@@ -124,7 +125,7 @@ public sealed class ShellViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Reopens the last bin at start when the Settings switch says so. A missing bin or XDF leaves the
+    /// Reopens the last bin at start when the Settings switch says so (system 5.12). A missing bin or XDF leaves the
     /// empty Tune screen with a banner naming the missing file; no file picker opens at start. Runs once: every caller
     /// gets the same task.
     /// </summary>
@@ -333,7 +334,7 @@ public sealed class ShellViewModel : ViewModelBase
 
     /// <summary>
     /// Connect is the screen's one primary action on Live and on Performance, where a test needs the link, and only until
-    /// connected; on Performance a finished run to save keeps Save result the primary.
+    /// connected (system 5.1, performance spec 9.1); on Performance a finished run to save keeps Save result the primary.
     /// </summary>
     public bool ConnectIsPrimary => (IsLive || (IsPerformance && !Performance.Run.CanSave)) && !Live.IsConnected;
 

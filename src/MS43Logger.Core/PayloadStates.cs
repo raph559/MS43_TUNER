@@ -1,7 +1,7 @@
 namespace MS43Logger.Core;
 
 /// <summary>
-/// The stock payload's on/off states the log writes on every row, under the ADX's own names: the trailing
+/// The stock payload's on/off states the log writes on every row, under the ADX's own names (V10.1 review): the trailing
 /// throttle (overrun) and its fuel cut, the brake light test switch, the brake light switch and the clutch switch. Every
 /// poll's payload carries them, so they cost no read; an ADX without one leaves its cell empty.
 /// </summary>

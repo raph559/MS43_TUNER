@@ -192,7 +192,7 @@ public sealed class AdxDefinition
 
     /// <summary>
     /// The bit's state in a payload, or null when this definition lacks it or the payload is too short:
-    /// a missing bit is unknown, never off.
+    /// a missing bit is unknown, never off (performance spec 4.3).
     /// </summary>
     public bool? DecodeBitmask(string id, ReadOnlySpan<byte> payload)
     {

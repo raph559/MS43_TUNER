@@ -22,8 +22,8 @@ public class LiveLoggerTests
 
     private static Func<byte[]> Timeout() => () => throw new TimeoutException("no reply");
 
-    // KLinePauseTests measured 23.4 samples/s without a pause and 16.2 with one; removing the pause preserved
-    // the emulator's schedule.
+    // Owner, 2026-10-28: the pause was there for the cable and the CPU; neither needs it, and the emulator's car file answers
+    // and keeps its schedule without it (sim KLinePauseTests: 23.4 samples/s against 16.2).
     [Fact]
     public void TheLoggerPollsWithoutAPauseByDefault() => Assert.Equal(TimeSpan.Zero, new LiveLogger().Pause);
 
@@ -134,7 +134,7 @@ public class LiveLoggerTests
         Assert.Equal(Payload(2), samples[1].Payload.ToArray());
     }
 
-    // Tests time a run on the request's monotonic stamp, not the wall clock after decoding.
+    // Tests time a run on the request's monotonic stamp, not the wall clock after decoding (performance spec 4.2).
     [Fact]
     public async Task SamplesCarryRequestAndReplyTimes()
     {
@@ -156,7 +156,7 @@ public class LiveLoggerTests
     }
 
     // A poll the source retried inside its call is stamped at the request that got the reply, not at the first one, which
-    // timed out 400 ms earlier on the ms43x definition.
+    // timed out 400 ms earlier on the ms43x definition (final review, finding 2).
     [Fact]
     public async Task ARetriedPollIsStampedAtTheRequestThatReplied()
     {
@@ -209,7 +209,7 @@ public class LiveLoggerTests
         Assert.Equal(angle, GaugeMath.Angle(0, 8000, value), 9);
     }
 
-    // Disconnect cancels the run, then closes the port under a poll still waiting for its reply.
+    // Disconnect cancels the run, then closes the port under a poll still waiting for its reply (final review, Important 2).
     [Fact]
     public async Task APortClosedByDisconnectIsNotAFailure()
     {

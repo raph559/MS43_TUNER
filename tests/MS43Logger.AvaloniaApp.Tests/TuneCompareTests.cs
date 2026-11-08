@@ -58,7 +58,7 @@ public sealed class TuneCompareTests : IDisposable
         Assert.False(Find.Named<Button>(window, "CopyFromBTool").IsEffectivelyVisible);
     }
 
-    // Tune showed no compare until Compare had been opened once ("Edit in Tune"); the remembered B opened only
+    // The owner: Tune showed no compare until Compare had been opened once ("Edit in Tune"); the remembered B opened only
     // when the Compare tab was shown.
     [AvaloniaFact]
     public async Task TheRememberedBShowsOnTuneWithoutVisitingCompare()
@@ -87,7 +87,7 @@ public sealed class TuneCompareTests : IDisposable
         Assert.True(Find.Named<Border>(window, "CompareStrip").IsEffectivelyVisible);
     }
 
-    // The compare controls sat among the edit tools with nothing to say they belong to Compare.
+    // The owner: the compare controls sat among the edit tools with nothing to say they belong to Compare.
     [AvaloniaFact]
     public async Task CompareControlsSitInTheirOwnLabelledStrip()
     {

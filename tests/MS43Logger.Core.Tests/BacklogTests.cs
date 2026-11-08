@@ -3,7 +3,7 @@ using MS43Logger.Core;
 namespace MS43Logger.Core.Tests;
 
 /// <summary>
-/// The samples waiting for the screen: with no pause between polls, a source that answers at once must not
+/// The samples waiting for the screen (owner, 2026-10-28): with no pause between polls, a source that answers at once must not
 /// pile them up in memory; the logger waits once the backlog is full, and a disconnect frees it.
 /// </summary>
 public sealed class BacklogTests

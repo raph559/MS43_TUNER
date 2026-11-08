@@ -8,8 +8,8 @@ using Avalonia.Media;
 namespace MS43Logger.AvaloniaApp.Controls;
 
 /// <summary>
-/// Live's readout band (layout B): five cells, rpm, load, advance, gear with speed, and knock,
-/// framed by one 1 px Hairline with a 12 px radius and Hairline dividers. Wide, they stand in four columns (18: 12: 12: 14,
+/// Live's readout band (system 8, layout B): five cells, rpm, load, advance, gear with speed, and knock (owner, 2026-10-28),
+/// framed by one 1 px Hairline with a 12 px radius and Hairline dividers. Wide, they stand in four columns (18 : 12 : 12 : 14,
 /// gear and speed over knock in the last, knock the taller); <see cref="Stacked"/> (below 1200 px) keeps rpm on the left
 /// and puts load and advance over gear and speed beside knock.
 /// </summary>

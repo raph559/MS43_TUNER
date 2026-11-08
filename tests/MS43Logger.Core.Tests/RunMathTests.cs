@@ -7,7 +7,7 @@ public class RunMathTests
     private static double[] Times(int count, double rate = 30, double from = 0) =>
         Enumerable.Range(0, count).Select(i => from + i / rate).ToArray();
 
-    // Every "time at X" is interpolated between the two samples around X.
+    // Every "time at X" is interpolated between the two samples around X (performance spec 4.6).
     [Fact]
     public void CrossingIsInterpolated()
     {
@@ -31,7 +31,7 @@ public class RunMathTests
         Assert.Throws<ArgumentException>(() => RunMath.CrossingTime([0, 1], [0], 1));
     }
 
-    // Time zero of a standing start: a straight line through 3 to 20 km/h, taken at 0 km/h.
+    // Time zero of a standing start: a straight line through 3 to 20 km/h, taken at 0 km/h (performance spec 6.4).
     [Fact]
     public void StartIsBackExtrapolated()
     {
@@ -80,7 +80,7 @@ public class RunMathTests
     }
 
     // Bursty timing (a retry gap, two samples at one instant, a stamp out of order) gives finite values or NaN, never a throw
-    // or an infinity.
+    // or an infinity (performance plan, review focus 4).
     [Fact]
     public void DerivativeSurvivesDuplicateTimes()
     {
@@ -105,7 +105,7 @@ public class RunMathTests
         Assert.Empty(RunMath.Derivative([], []));
     }
 
-    // Rolling circumference is 0.97 × the free circumference: 205/55 R16 is 631.9 mm across, 225/45 R17 634.3 mm.
+    // Rolling circumference is 0.97 × the free circumference (plan Task 5): 205/55 R16 is 631.9 mm across, 225/45 R17 634.3 mm.
     [Fact]
     public void TyreCircumference()
     {
@@ -214,7 +214,7 @@ public class RunMathTests
     }
 
     // A band that is not a whole number of bins wide keeps its top: readings past the last bin's upper edge, up to the band's
-    // end, fold into the last bin rather than being dropped.
+    // end, fold into the last bin rather than being dropped (minor review, finding 1).
     [Fact]
     public void TheTopOfTheBandFoldsIntoTheLastBin()
     {

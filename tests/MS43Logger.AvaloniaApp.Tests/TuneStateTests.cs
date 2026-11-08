@@ -251,7 +251,7 @@ public sealed class TuneStateTests : IDisposable
         Assert.StartsWith("'colmajor' is read-only: ", ToolTip.GetTip(tools) as string);
     }
 
-    // Saved, but the edit log was locked (open in Excel): the message must say the bin was saved.
+    // Saved, but the edit log was locked (open in Excel): the message must say the bin was saved (final review, Important 1).
     [AvaloniaFact]
     public async Task SaveWithALockedEditLogSaysItSaved()
     {

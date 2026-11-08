@@ -14,7 +14,7 @@ internal sealed class FixedTime(DateTimeOffset now) : TimeProvider
     public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
 }
 
-// The saved result and its library are performance spec 8; the shapes are the plan's.
+// The saved result and its library are performance spec 8; the shapes are the plan's (Task 7).
 public sealed class PerfResultStoreTests : IDisposable
 {
     private static readonly AdxDefinition Ms43x = BundledDefinitions.Load("ms43x");
@@ -176,7 +176,7 @@ public sealed class PerfResultStoreTests : IDisposable
     }
 
     // A hand-edited file that is still JSON but has a null where the app reads text, a null entry or a broken trace is not a
-    // result file: listing it would throw in the list's filter and stop the app at start.
+    // result file: listing it would throw in the list's filter and stop the app at start (final review, finding 7).
     [Fact]
     public void AFileWithANullPartIsNotAResult()
     {
@@ -222,7 +222,7 @@ public sealed class PerfResultStoreTests : IDisposable
     }
 
     // Names a newer app may write: an unknown flag severity reads as suspect, never as a note; an unknown test is listed
-    // read-only and never opened as another test; fields this app does not know survive a rename.
+    // read-only and never opened as another test; fields this app does not know survive a rename (minor review, finding 15).
     [Fact]
     public void UnknownNamesAreReadSafely()
     {
@@ -255,7 +255,7 @@ public sealed class PerfResultStoreTests : IDisposable
     }
 
     // The list reads a file again only when it changed on disk: one with the same write time and length is the one already
-    // read, so showing the tab again parses nothing.
+    // read, so showing the tab again parses nothing (minor review, findings 16 and 22).
     [Fact]
     public void TheListReadsOnlyChangedFiles()
     {
@@ -277,7 +277,8 @@ public sealed class PerfResultStoreTests : IDisposable
         Assert.Empty(store.List());
     }
 
-    // A newer schema whose parts have another shape still lists, read-only, and is not opened (the earlier fix to Whole covers the list).
+    // A newer schema whose parts have another shape still lists, read-only, and is not opened (minor review, finding 71: the
+    // earlier fix to Whole covers the list).
     [Fact]
     public void ANewerFileOfAnotherShapeListsReadOnly()
     {

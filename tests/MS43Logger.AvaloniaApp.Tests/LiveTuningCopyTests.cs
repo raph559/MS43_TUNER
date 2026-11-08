@@ -5,7 +5,7 @@ using MS43Logger.Core.Tuning;
 
 namespace MS43Logger.AvaloniaApp.Tests;
 
-/// <summary>Copy to Tune: the page's maps into the Tune tab's open bin.</summary>
+/// <summary>Copy to Tune (live tuning spec 5.6): the page's maps into the Tune tab's open bin.</summary>
 public sealed class LiveTuningCopyTests : IDisposable
 {
     private readonly string _folder = TestShell.NewFolder();

@@ -11,11 +11,11 @@ using MS43Logger.AvaloniaApp.Theme;
 namespace MS43Logger.AvaloniaApp.Controls;
 
 /// <summary>
-/// Knock retard per cylinder: six Track bars numbered 1 to 6 in Data 12 Ink3, filled Now while
+/// Knock retard per cylinder (performance spec 9.2): six Track bars numbered 1 to 6 in Data 12 Ink3, filled Now while
 /// live and Ink2 in a stored result. A cylinder at or past <see cref="WarnFrom"/> also gets the warning icon above its bar
-/// in Caution, the colour of the run's knock flag, and a line under the bars names it, never
-/// colour alone. A cylinder without a value draws no fill and reads "n/a". With <see cref="ShowsAverage"/> (the Live tab)
-/// a seventh bar, set apart, shows the average of the cylinders that have a value and reads "Avg".
+/// in Caution, the colour of the run's knock flag (minor review, finding 34), and a line under the bars names it, never
+/// colour alone. A cylinder without a value draws no fill and reads "n/a". With <see cref="ShowsAverage"/> (the Live tab,
+/// owner 2026-10-28) a seventh bar, set apart, shows the average of the cylinders that have a value and reads "Avg".
 /// </summary>
 public sealed class CylinderBars : Control
 {
@@ -56,7 +56,7 @@ public sealed class CylinderBars : Control
     /// <summary>The retard from which a cylinder gets the warning icon.</summary>
     public double WarnFrom { get => GetValue(WarnFromProperty); set => SetValue(WarnFromProperty, value); }
 
-    /// <summary>Samples are arriving: the fills are Now; otherwise Ink2, since orange means now.</summary>
+    /// <summary>Samples are arriving: the fills are Now; otherwise Ink2, since orange means now (system 1.4).</summary>
     public bool IsLive { get => GetValue(IsLiveProperty); set => SetValue(IsLiveProperty, value); }
 
     /// <summary>Raised when <see cref="Values"/> changed in place, so the bars draw again.</summary>
@@ -131,7 +131,7 @@ public sealed class CylinderBars : Control
                 }
             }
 
-            // Numbers in the data font; a missing value's "n/a" and the word "Avg" in UI text, as everywhere else.
+            // Numbers in the data font; a missing value's "n/a" and the word "Avg" in UI text, as everywhere else (system 3.3).
             var missing = Value(i) is null || i == Cylinders;
             var text = new FormattedText(labels[i], CultureInfo.InvariantCulture, FlowDirection.LeftToRight, missing ? ui : data, 12, ink3);
             text.SetFontFeatures(Typography.Tabular);

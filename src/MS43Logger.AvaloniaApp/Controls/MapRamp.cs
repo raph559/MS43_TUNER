@@ -6,7 +6,7 @@ using Avalonia.Media;
 namespace MS43Logger.AvaloniaApp.Controls;
 
 /// <summary>
-/// The one map colour path: sea teal at the low end to ultramarine at the high end, the same hues in both
+/// The one map colour path (system 2.1): sea teal at the low end to ultramarine at the high end, the same hues in both
 /// themes. Day runs light to dark and Night dark to light, so the peak of a map always sits farthest from the pane.
 /// </summary>
 public static class MapRamp
@@ -34,12 +34,12 @@ public static class MapRamp
 
     /// <summary>
     /// Black on fills of relative luminance 0.1791 or more, white below: either choice then gives 4.58:1 or more on any
-    /// fill, including the mixes between stops.
+    /// fill, including the mixes between stops (system 2.3).
     /// </summary>
     public static Color TextOn(Color fill) => Luminance(fill) >= 0.1791 ? Colors.Black : Colors.White;
 
     /// <summary>
-    /// The A − B scale: <paramref name="pane"/> at 0, <paramref name="above"/> at +1 and
+    /// The A − B scale (system 2.5): <paramref name="pane"/> at 0, <paramref name="above"/> at +1 and
     /// <paramref name="below"/> at -1, mixed by |t|^0.7 so small changes still show.
     /// </summary>
     public static Color Diverging(double t, Color pane, Color below, Color above)

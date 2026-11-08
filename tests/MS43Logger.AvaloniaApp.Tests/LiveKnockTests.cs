@@ -8,7 +8,7 @@ using MS43Logger.Core.Tests;
 namespace MS43Logger.AvaloniaApp.Tests;
 
 /// <summary>
-/// Knock retard per cylinder on the Live tab: the Performance tab's six bars plus an average bar, all the
+/// Knock retard per cylinder on the Live tab (owner, 2026-10-28): the Performance tab's six bars plus an average bar, all the
 /// time while driving, with the warning line naming each cylinder at or past 1.5 °CRK.
 /// </summary>
 public sealed class LiveKnockTests : IDisposable
@@ -111,7 +111,7 @@ public sealed class LiveKnockTests : IDisposable
         window.Close();
     }
 
-    // A channel the band shows is not repeated as a tile; it stays pinned in the list.
+    // A channel the band shows is not repeated as a tile; it stays pinned in the list (owner, 2026-10-28).
     [AvaloniaFact]
     public void ABandChannelIsNotRepeatedAsATile()
     {

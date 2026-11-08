@@ -5,8 +5,8 @@ using System.Text.Json.Serialization;
 namespace MS43Logger.Core.Performance;
 
 /// <summary>
-/// The results folder: one JSON file per result, named from the clock ("perf-20261021-143212.json",
-/// "-2" on a clash), written atomically. The user's name lives inside the file, so renaming never renames it. A file that is
+/// The results folder (performance spec 8): one JSON file per result, named from the clock ("perf-20261021-143212.json",
+/// "-2" on a clash), written atomically. The owner's name lives inside the file, so renaming never renames it. A file that is
 /// not a result never breaks the list; a newer schema is listed read-only and never rewritten.
 /// </summary>
 public sealed class PerfResultStore
@@ -34,7 +34,7 @@ public sealed class PerfResultStore
     private readonly Dictionary<string, Listed> _listed = new(StringComparer.OrdinalIgnoreCase);
     private IReadOnlyList<string> _skipped = [];
 
-    /// <param name="folder">The results folder, derived from the settings folder so tests never touch the user's data.</param>
+    /// <param name="folder">The results folder, derived from the settings folder so tests never touch the owner's data.</param>
     public PerfResultStore(string folder, TimeProvider? time = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(folder);
@@ -175,7 +175,7 @@ public sealed class PerfResultStore
         }
     }
 
-    /// <summary>Changes the user's name, description and direction ("A", "B", anything else none), rewriting the file in place.</summary>
+    /// <summary>Changes the owner's name, description and direction ("A", "B", anything else none), rewriting the file in place.</summary>
     public bool Update(string fileName, string name, string description, string? direction)
     {
         LastError = null;
@@ -252,7 +252,7 @@ public sealed class PerfResultStore
         }
     }
 
-    // The temp file is the only thing a failure leaves behind, and it is removed. It reaches the disk before the move,
+    // The temp file is the only thing a failure leaves behind, and it is removed (spec 8). It reaches the disk before the move,
     // so a crash after the move cannot leave an empty result in place of the old one.
     private static void Write(string path, byte[] bytes, bool overwrite)
     {

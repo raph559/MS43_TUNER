@@ -47,8 +47,8 @@ public static class SurfaceMath
 }
 
 /// <summary>
-/// The map as a shaded surface in a Pane box: heights and colours over the working range, cells at the storage
-/// limit left out. It is handled like an object in the hand: a drag moves its near side with the pointer (the
+/// The map as a shaded surface in a Pane box (system 8): heights and colours over the working range, cells at the storage
+/// limit left out (system 2.2). It is handled like an object in the hand: a drag moves its near side with the pointer (the
 /// arrow keys do the same), the wheel or Ctrl + and Ctrl - zoom towards the pointer, Shift-drag or a right-button drag moves
 /// it, and Home puts it back. It also tunes: a click on a point selects that cell (Shift-click a range, the grid follows),
 /// + and - step the selection as the grid does, and Ctrl-drag raises or lowers it in one undo step on release.

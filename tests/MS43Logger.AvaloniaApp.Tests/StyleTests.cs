@@ -39,7 +39,7 @@ public class StyleTests
         Assert.Equal(Color.Parse("#0A0B0D"), Solid(button.Foreground));
     }
 
-    // The Edge outline on every button was too bright at Night: a secondary button is a filled surface with
+    // The owner found the Edge outline on every button too bright at Night: a secondary button is a filled surface with
     // a dim edge; its label names it.
     [AvaloniaTheory]
     [InlineData("Dark", "#1F2328", "#30363D")]
@@ -81,7 +81,7 @@ public class StyleTests
         return scroller.GetVisualDescendants().OfType<ScrollBar>().First(bar => bar.Orientation == Orientation.Horizontal);
     }
 
-    // Fluent's scroll bar was heavy: 16 px, arrow buttons, a square grey thumb over the grid's last row.
+    // The owner found Fluent's bar heavy: 16 px, arrow buttons, a square grey thumb over the grid's last row.
     [AvaloniaFact]
     public void ScrollBarIsSlimWithoutArrows()
     {
@@ -290,7 +290,7 @@ public class StyleTests
         return bytes;
     }
 
-    // The amber banner's stripe and icon are non-text cues: 3:1 on both surfaces a banner sits on.
+    // The amber banner's stripe and icon are non-text cues: 3:1 on both surfaces a banner sits on (performance spec 5).
     [AvaloniaTheory]
     [InlineData("Dark")]
     [InlineData("Light")]

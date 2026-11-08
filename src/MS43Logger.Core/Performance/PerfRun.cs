@@ -3,7 +3,7 @@ using System.Globalization;
 namespace MS43Logger.Core.Performance;
 
 /// <summary>
-/// A sample kept with a run: its time on the run clock and its raw payload, so any channel or bit can be decoded again,
+/// A sample kept with a run: its time on the run clock and its raw payload, so any channel or bit can be decoded again (spec 8),
 /// and the retries its poll needed when the source said.
 /// </summary>
 public sealed record RecordedSample(TimeSpan At, byte[] Payload, int? Retries = null);
@@ -13,13 +13,13 @@ public sealed record RecordedSample(TimeSpan At, byte[] Payload, int? Retries = 
 /// end; <see cref="WindowStart"/> is the first sample in the band, the start crossing lying between it and the sample before,
 /// and <see cref="WindowEnd"/> is the last sample. <see cref="Figures"/> is <see cref="RunAnalysis.Analyse"/> of these samples
 /// with the flags only the run could see: why it ended, the warm-up state while it ran, a late full throttle. <see cref="Armed"/>
-/// are the conditions when the ready checks were met (at arm, start and end).
+/// are the conditions when the ready checks were met (spec 8: at arm, start and end).
 /// </summary>
 public sealed record RunOutcome(PerfTestSpec Spec, bool Complete, RunFigures Figures, Conditions Start, Conditions End,
     IReadOnlyList<RecordedSample> Samples, int WindowStart, int WindowEnd, Conditions? Armed = null);
 
 /// <summary>
-/// One test from arming to its result, fed the frames Live already receives: it never asks for a sample
+/// One test from arming to its result (performance spec 6), fed the frames Live already receives: it never asks for a sample
 /// of its own. A pull, knock check or roll-on waits for its ready checks, starts on full throttle, times its window from the
 /// interpolated start crossing and ends complete at the end crossing, or incomplete when the pedal lifts, the clutch or brake
 /// is pressed, the gear changes, the revs drop or the link is lost. Ending before the band was reached is a false start:
@@ -27,7 +27,7 @@ public sealed record RunOutcome(PerfTestSpec Spec, bool Complete, RunFigures Fig
 /// </summary>
 public sealed class PerfRun
 {
-    // Pedal shares are of the calibrated full-pedal value.
+    // Pedal shares are of the calibrated full-pedal value (spec 4.4).
     private const double FullThrottle = 90;
     private const double Released = 30;
     private const double LightPedal = 60;
@@ -37,7 +37,7 @@ public sealed class PerfRun
     private const double CalibrationKmh = 50;
     private const double SteadyKmh = 1;
     private const double SteadyRpm = 50;
-    // A roll-on starts from a steady speed: within 2 km/h for 1 s.
+    // A roll-on starts from a steady speed (spec 6.3): within 2 km/h for 1 s.
     private const double RollOnSteadyKmh = 2;
     private const double OilWarmC = 80;
     private const double LinkSeconds = 30;
@@ -100,7 +100,7 @@ public sealed class PerfRun
     /// <param name="inputs">Car values, speed calibration and full-pedal value, as they are when the test is armed.</param>
     /// <param name="warmUp">
     /// The monitor Live keeps. The caller pushes each frame into it before <see cref="Push"/>; the run only reads it, for the
-    /// "Engine warm" check and the cold and oil flags.
+    /// "Engine warm" check and the cold and oil flags (spec 5).
     /// </param>
     public PerfRun(PerfTestSpec spec, AnalysisInputs inputs, WarmUpMonitor warmUp)
     {
@@ -134,7 +134,7 @@ public sealed class PerfRun
 
     public RunStage Stage { get; private set; }
 
-    /// <summary>Each condition of the test with its live reading; empty for the link test.</summary>
+    /// <summary>Each condition of the test with its live reading (spec 6); empty for the link test.</summary>
     public IReadOnlyList<ReadyCheck> Checks => _checks;
 
     /// <summary>"Waiting for full throttle…", "Running", "Done", "Incomplete: pedal lifted at 5210 rpm" and the like.</summary>
@@ -211,8 +211,8 @@ public sealed class PerfRun
     }
 
     /// <summary>
-    /// The link to the car is gone: a run with a window ends incomplete with what it measured and the flag
-    /// "link-lost", except a standing start that had reached 100 km/h, which is complete with what it reached and
+    /// The link to the car is gone (review focus 1): a run with a window ends incomplete with what it measured and the flag
+    /// "link-lost", except a standing start that had reached 100 km/h, which is complete with what it reached (spec 6.4) and
     /// says so in a note; anything else, waiting included, is cancelled.
     /// </summary>
     public void LinkLost()
@@ -252,10 +252,10 @@ public sealed class PerfRun
 
     private string Unit => RollOn || Spec.Kind == PerfTestKind.StandingStart ? "km/h" : "rpm";
 
-    // Pulls wait 200 to 700 rpm below the start, roll-ons 5 to 15 km/h below it.
+    // Pulls wait 200 to 700 rpm below the start, roll-ons 5 to 15 km/h below it (spec 6.1, 6.3).
     private (double Far, double Near) Window => RollOn ? (15d, 5d) : (700d, 200d);
 
-    // A roll-on's speed held within 2 km/h for 1 s (steady below the start speed); a pull needs no steadiness.
+    // A roll-on's speed held within 2 km/h for 1 s (spec 6.3: steady below the start speed); a pull needs no steadiness.
     private bool Steady(PerfFrame frame, double? measure)
     {
         if (!RollOn)
@@ -295,7 +295,7 @@ public sealed class PerfRun
             _checks = PullChecks(frame, measure, warm, inGear, ready, released);
 
             // Ready is judged with the pedal released and holds while it goes down, however slowly; only full throttle
-            // below the start level starts the run. Full throttle that comes at or above it cannot be timed from the
+            // below the start level starts the run (spec 6). Full throttle that comes at or above it cannot be timed from the
             // start: the run says so until the pedal is lifted.
             var held = warm && _pedalCalibrated && inGear;
             var wasArmed = _armed;
@@ -350,7 +350,7 @@ public sealed class PerfRun
             return;
         }
 
-        // Incomplete: two samples below full throttle, the clutch or the brake, another gear, or the revs falling
+        // Incomplete (spec 6): two samples below full throttle, the clutch or the brake, another gear, or the revs falling
         // 100 below their peak.
         if (PedalShare(frame) is { } share)
         {
@@ -427,7 +427,7 @@ public sealed class PerfRun
 
             var stopped = speed <= 0 && _stoppedSince is { } since && frame.At - since >= StoppedFor;
             _checks = StandingChecks(frame, warm, stopped);
-            // Running at the first moving sample after a stop of 1 s.
+            // Running at the first moving sample after a stop of 1 s (spec 6.4).
             if (speed > 0 && wasArmed && warm)
             {
                 StartRunning(frame);
@@ -516,7 +516,7 @@ public sealed class PerfRun
         if (fast && inGear && light && frame.Rpm > 0)
         {
             var (gear, kmh, rpm) = (frame.Gear!.Value, frame.SpeedKmh!.Value, frame.Rpm!.Value);
-            // Steady: within 1 km/h and 50 rpm of where the stretch began, in one gear.
+            // Steady: within 1 km/h and 50 rpm of where the stretch began, in one gear (spec 6.5).
             if (_steady is not { } stretch || stretch.Gear != gear || Math.Abs(kmh - stretch.Kmh) > SteadyKmh || Math.Abs(rpm - stretch.Rpm) > SteadyRpm)
             {
                 _steady = (gear, kmh, rpm, frame.At);
@@ -575,7 +575,7 @@ public sealed class PerfRun
             PedalReading = Math.Max(PedalReading ?? reading, reading);
         }
 
-        // Read with the ignition on and the engine off: held within 1 % of the highest reading for 2 s.
+        // Read with the ignition on and the engine off (spec 4.4): held within 1 % of the highest reading for 2 s.
         var off = frame.Rpm is not { } rpm || rpm <= 0;
         var peak = PedalReading ?? 0;
         var near = off && frame.Pedal is { } pedal && peak >= MinFullPedal && pedal >= peak * (1 - PedalBand);
@@ -645,7 +645,7 @@ public sealed class PerfRun
         return _windowStart;
     }
 
-    // The time the measure crossed level between the last frame before index that has one and index.
+    // The time the measure crossed level between the last frame before index that has one and index (spec 4.6).
     private double CrossingInto(int index, double level)
     {
         var at = _frames[index].At.TotalSeconds;
@@ -665,7 +665,7 @@ public sealed class PerfRun
         return at;
     }
 
-    // Time zero of a standing start: a line through 3 to 20 km/h, taken at 0 km/h.
+    // Time zero of a standing start: a line through 3 to 20 km/h, taken at 0 km/h (spec 6.4).
     private double? FitStart()
     {
         var from = Math.Max(_windowStart - 1, 0);
@@ -687,7 +687,7 @@ public sealed class PerfRun
         Finish(false, reason, endIndex);
     }
 
-    // A standing start is complete when it reached 100 km/h by the end of its window.
+    // A standing start is complete when it reached 100 km/h by the end of its window (spec 6.4).
     private void StandingEnd(string reason, int endIndex)
     {
         if (endIndex < _windowStart)
@@ -742,7 +742,7 @@ public sealed class PerfRun
         }
         else if (linkLost)
         {
-            // A standing start past 100 km/h: what it reached stands.
+            // A standing start past 100 km/h: what it reached stands (spec 6.4).
             flags.Add(new RunFlag("link-lost", FlagSeverity.Info, $"{char.ToUpperInvariant(reason![0])}{reason[1..]}: the times it reached are kept."));
         }
 
@@ -769,7 +769,7 @@ public sealed class PerfRun
 
     private IEnumerable<RunFlag> RunFlags()
     {
-        // A run made anyway with the coolant red is kept but not comparable; cold or unreported oil makes it doubtful.
+        // A run made anyway with the coolant red is kept but not comparable; cold or unreported oil makes it doubtful (spec 5).
         if (_sawCold)
         {
             yield return new RunFlag("cold", FlagSeverity.Cold, "Engine cold: not comparable.");
@@ -799,7 +799,7 @@ public sealed class PerfRun
         }
     }
 
-    // The warm-up state over the run, read from the shared monitor the caller feeds.
+    // The warm-up state over the run, read from the shared monitor the caller feeds (spec 5).
     private void Watch(PerfFrame frame)
     {
         _sawCold |= _warmUp.CoolantCold;
@@ -823,7 +823,7 @@ public sealed class PerfRun
             return;
         }
 
-        // Waiting keeps 2 s and the frame just before them: the pre-roll a result stores.
+        // Waiting keeps 2 s and the frame just before them: the pre-roll a result stores (spec 8).
         var cut = 0;
         while (cut + 1 < _frames.Count && _frames[cut + 1].At <= frame.At - PreRoll)
         {
@@ -881,7 +881,7 @@ public sealed class PerfRun
     }
 
     // What a pull-type test times: rpm, or for a roll-on the speed from rpm when calibrated, else VS; a standing start times
-    // VS. VS carries any GPS correction of the speed calibration.
+    // VS. VS carries any GPS correction of the speed calibration (spec 4.5, 6.3, 6.5).
     private double? Measure(PerfFrame frame) => Spec.Kind switch
     {
         PerfTestKind.RollOn => _rollOnSpeed(frame),
@@ -893,7 +893,7 @@ public sealed class PerfRun
 
     private double? PedalShare(PerfFrame? frame) => _pedalCalibrated && frame?.Pedal is { } pedal ? 100 * pedal / _inputs.FullPedal : null;
 
-    // A coolant reading and no red banner.
+    // A coolant reading and no red banner (spec 5).
     private bool Warm(PerfFrame? frame) => frame?.CoolantC is not null && !_warmUp.CoolantCold;
 
     private Conditions ConditionsOf(PerfFrame frame) => new(frame.CoolantC, _warmUp.OilUnreported ? null : frame.OilC, frame.IntakeC,
@@ -902,7 +902,7 @@ public sealed class PerfRun
     private static double Share(double part, double whole) => whole > 0 && double.IsFinite(part / whole) ? Math.Clamp(part / whole, 0, 1) : 0;
 
     // Full throttle is no check: it cannot be met together with "Pedal released", and the status asks for it once the checks
-    // are met.
+    // are met (minor review, finding 38).
     private IReadOnlyList<ReadyCheck> PullChecks(PerfFrame? frame, double? measure, bool warm, bool inGear, bool ready, bool released)
     {
         var pedal = PedalText(frame);

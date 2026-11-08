@@ -176,7 +176,7 @@ public sealed class SaveTests : IDisposable
             File.ReadAllText(log));
     }
 
-    // The bin is in place before the log is appended: a log that cannot be written must not hide that.
+    // The bin is in place before the log is appended: a log that cannot be written must not hide that (final review, Important 1).
     [RealFileFact(TestData.CarBin, TestData.Xdf)]
     public void ALockedEditLogStillSavesTheBin()
     {
