@@ -1,0 +1,180 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:MS43Logger.AvaloniaApp"
+        xmlns:controls="using:MS43Logger.AvaloniaApp.Controls"
+        x:Class="MS43Logger.AvaloniaApp.Views.MapWindow"
+        x:DataType="local:MapWindowViewModel"
+        Title="{Binding Title}"
+        Icon="avares://MS43Logger.AvaloniaApp/Assets/ms43-tuner.ico"
+        MinWidth="520" MinHeight="360"
+        Background="{DynamicResource PaneBrush}"
+        ExtendClientAreaToDecorationsHint="True" ExtendClientAreaChromeHints="NoChrome" ExtendClientAreaTitleBarHeightHint="-1">
+
+    <!-- A table in a window of its own, as TunerPro opens them: the Tune pane's title, tools, grid and key line, nothing else. -->
+    <Window.Styles>
+        <Style Selector="controls|StrokeIcon#RestoreGlyph">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="Window.maximized controls|StrokeIcon#RestoreGlyph">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+        <Style Selector="Window.maximized controls|StrokeIcon#MaximizeGlyph">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="controls|MapGrid#MapGrid">
+            <Setter Property="HorizontalAlignment" Value="Left" />
+        </Style>
+        <Style Selector="controls|TableLayout#TableArea.centred controls|MapGrid#MapGrid">
+            <Setter Property="HorizontalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="StackPanel#KeyArea">
+            <Setter Property="Margin" Value="50,12,0,0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="controls|TableLayout#TableArea.centred StackPanel#KeyArea">
+            <Setter Property="Margin" Value="0,12,0,0" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="WrapPanel#KeyLine TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="WrapPanel#KeyLine TextBlock.dim">
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+        </Style>
+    </Window.Styles>
+
+    <!-- Maximized, a window without the system frame reaches past the screen by the frame's width (as MainWindow). -->
+    <Grid Name="RootGrid" RowDefinitions="Auto,*" Margin="{Binding $parent[Window].OffScreenMargin}">
+        <!-- The header stands in for the title bar, as on the main window: its background moves the window. -->
+        <Border Name="TitleBar" Height="48" Background="{DynamicResource FrameBrush}" BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="0,0,0,1"
+                Padding="16,0,146,0" PointerPressed="TitleBar_PointerPressed">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+                <controls:ItemGlyph Kind="{Binding Kind}" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource Ink2Brush}" />
+                <TextBlock Name="ItemTitle" Grid.Column="1" Classes="mono13" Text="{Binding Title}" VerticalAlignment="Center" Foreground="{DynamicResource Ink1Brush}" />
+                <!-- Capped, so a long XDF description does not set the window's opening width: the grid does. -->
+                <TextBlock Name="ItemDescription" Grid.Column="2" Classes="body" Margin="12,0,12,0" MaxWidth="360" HorizontalAlignment="Left"
+                           Text="{Binding Description}" Foreground="{DynamicResource Ink2Brush}"
+                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding Description}" />
+                <Border Name="ReadOnlyChip" Grid.Column="3" Classes="chip" VerticalAlignment="Center" IsVisible="{Binding IsReadOnlyItem}">
+                    <TextBlock Text="Read-only" />
+                </Border>
+            </Grid>
+        </Border>
+
+        <DockPanel Name="MapPane" Grid.Row="1" Margin="24,16,24,24" IsEnabled="{Binding !IsHeld}">
+            <Border Name="ErrorBanner" DockPanel.Dock="Top" Classes="banner warn" Margin="0,0,0,12" IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}">
+                <DockPanel>
+                    <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource WarnBrush}" Width="16" Height="16"
+                                         Margin="0,0,8,0" VerticalAlignment="Center" />
+                    <TextBlock Name="EditError" Classes="body" Text="{Binding ErrorMessage}" TextWrapping="Wrap" Foreground="{DynamicResource Ink1Brush}"
+                               VerticalAlignment="Center" />
+                </DockPanel>
+            </Border>
+            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12" IsVisible="{Binding IsReadOnlyItem}">
+                <controls:StrokeIcon Data="{StaticResource Icon.Info}" Margin="0,1,8,0" VerticalAlignment="Top" />
+                <TextBlock Name="ReadOnlyLine" Classes="body" Text="{Binding ReadOnlyReason}" TextWrapping="Wrap" Foreground="{DynamicResource Ink2Brush}" />
+            </DockPanel>
+            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12" IsVisible="{Binding IsAxis}">
+                <controls:StrokeIcon Data="{StaticResource Icon.Info}" Margin="0,1,8,0" VerticalAlignment="Top" />
+                <TextBlock Name="AxisRuleText" Classes="body" TextWrapping="Wrap" Foreground="{DynamicResource Ink2Brush}"
+                           Text="Breakpoints must not go down: an edit that makes one fall below its neighbour is refused." />
+            </DockPanel>
+
+            <!-- The Tune tab's cell tools, on this window's selection; Undo and Redo are the bin's. -->
+            <WrapPanel Name="ToolBar" DockPanel.Dock="Top" ItemSpacing="12" LineSpacing="8"
+                       IsEnabled="{Binding !IsReadOnlyItem}" ToolTip.Tip="{Binding ReadOnlyReason}" ToolTip.ShowOnDisabled="True">
+                <TextBox Name="ToolValue" Width="120" Height="32" Classes="data13 commits" Watermark="Value" Text="{Binding ToolValue}" KeyDown="ToolValue_KeyDown"
+                         AutomationProperties.Name="Value">
+                    <TextBox.InnerRightContent>
+                        <TextBlock Classes="meta" Text="{Binding Editor.Units}" VerticalAlignment="Center" Margin="6,0,10,0" />
+                    </TextBox.InnerRightContent>
+                </TextBox>
+                <Border Classes="toolgroup">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Name="SetTool" Content="Set" Tag="Set" Click="Tool_Click" ToolTip.Tip="Set the selected cells to the value (Enter)" />
+                        <Button Name="AddTool" Content="Add" Tag="Add" Click="Tool_Click" ToolTip.Tip="Add the value to the selected cells" />
+                        <Button Name="ScaleTool" Content="Scale %" Tag="Scale" Click="Tool_Click" ToolTip.Tip="Change the selected cells by that many percent" />
+                    </StackPanel>
+                </Border>
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <Border Classes="toolgroup">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Name="InterpolateTool" Content="Interpolate" Tag="Interpolate" Click="Tool_Click" IsEnabled="{Binding Editor.CanInterpolate}"
+                                    ToolTip.Tip="{Binding Editor.InterpolateTip}" ToolTip.ShowOnDisabled="True" />
+                            <Button Name="SmoothTool" Content="Smooth" Tag="Smooth" Click="Tool_Click" ToolTip.Tip="{Binding Editor.SmoothTip}" />
+                        </StackPanel>
+                    </Border>
+                    <Border Name="EditAxisSeg" Classes="seg" IsVisible="{Binding ShowsEditAxis}" AutomationProperties.Name="Interpolate and Smooth direction">
+                        <StackPanel Orientation="Horizontal" Spacing="2">
+                            <ToggleButton Name="EditAxisX" Classes="seg" Content="X" IsChecked="{Binding IsEditAxisX}"
+                                          ToolTip.Tip="Along each row: across the columns" AutomationProperties.Name="Along X" />
+                            <ToggleButton Name="EditAxisY" Classes="seg" Content="Y" IsChecked="{Binding IsEditAxisY}"
+                                          ToolTip.Tip="Along each column: across the rows" AutomationProperties.Name="Along Y" />
+                            <ToggleButton Name="EditAxisXY" Classes="seg" Content="XY" IsChecked="{Binding IsEditAxisXY}"
+                                          ToolTip.Tip="Both ways at once" AutomationProperties.Name="Along X and Y" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+                <Border Classes="toolgroup">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Name="UndoTool" Content="Undo" Click="Undo_Click" IsEnabled="{Binding CanUndo}" ToolTip.Tip="{Binding UndoTip}" ToolTip.ShowOnDisabled="True" />
+                        <Button Name="RedoTool" Content="Redo" Click="Redo_Click" IsEnabled="{Binding CanRedo}" ToolTip.Tip="{Binding RedoTip}" ToolTip.ShowOnDisabled="True" />
+                    </StackPanel>
+                </Border>
+            </WrapPanel>
+
+            <controls:TableLayout Name="TableArea" Margin="0,16,0,0" Classes.centred="{Binding CentreGrid}">
+                <StackPanel Name="AxisLine" Orientation="Horizontal" Spacing="8" Margin="50,0,0,4" Height="16" IsVisible="{Binding !CentreGrid}">
+                    <TextBlock Classes="label" Text="{Binding Editor.Values.X.Units}" VerticalAlignment="Center" />
+                    <TextBlock Classes="mono" FontSize="12" Text="{Binding Editor.Values.X.Name}" Foreground="{DynamicResource Ink3Brush}" VerticalAlignment="Center" />
+                </StackPanel>
+                <ScrollViewer HorizontalScrollBarVisibility="Auto">
+                    <controls:MapGrid Name="MapGrid" Editor="{Binding Editor}" VerticalAlignment="Top" />
+                </ScrollViewer>
+                <StackPanel Name="KeyArea" Spacing="4">
+                    <DockPanel IsVisible="{Binding Editor.Message, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource WarnBrush}" Width="14" Height="14"
+                                             Margin="0,1,8,0" VerticalAlignment="Top" />
+                        <TextBlock Name="EditMessage" Classes="body" Text="{Binding Editor.Message}" TextWrapping="Wrap" />
+                    </DockPanel>
+                    <WrapPanel Name="KeyLine" ItemSpacing="24" LineSpacing="4">
+                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding !Editor.IsTyping}">
+                            <Border Width="16" Height="12" CornerRadius="4" BorderThickness="2" BorderBrush="{DynamicResource Ink1Brush}" VerticalAlignment="Center" />
+                            <controls:NumberText Name="KeySelection" Value="{Binding Editor.SelectionText}" />
+                        </StackPanel>
+                        <controls:NumberText Name="KeyTyping" Value="{Binding Editor.TypingHint}" Foreground="{DynamicResource Ink1Brush}" IsVisible="{Binding Editor.IsTyping}" />
+                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding Editor.ChangedText, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <controls:StrokeIcon FillData="{StaticResource Mark.Changed}" Width="8" Height="8" Foreground="{DynamicResource Ink1Brush}" VerticalAlignment="Center" />
+                            <controls:NumberText Name="KeyChanged" Value="{Binding Editor.ChangedText}" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding LiveCursor.Readout, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <Ellipse Width="8" Height="8" StrokeThickness="1.5" Stroke="{DynamicResource Ink2Brush}" VerticalAlignment="Center" />
+                            <TextBlock Name="LiveReadout" Text="{Binding LiveCursor.Readout}" />
+                            <TextBlock Name="LiveUse" Text="{Binding LiveCursor.Use}" Classes.dim="{Binding LiveCursor.UseIsDim}" ToolTip.Tip="{Binding LiveCursor.UseDetail}"
+                                       IsVisible="{Binding LiveCursor.Use, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                        </StackPanel>
+                        <controls:NumberText Name="KeyUndo" Value="{Binding UndoTip}" IsVisible="{Binding CanUndo}" />
+                    </WrapPanel>
+                </StackPanel>
+            </controls:TableLayout>
+        </DockPanel>
+
+        <StackPanel Name="WindowButtons" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Height="47">
+            <Button Name="MinimizeButton" Classes="caption" Click="Minimize_Click" ToolTip.Tip="Minimize" AutomationProperties.Name="Minimize">
+                <controls:StrokeIcon Data="{StaticResource Icon.WindowMinimize}" />
+            </Button>
+            <Button Name="MaximizeButton" Classes="caption" Click="Maximize_Click" ToolTip.Tip="Maximize" AutomationProperties.Name="Maximize">
+                <Panel>
+                    <controls:StrokeIcon Name="MaximizeGlyph" Data="{StaticResource Icon.WindowMaximize}" />
+                    <controls:StrokeIcon Name="RestoreGlyph" Data="{StaticResource Icon.WindowRestore}" />
+                </Panel>
+            </Button>
+            <Button Name="CloseButton" Classes="caption close" Click="Close_Click" ToolTip.Tip="Close" AutomationProperties.Name="Close">
+                <controls:StrokeIcon Data="{StaticResource Icon.WindowClose}" />
+            </Button>
+        </StackPanel>
+    </Grid>
+</Window>

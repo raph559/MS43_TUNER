@@ -1,0 +1,6 @@
+# Assembler output and built bins: never committed.
+src/*.lst
+src/*.p
+src/*.hex
+*.bin
+__pycache__/

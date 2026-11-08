@@ -7,7 +7,7 @@ using MS43Logger.Core.Tuning;
 namespace MS43Logger.AvaloniaApp;
 
 /// <summary>
-/// One reading of Live's band (system 8): the first of its candidate channels the definition has, that channel's ADX
+/// One reading of Live's band: the first of its candidate channels the definition has, that channel's ADX
 /// title and unit, and the value of the last sample, null when the sample did not hold it.
 /// </summary>
 public class ReadoutViewModel : ViewModelBase
@@ -29,7 +29,7 @@ public class ReadoutViewModel : ViewModelBase
     /// <summary>The name used until a definition names the channel.</summary>
     public string Title { get; }
 
-    /// <summary>The band's rounding (system 3.3): rpm and speed whole, load and advance one decimal.</summary>
+    /// <summary>The band's rounding: rpm and speed whole, load and advance one decimal.</summary>
     public int Decimals { get; }
 
     /// <summary>ADX channel IDs this reading can show, first match wins (MS43X001 names, then stock names).</summary>
@@ -69,23 +69,47 @@ public class ReadoutViewModel : ViewModelBase
     /// <summary>The reading's unit, the channel's own where the definition gives one ("mg/stk").</summary>
     public string Unit { get => _unit; private set => SetField(ref _unit, value); }
 
+    /// <summary>The latest reading, for the bars, dials and gear; setting it shows its number too.</summary>
     public double? Value
     {
         get => _value;
-        set
+        set => SetValue(value, show: true);
+    }
+
+    /// <summary>
+    /// Takes a reading; its number shows now or at the next <see cref="ShowLatest"/>: the numbers change at most five times a
+    /// second, while the bars follow every sample.
+    /// </summary>
+    public void SetValue(double? value, bool show)
+    {
+        SetField(ref _value, value, nameof(Value));
+        if (show)
         {
-            if (SetField(ref _value, value))
-            {
-                OnPropertyChanged(nameof(Display));
-                OnPropertyChanged(nameof(HasValue));
-            }
+            ShowLatest();
         }
     }
 
-    public bool HasValue => Value is double value && double.IsFinite(value);
+    /// <summary>Shows the latest reading's number.</summary>
+    public void ShowLatest()
+    {
+        if (Nullable.Equals(_shown, _value) && _shownOnce)
+        {
+            return;
+        }
 
-    /// <summary>"2480", "112.4", or "n/a" when the last sample did not hold the channel.</summary>
-    public string Display => NumberFormat.Format(Value, Decimals);
+        _shown = _value;
+        _shownOnce = true;
+        OnPropertyChanged(nameof(Display));
+        OnPropertyChanged(nameof(HasValue));
+    }
+
+    private double? _shown;
+    private bool _shownOnce;
+
+    public bool HasValue => _shown is double value && double.IsFinite(value);
+
+    /// <summary>"2480", "112.4", or "n/a" when the last sample shown did not hold the channel.</summary>
+    public string Display => NumberFormat.Format(_shown, Decimals);
 
     /// <summary>Picks the channel from a definition's channels and takes its title and unit.</summary>
     public void Resolve(IReadOnlyList<AdxValueDefinition> channels, Func<string, string> units)
@@ -100,7 +124,7 @@ public class ReadoutViewModel : ViewModelBase
     }
 }
 
-/// <summary>One readout of the band with a scale: a bar in Tiles, a dial in Dials (system 8).</summary>
+/// <summary>One readout of the band with a scale: a bar in Tiles, a dial in Dials.</summary>
 public sealed class GaugeViewModel : ReadoutViewModel
 {
     private double? _redFrom;
@@ -161,7 +185,7 @@ public sealed class GaugeViewModel : ReadoutViewModel
 }
 
 /// <summary>
-/// One channel's samples over the trend window (system 5.6), by the time each arrived, for its sparkline. It holds up to
+/// One channel's samples over the trend window, by the time each arrived, for its sparkline. It holds up to
 /// 64 samples a second of the window; older ones drop out first.
 /// </summary>
 public sealed class SampleHistory

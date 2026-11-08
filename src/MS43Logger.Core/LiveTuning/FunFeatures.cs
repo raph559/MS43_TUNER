@@ -1,0 +1,77 @@
+using MS43Logger.Core.Tuning;
+
+namespace MS43Logger.Core.LiveTuning;
+
+/// <summary>Which of the Fun tab's features a connected ECU or an open bin has, in the tab's order.</summary>
+public static class FunFeatures
+{
+    public const string LaunchControl = "lc", NoLiftShift = "nls", RollingAntiLag = "ral", Hardcut = "hardcut", Pops = "pops", Blip = "blip";
+
+    public static IReadOnlyList<string> Order { get; } = [LaunchControl, NoLiftShift, RollingAntiLag, Hardcut, Pops, Blip];
+
+    /// <summary>The feature a settings group belongs to: V10's stabs to pops, its gears and ratios to the blip.</summary>
+    public static string? KeyOf(int mapIndex) => mapIndex switch
+    {
+        OverlayV6.LaunchControl => LaunchControl,
+        OverlayV6.NoLiftShift => NoLiftShift,
+        OverlayV6.RollingAntiLag => RollingAntiLag,
+        OverlayV8.Pops or OverlayV10.Stabs => Pops,
+        OverlayV10.Blip or OverlayV10.BlipGears or OverlayV10.BlipRatios => Blip,
+        _ => null,
+    };
+
+    /// <summary>The feature's main group, whose byte 0 is its switch.</summary>
+    public static int? MapIndexOf(string key) => key switch
+    {
+        LaunchControl => OverlayV6.LaunchControl,
+        NoLiftShift => OverlayV6.NoLiftShift,
+        RollingAntiLag => OverlayV6.RollingAntiLag,
+        Pops => OverlayV8.Pops,
+        Blip => OverlayV10.Blip,
+        _ => null,
+    };
+
+    /// <summary>
+    /// Every group the feature's page shows, its main group first: pops with V10's stabs (spec 7.2: shown inside "Pops &amp;
+    /// bangs"), the blip with its gears and ratios (spec 7.9: a switch per downshift on the blip's page). A group the ECU or
+    /// the bin lacks is left out by the caller.
+    /// </summary>
+    public static IReadOnlyList<int> MapIndicesOf(string key) => key switch
+    {
+        Pops => [OverlayV8.Pops, OverlayV10.Stabs],
+        Blip => [OverlayV10.Blip, OverlayV10.BlipGears, OverlayV10.BlipRatios],
+        _ => MapIndexOf(key) is { } index ? [index] : [],
+    };
+
+    /// <summary>Connected: the settings groups the verified catalogue holds (with their definitions), and the hardcut when the overlay has the limiter.</summary>
+    public static IReadOnlyList<string> Live(IEnumerable<int> groupsWithDefinitions, bool limiter)
+    {
+        var present = groupsWithDefinitions.Select(KeyOf).OfType<string>().ToHashSet();
+        if (limiter) present.Add(Hardcut);
+        return Order.Where(present.Contains).ToArray();
+    }
+
+    /// <summary>
+    /// Offline: LC, NLS and RAL when every field has its XDF constant; the hardcut when its three XDF items exist; pops when
+    /// the bin's overlay header reads version 8 or later; the blip from version 10.
+    /// </summary>
+    public static IReadOnlyList<string> Offline(CalibrationDocument bin, IReadOnlyList<OverlayMap>? groups = null)
+    {
+        ArgumentNullException.ThrowIfNull(bin);
+        var present = new HashSet<string>();
+        var version = OverlayVersionOf(bin);
+        foreach (var map in groups ?? OverlayV9.MapsFor(version, OverlayHeader.MinorIn(bin.Image.Bytes)).Where(m => m.ScalarGroup is not null).ToArray())
+        {
+            if (KeyOf(map.Index) is not { } key) continue;
+            if (key == Pops && version < OverlayV8.Version) continue;
+            if (key == Blip && version < OverlayV10.Version) continue;
+            if (LiveScalarDefinitions.ConstantsFor(map, bin.Xdf) is not null) present.Add(key);
+        }
+        if (LimiterInBin.Find(bin.Xdf) is not null) present.Add(Hardcut);
+        return Order.Where(present.Contains).ToArray();
+    }
+
+    /// <summary>The overlay version in the bin's header, or 0 when the bin has no live overlay.</summary>
+    public static int OverlayVersionOf(CalibrationDocument bin) =>
+        OverlayHeader.Parse(bin.Image.Bytes.Slice(OverlayContract.HeaderAddress & 0x7FFFF, 16).ToArray())?.Version ?? 0;
+}

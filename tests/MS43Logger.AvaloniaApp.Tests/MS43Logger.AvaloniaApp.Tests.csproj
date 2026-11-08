@@ -19,6 +19,9 @@
   <ItemGroup>
     <Compile Include="..\MS43Logger.Core.Tests\LivePayloads.cs" Link="LivePayloads.cs" />
     <Compile Include="..\MS43Logger.Core.Tests\SyntheticRuns.cs" Link="SyntheticRuns.cs" />
+    <Compile Include="..\MS43Logger.Core.Tests\Support\FakeOverlayEcu.cs" Link="Support\FakeOverlayEcu.cs" />
+    <Compile Include="..\MS43Logger.Core.Tests\Support\FakeOverlayV4Ecu.cs" Link="Support\FakeOverlayV4Ecu.cs" />
+    <Compile Include="..\MS43Logger.Core.Tests\Support\V10Groups.cs" Link="Support\V10Groups.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\MS43Logger.AvaloniaApp\MS43Logger.AvaloniaApp.csproj" />

@@ -8,31 +8,44 @@ namespace MS43Logger.AvaloniaApp;
 /// <summary>The window: header tabs, theme, and the screens.</summary>
 public sealed class ShellViewModel : ViewModelBase
 {
+    /// <summary>The V9 watch's coordinator: the map in front is the one the ECU records.</summary>
+    public MapWatchCoordinator Watch { get; }
+
     public const string LiveTab = "Live";
     public const string TuneTab = "Tune";
+    public const string LiveTuningTab = "Live tuning";
+    public const string FunTab = "Fun";
     public const string CompareTab = "Compare";
     public const string PerformanceTab = "Performance";
 
     private string _selectedTab = LiveTab;
     private System.Threading.Tasks.Task? _start;
 
-    public ShellViewModel(MainWindowViewModel live, TuneViewModel tune)
+    public ShellViewModel(MainWindowViewModel live, TuneViewModel tune, TimeProvider? time = null)
     {
         Live = live;
         Tune = tune;
         Compare = new CompareViewModel(tune);
         Performance = new PerformanceViewModel(live, tune);
+        // The edits are kept beside the settings, so a test's throw-away settings folder holds its own.
+        LiveTuning = new LiveTuningViewModel(live, tune, new MS43Logger.Core.LiveTuning.LiveEditStore(
+            System.IO.Path.Combine(tune.Settings.Folder, "live-edits.json")), time);
+        LiveTuning.LiveCursor.IsVisible = false;
+        Fun = new FunViewModel(tune, LiveTuning);
+        live.LiveMaps = () => LiveTuning.CsvCell;
+        live.DiagnosticsPaused = () => Performance.Run.IsRecording;
+        Performance.LiveTags = () => LiveTuning.LiveTagsIfAnyLive;
         Compare.ShowInTuneRequested += (_, item) =>
         {
             tune.SelectedItem = item;
             SelectedTab = TuneTab;
         };
         App.SetTheme(tune.Settings.Theme);
-        tune.LiveCursor.Trail = tune.Settings.CursorTrail;
+        tune.SetCursorTrail(tune.Settings.CursorTrail);
         live.Readouts = tune.Settings.Readouts;
         ApplyLiveSettings();
 
-        // The last port used is preselected while it is still plugged in (system 7.2); otherwise the first stays.
+        // The last port used is preselected while it is still plugged in; otherwise the first stays.
         if (tune.Settings.LastPort is { } port && live.AvailablePorts.Contains(port))
         {
             live.SelectedPort = port;
@@ -65,8 +78,8 @@ public sealed class ShellViewModel : ViewModelBase
                 OnPropertyChanged(nameof(ConnectIsPrimary));
                 if (!live.IsConnected)
                 {
-                    tune.LiveCursor.Clear();
-                    // A run ends incomplete with what it measured (review focus 1).
+                    tune.ClearLive();
+                    // A run ends incomplete with what it measured.
                     Performance.LinkLost();
                 }
                 else if (live.SelectedPort is { Length: > 0 } connected && connected != tune.Settings.LastPort)
@@ -77,11 +90,11 @@ public sealed class ShellViewModel : ViewModelBase
             }
         };
 
-        live.SampleShown += (_, sample) => tune.LiveCursor.Push(sample, live.CurrentDefinition);
-        // On every tab, so a run survives switching tabs; Live has already fed its warm-up monitor the same frame (performance
-        // spec 5).
+        live.SampleShown += (_, sample) => tune.PushSample(sample, live.CurrentDefinition);
+        live.SampleShown += (_, sample) => LiveTuning.Push(sample, live.CurrentDefinition);
+        // On every tab, so a run survives switching tabs; Live has already fed its warm-up monitor the same frame.
         live.SampleShown += (_, sample) => Performance.Push(sample, live.LastFrame, live.CurrentDefinition);
-        // A finished run to save takes the primary from Connect (minor review, findings 20 and 33).
+        // A finished run to save takes the primary from Connect.
         Performance.Run.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(PerformanceRunViewModel.CanSave))
@@ -90,6 +103,12 @@ public sealed class ShellViewModel : ViewModelBase
             }
         };
         tune.LiveCursor.IsVisible = IsTune;
+        // With a V9 ECU, one watch follows the table in front: the Tune tab's, Live tuning's or a focused map window's.
+        Watch = new MapWatchCoordinator(() => live.Watch);
+        tune.LiveCursor.Coordinator = Watch;
+        LiveTuning.LiveCursor.Coordinator = Watch;
+        if (tune.LiveCursor.IsVisible) Watch.Activate(tune.LiveCursor);
+        live.LineChanged += (_, _) => Watch.Send();
 
         tune.DocumentOpened += (_, _) =>
         {
@@ -105,7 +124,7 @@ public sealed class ShellViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Reopens the last bin at start when the Settings switch says so (system 5.12). A missing bin or XDF leaves the
+    /// Reopens the last bin at start when the Settings switch says so. A missing bin or XDF leaves the
     /// empty Tune screen with a banner naming the missing file; no file picker opens at start. Runs once: every caller
     /// gets the same task.
     /// </summary>
@@ -140,6 +159,10 @@ public sealed class ShellViewModel : ViewModelBase
 
     public PerformanceViewModel Performance { get; }
 
+    public LiveTuningViewModel LiveTuning { get; }
+
+    public FunViewModel Fun { get; }
+
     public string SelectedTab
     {
         get => _selectedTab;
@@ -149,13 +172,17 @@ public sealed class ShellViewModel : ViewModelBase
             {
                 OnPropertyChanged(nameof(IsLive));
                 OnPropertyChanged(nameof(IsTune));
+                OnPropertyChanged(nameof(IsLiveTuning));
+                OnPropertyChanged(nameof(IsFun));
                 OnPropertyChanged(nameof(IsCompare));
                 OnPropertyChanged(nameof(IsPerformance));
                 OnPropertyChanged(nameof(ConnectIsPrimary));
                 OnPropertyChanged(nameof(SaveIsPrimary));
                 Tune.LiveCursor.IsVisible = IsTune;
+                LiveTuning.LiveCursor.IsVisible = IsLiveTuning;
                 Compare.IsVisible = IsCompare;
                 Performance.IsVisible = IsPerformance;
+                Fun.IsVisible = IsFun;
             }
         }
     }
@@ -184,6 +211,38 @@ public sealed class ShellViewModel : ViewModelBase
             if (value)
             {
                 SelectedTab = TuneTab;
+            }
+            else
+            {
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool IsLiveTuning
+    {
+        get => SelectedTab == LiveTuningTab;
+        set
+        {
+            if (value)
+            {
+                SelectedTab = LiveTuningTab;
+            }
+            else
+            {
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool IsFun
+    {
+        get => SelectedTab == FunTab;
+        set
+        {
+            if (value)
+            {
+                SelectedTab = FunTab;
             }
             else
             {
@@ -259,7 +318,7 @@ public sealed class ShellViewModel : ViewModelBase
     public void SettingsChanged()
     {
         Tune.SettingsChanged();
-        Tune.LiveCursor.Trail = Tune.Settings.CursorTrail;
+        Tune.SetCursorTrail(Tune.Settings.CursorTrail);
         ApplyLiveSettings();
         SettingsApplied?.Invoke(this, EventArgs.Empty);
     }
@@ -274,7 +333,7 @@ public sealed class ShellViewModel : ViewModelBase
 
     /// <summary>
     /// Connect is the screen's one primary action on Live and on Performance, where a test needs the link, and only until
-    /// connected (system 5.1, performance spec 9.1); on Performance a finished run to save keeps Save result the primary.
+    /// connected; on Performance a finished run to save keeps Save result the primary.
     /// </summary>
     public bool ConnectIsPrimary => (IsLive || (IsPerformance && !Performance.Run.CanSave)) && !Live.IsConnected;
 

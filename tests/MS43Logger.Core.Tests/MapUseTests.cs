@@ -23,6 +23,46 @@ public class MapUseTests
 
     private static string Text(string title, params (int, byte)[] bytes) => Use(Car().Image, title, bytes).Text;
 
+    private static MapUse? ZeroShare(BinImage image, string title, params (int Offset, byte Value)[] bytes)
+    {
+        var table = Ms43xTables.Value.Single(t => t.Title == title);
+        return MapUseBinding.Resolve(Rules, image, table.Z.Data.Address!.Value).ZeroShare(Ms43x, LivePayloads.Build(Ms43x, bytes));
+    }
+
+    [RealFileFact(TestData.CarBin, TestData.Xdf)] // the car's flex-fuel substitutes are 0 %: its E85 maps are read but count for nothing
+    public void AZeroShareIsKnownWhateverTheStateCase()
+    {
+        var image = Car().Image;
+        var partLoad = ZeroShare(image, "ip_iga_e85_pl__n__maf", (State, 0x04));                 // the case uses the blend
+        Assert.Equal(MapUseState.NotInUse, partLoad!.State);
+        Assert.Equal("Not in use · RON98 100 %", partLoad.Text);
+        Assert.Equal("Not in use · RON98 100 %", ZeroShare(image, "ip_af_target_e85__maf__n", (State, 0x04))?.Text); // no enrichment
+        Assert.Equal("Not in use · RON98 100 %", ZeroShare(image, "ip_iga_ron91_pl__n__maf", (State, 0x04))?.Text);  // octane 0
+        Assert.Null(ZeroShare(image, "ip_iga_ron98_pl__n__maf", (State, 0x04)));
+        Assert.Null(ZeroShare(image, "ip_af_target_ron98__maf__n", (State, 0x04)));
+        Assert.Null(ZeroShare(image, "ip_iga_ron91_pl__n__maf", (State, 0x04), (Octane, 71)));
+        Assert.Null(ZeroShare(image, "id_t_tco_puc_deacc__tco", (State, 0x04)));               // no rule
+    }
+
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void WithTheE85SubstitutesAtOneThePetrolMapsHaveTheZeroShare()
+    {
+        var image = Car().Image.Clone();
+        image.WriteElement(new XdfData(0x70A10, 8, false, true, 1, 1, null), 0, 160);
+        image.WriteElement(new XdfData(0x70A11, 8, false, true, 1, 1, null), 0, 160);
+        Assert.Null(ZeroShare(image, "ip_iga_e85_pl__n__maf", (State, 0x04)));
+        Assert.Equal("Not in use · E85 100 %", ZeroShare(image, "ip_iga_ron98_pl__n__maf", (State, 0x04))?.Text);
+        Assert.Equal("Not in use · E85 100 %", ZeroShare(image, "ip_af_target_ron98__maf__n", (State, 0x04))?.Text);
+    }
+
+    [RealFileFact(TestData.CarBin, TestData.Xdf)]
+    public void AShareThatCannotBeToldIsNoZeroShare()
+    {
+        var image = Car().Image.Clone();
+        image.WriteElement(new XdfData(0x70DF8, 8, false, true, 1, 1, null), 0, 1);             // flex fuel on: not modelled
+        Assert.Null(ZeroShare(image, "ip_iga_e85_pl__n__maf", (State, 0x04)));
+    }
+
     [RealFileFact(TestData.CarBin, TestData.Xdf)]
     public void VeBlendFollowsActiveVe()
     {

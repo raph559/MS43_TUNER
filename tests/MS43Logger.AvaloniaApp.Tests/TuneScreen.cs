@@ -14,7 +14,7 @@ internal static class TuneScreen
     public static async Task<(MainWindow Window, ShellViewModel Shell)> OpenAsync(string? select = "ip_iga_ron98_pl__n__maf", string? binPath = null, TimeProvider? time = null)
     {
         var folder = Path.Combine(Path.GetTempPath(), "ms43-ui-" + Guid.NewGuid().ToString("N"));
-        var shell = new ShellViewModel(new MainWindowViewModel(ports: () => ["COM1"]), new TuneViewModel(AppSettings.Load(folder), time));
+        var shell = new ShellViewModel(new MainWindowViewModel(ports: () => ["COM1"]), new TuneViewModel(AppSettings.Load(folder), time), time);
         var window = new MainWindow(shell);
         shell.SelectedTab = ShellViewModel.TuneTab;
         window.Show();

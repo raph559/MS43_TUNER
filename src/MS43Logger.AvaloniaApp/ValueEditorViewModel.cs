@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using MS43Logger.Core.LiveTuning;
 using MS43Logger.Core.Tuning;
 
 namespace MS43Logger.AvaloniaApp;
@@ -32,7 +33,8 @@ public sealed class ValueEditorViewModel : ViewModelBase, IDisposable
         _document = document ?? throw new ArgumentNullException(nameof(document));
         _history = history ?? throw new ArgumentNullException(nameof(history));
         Item = item ?? throw new ArgumentNullException(nameof(item));
-        Choices = item is XdfConstant constant ? catalog.Choices(constant)?.Select(choice => new ChoiceItem(choice.Value, choice.Label)).ToList() : null;
+        // The choices as this bin's overlay reads them (V9 names its LC/NLS/RAL triggers).
+        Choices = item is XdfConstant constant ? catalog.Choices(constant, OverlayHeader.VersionIn(document.Image.Bytes))?.Select(choice => new ChoiceItem(choice.Value, choice.Label)).ToList() : null;
         Limits = item is XdfConstant limited
             ? EditLimits.For(document.Reader.Codec, limited.Math, limited.Data, limited.RangeLow, limited.RangeHigh)
             : new EditLimits(0, 1, 1, null, null);
@@ -297,11 +299,21 @@ public sealed class ValueEditorViewModel : ViewModelBase, IDisposable
 
     public void Dispose() => _document.Changed -= OnDocumentChanged;
 
+    /// <summary>Refuses an edit before it is applied: the reason, or null to apply it (the Fun tab's firmware limits offline).</summary>
+    public Func<EditPlan, string?>? Guard { get; set; }
+
     private bool Write(Func<EditPlan> plan, string label)
     {
         try
         {
             var edit = plan();
+            if (edit.Changes.Count > 0 && Guard?.Invoke(edit) is { } refused)
+            {
+                Message = refused;
+                Read();
+                return false;
+            }
+
             _history.Apply(edit, label);
             Message = edit.Warnings.Count > 0 ? string.Join(" ", edit.Warnings) : edit.Changes.Count == 0 ? "Nothing changed: it already holds that value." : null;
             return edit.Changes.Count > 0;

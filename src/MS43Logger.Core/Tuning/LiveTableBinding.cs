@@ -21,8 +21,11 @@ public sealed class LiveTableBinding
 
     private readonly ValueCodec _codec;
 
-    private LiveTableBinding(XdfTable table, ValueCodec codec, MapUseBinding use, string? reason, LiveAxisBinding? row, LiveAxisBinding? col, bool interpolates)
+    private LiveTableBinding(XdfTable table, ValueCodec codec, MapUseBinding use, string? reason, LiveAxisBinding? row, LiveAxisBinding? col, bool interpolates,
+        (IReadOnlyList<long>? Breakpoints, int Bits) rowAxis = default, (IReadOnlyList<long>? Breakpoints, int Bits) colAxis = default)
     {
+        (RowBreakpoints, RowBits) = rowAxis;
+        (ColBreakpoints, ColBits) = colAxis;
         Table = table;
         Use = use;
         _codec = codec;
@@ -44,6 +47,19 @@ public sealed class LiveTableBinding
     public LiveAxisBinding? Col { get; }
 
     public bool Interpolates { get; }
+
+    /// <summary>
+    /// The breakpoints the ECU searches the rows with, from the code catalogue, whether or not the logger carries the input:
+    /// a V9 watch record's inputs go through them. Null when the catalogue does not list the table's axes.
+    /// </summary>
+    public IReadOnlyList<long>? RowBreakpoints { get; }
+
+    /// <summary>The row axis's element bits (8 or 16); 0 without one.</summary>
+    public int RowBits { get; }
+
+    public IReadOnlyList<long>? ColBreakpoints { get; }
+
+    public int ColBits { get; }
 
     /// <summary>Whether the ECU is using the table, evaluated with every <see cref="Locate"/>.</summary>
     public MapUseBinding Use { get; }
@@ -103,20 +119,25 @@ public sealed class LiveTableBinding
             return NoInput(Mismatch);
         }
 
+        // The searched axes, kept for the V9 watch even when the logger cannot feed them.
+        var axes = (Row: rowAxis is null ? default : (ReadBreakpoints(document.Image, rowAxis), rowAxis.ElementBits),
+            Col: colAxis is null ? default : (ReadBreakpoints(document.Image, colAxis), colAxis.ElementBits));
+        LiveTableBinding Unlogged(string why) => new(table, codec, use, why, null, null, catalog.Interpolates, axes.Row, axes.Col);
+
         string? reason = null;
         var row = rowAxis is null ? null : Bind(map, document.Image, rowAxis, "rows", AxisDisplay(document.Xdf, table.Y), out reason);
         if (rowAxis is not null && row is null)
         {
-            return NoInput(reason!);
+            return Unlogged(reason!);
         }
 
         var col = colAxis is null ? null : Bind(map, document.Image, colAxis, "columns", AxisDisplay(document.Xdf, table.X), out reason);
         if (colAxis is not null && col is null)
         {
-            return NoInput(reason!);
+            return Unlogged(reason!);
         }
 
-        return new LiveTableBinding(table, codec, use, null, row, col, catalog.Interpolates);
+        return new LiveTableBinding(table, codec, use, null, row, col, catalog.Interpolates, axes.Row, axes.Col);
     }
 
     /// <summary>An axis table is not read as data by the ECU; it gets a cursor when every table using it searches it with the same input.</summary>
@@ -263,6 +284,43 @@ public sealed class LiveTableBinding
         AxisPosition? col = Col is { } c ? Read(adx, c, payload, inputs) : null;
         var cells = CellWeights.Around(row, col, physical.GetLength(0), physical.GetLength(1));
         return new CursorFix(row, col, cells, CellWeights.Interpolate(physical, cells), inputs, Axes.Any(axis => axis.Source.Approximate), Use.Evaluate(adx, payload));
+    }
+
+    /// <summary>
+    /// The cursor from a V9 watch record of this table. Indices are the library's search result: the index and a 16-bit
+    /// fraction (none for a table that does not interpolate). Inputs are the lookup's raw R13/R14, searched on the catalogue's
+    /// axes, the low byte only on an 8-bit axis. A curve's one position goes on the table's one axis. The use is "In use":
+    /// the record's count says whether the ECU is still reading the table.
+    /// </summary>
+    public CursorFix LocateWatched(LiveTuning.WatchRecord record, double[,] physical)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        ArgumentNullException.ThrowIfNull(physical);
+        AxisPosition Index(ushort index, ushort fraction) => new(index, Interpolates ? fraction / 65536.0 : 0, 0);
+        AxisPosition Input(IReadOnlyList<long>? breakpoints, int bits, ushort input) =>
+            AxisSearch.Find(breakpoints ?? throw new InvalidOperationException("The code catalogue does not list this table's axes."),
+                bits == 8 ? input & 0xFF : input, Interpolates);
+        var data = Table.Z.Data;
+        AxisPosition? row = null, col = null;
+        switch (record.Kind)
+        {
+            case LiveTuning.WatchKind.MapIndices:
+                row = Index(record.Row, record.RowFraction); col = Index(record.Column, record.ColumnFraction);
+                break;
+            case LiveTuning.WatchKind.MapInputs:
+                row = Input(RowBreakpoints, RowBits, record.Row); col = Input(ColBreakpoints, ColBits, record.Column);
+                break;
+            case LiveTuning.WatchKind.CurveIndex or LiveTuning.WatchKind.CurveInput:
+                var one = record.Kind == LiveTuning.WatchKind.CurveIndex ? Index(record.Row, record.RowFraction)
+                    : data.Rows > 1 ? Input(RowBreakpoints, RowBits, record.Row) : Input(ColBreakpoints, ColBits, record.Row);
+                if (data.Rows > 1) row = one; else col = one;
+                break;
+            default:
+                throw new InvalidOperationException("The watch has recorded no read of this table yet.");
+        }
+        var cells = CellWeights.Around(row, col, physical.GetLength(0), physical.GetLength(1));
+        return new CursorFix(row, col, cells, CellWeights.Interpolate(physical, cells), Array.Empty<LiveReading>(), false,
+            new MapUse(MapUseState.InUse, "In use", Array.Empty<MapShare>(), null));
     }
 
     private AxisPosition Read(AdxDefinition adx, LiveAxisBinding axis, ReadOnlySpan<byte> payload, List<LiveReading> inputs)

@@ -4,7 +4,7 @@ using MS43Logger.Core.Tuning;
 
 namespace MS43Logger.Core.Tests;
 
-// Comparing two saved results is performance spec 9.2; the shapes and mismatch rules are the plan's (Task 8).
+// Comparing two saved results is performance spec 9.2; the shapes and mismatch rules are the plan's.
 public class PerfCompareTests
 {
     private static readonly AdxDefinition Ms43x = BundledDefinitions.Load("ms43x");
@@ -188,7 +188,7 @@ public class PerfCompareTests
         var unknown = Saved(outcome with { Start = start with { IntakeC = null } }, Inputs());
         Assert.Empty(PerfCompare.Compare(a, unknown, Inputs(), null).Mismatches);
 
-        // The same tune is no condition that differs: it is said apart, as a note (minor review, findings 14 and 68).
+        // The same tune is no condition that differs: it is said apart, as a note.
         var sameTune = PerfCompare.Compare(Saved(outcome, Inputs(), Tune("aa")), Saved(outcome, Inputs(), Tune("aa")), Inputs(), null);
         Assert.Empty(sameTune.Mismatches);
         Assert.True(sameTune.SameTune);
@@ -196,7 +196,7 @@ public class PerfCompareTests
         Assert.False(PerfCompare.Compare(Saved(outcome, Inputs(), Tune("aa")), Saved(outcome, Inputs(), Tune("bb")), Inputs(), null).SameTune);
     }
 
-    // Two gears, or two tests, are named, so their differences are not read as the tune's doing (minor review, finding 59).
+    // Two gears, or two tests, are named, so their differences are not read as the tune's doing.
     [Fact]
     public void DifferentGearsAreNamed()
     {
@@ -213,7 +213,7 @@ public class PerfCompareTests
     }
 
     // Roll-ons compared over the speeds they share are cut at the shared end, as pulls are: B's knock above A's end does not
-    // count (minor review, finding 60).
+    // count.
     [Fact]
     public void RollOnsAreCutAtTheSharedEnd()
     {
@@ -233,8 +233,7 @@ public class PerfCompareTests
         Assert.False(comparison.Recomputed);
     }
 
-    // A result decoded now with another logging definition than it was saved with is said apart from other car values (minor
-    // review, finding 11).
+    // A result decoded now with another logging definition than it was saved with is said apart from other car values.
     [Fact]
     public void ANewerDefinitionIsNoted()
     {
@@ -247,7 +246,7 @@ public class PerfCompareTests
     }
 
     // A result saved before injector duty, DME torque and the knock cylinder were traced still loads and compares; the
-    // recompute brings the new traces (minor review, finding 5).
+    // recompute brings the new traces.
     [Fact]
     public void AnOlderResultWithoutTheNewTracesCompares()
     {
@@ -274,7 +273,7 @@ public class PerfCompareTests
         Assert.False(comparison.Recomputed);
     }
 
-    // The retries of a link test are kept with its samples and read again from the file (minor review, finding 6).
+    // The retries of a link test are kept with its samples and read again from the file.
     [Fact]
     public void RetriesSurviveTheRoundTrip()
     {
@@ -300,8 +299,7 @@ public class PerfCompareTests
         Assert.Null(Value(PerfCompare.Recompute(older, Inputs()), "retries"));
     }
 
-    // A stock-definition pull, from its own payloads, through run, save, reload and compare: knock is n/a, never zero (minor
-    // review, finding 51).
+    // A stock-definition pull, from its own payloads, through run, save, reload and compare: knock is n/a, never zero.
     [Fact]
     public void AStockDefinitionPullGoesThroughToCompare()
     {
@@ -344,7 +342,8 @@ public class PerfCompareTests
         var a = Saved(outcome, Inputs(), TuneOf(before));
         var b = Saved(outcome, Inputs(), TuneOf(after));
 
-        var comparison = PerfCompare.Compare(a, b, Inputs(), xdf);
+        // The newer tune as A, as the app passes it: A − B is what the change did.
+        var comparison = PerfCompare.Compare(b, a, Inputs(), xdf);
 
         var table = Assert.Single(comparison.TableDifferences);
         Assert.Equal("fuel_map", table.Item.Title);
@@ -355,8 +354,7 @@ public class PerfCompareTests
         Assert.Empty(PerfCompare.Compare(a, a, Inputs(), xdf).TableDifferences);
         Assert.Null(comparison.TablesNote);
 
-        // Through another XDF than the runs were saved with, no table is listed and the note names the XDF they need
-        // (minor review, finding 12).
+        // Through another XDF than the runs were saved with, no table is listed and the note names the XDF they need.
         var a2 = Saved(outcome, Inputs(), TuneOf(before) with { XdfTitle = "MS43X001 v1.0" });
         var b2 = Saved(outcome, Inputs(), TuneOf(after) with { XdfTitle = "MS43X001 v1.0" });
         var other = PerfCompare.Compare(a2, b2, Inputs(), xdf);
@@ -367,8 +365,7 @@ public class PerfCompareTests
         Assert.Equal("The runs were saved with different XDFs (TEST and MS43X001 v1.0), so their tables are not compared.", mixed.TablesNote);
     }
 
-    // An empty table list always says why: no XDF open, or a snapshot that cannot be read, never "no table differs" (minor
-    // review, findings 12 and 13).
+    // An empty table list always says why: no XDF open, or a snapshot that cannot be read, never "no table differs".
     [Fact]
     public void TablesNoteSaysWhyNoneIsListed()
     {

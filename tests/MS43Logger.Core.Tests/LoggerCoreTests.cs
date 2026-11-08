@@ -31,7 +31,7 @@ public class LoggerCoreTests
         Assert.DoesNotContain(definition.Values, value => value.Id == "CHSTATE");
     }
 
-    // Tests read clutch, brake and warm-up bits by id; a bit the definition lacks is unknown, never off (performance spec 4.3).
+    // Tests read clutch, brake and warm-up bits by id; a bit the definition lacks is unknown, never off.
     [Fact]
     public void BitmasksDecodeFromThePayload()
     {
@@ -152,7 +152,7 @@ public class LoggerCoreTests
     public void SessionHandlesEchoAndExtractsPayload()
     {
         var definition = BundledDefinitions.Load("b30");
-        var fakePort = new FakeSerialPortAdapter("COM_TEST");
+        var fakePort = new ScriptedPort("COM_TEST");
         var connectExchange = definition.GetConnectExchange();
         var monitorExchange = definition.GetMonitorExchange();
         var disconnectExchange = definition.GetDisconnectExchange();
@@ -181,7 +181,7 @@ public class LoggerCoreTests
     public void SessionRetriesPollingAfterSingleTimeout()
     {
         var definition = BundledDefinitions.Load("b30");
-        var fakePort = new FakeSerialPortAdapter("COM_TEST");
+        var fakePort = new ScriptedPort("COM_TEST");
         var connectExchange = definition.GetConnectExchange();
         var monitorExchange = definition.GetMonitorExchange();
         var disconnectExchange = definition.GetDisconnectExchange();
@@ -201,7 +201,7 @@ public class LoggerCoreTests
         session.Disconnect();
 
         Assert.Equal(payload, loggedPayload);
-        // The reply answered the second request, sent once the first had timed out (final review, finding 2).
+        // The reply answered the second request, sent once the first had timed out.
         Assert.Equal(2, session.LastAttempts);
         Assert.True(System.Diagnostics.Stopwatch.GetElapsedTime(before, session.LastRequestTimestamp!.Value)
             >= TimeSpan.FromMilliseconds(monitorExchange.Response.ListenTimeout * 0.8));
@@ -256,101 +256,5 @@ public class LoggerCoreTests
 
         frame[^1] = checksum;
         return frame;
-    }
-
-    private sealed class FakeSerialPortAdapter : ISerialPortAdapter
-    {
-        private readonly Queue<byte[]> _queuedResponses = new();
-        private readonly Queue<byte> _receiveBuffer = new();
-        private int _baudRate;
-
-        public FakeSerialPortAdapter(string portName)
-        {
-            PortName = portName;
-        }
-
-        public string PortName { get; }
-
-        public bool IsOpen { get; private set; }
-
-        public List<byte[]> Writes { get; } = new();
-
-        public List<int> BaudHistory { get; } = new();
-
-        public int BaudRate
-        {
-            get => _baudRate;
-            set
-            {
-                _baudRate = value;
-                BaudHistory.Add(value);
-            }
-        }
-
-        public Parity Parity { get; set; }
-
-        public int DataBits { get; set; }
-
-        public StopBits StopBits { get; set; }
-
-        public int ReadTimeout { get; set; }
-
-        public int WriteTimeout { get; set; }
-
-        public void QueueWriteResponse(byte[] responseBytes)
-        {
-            _queuedResponses.Enqueue(responseBytes);
-        }
-
-        public void Open()
-        {
-            IsOpen = true;
-        }
-
-        public void Close()
-        {
-            IsOpen = false;
-        }
-
-        public void DiscardInBuffer()
-        {
-            _receiveBuffer.Clear();
-        }
-
-        public void DiscardOutBuffer()
-        {
-        }
-
-        public int ReadByte()
-        {
-            if (_receiveBuffer.Count == 0)
-            {
-                throw new TimeoutException();
-            }
-
-            return _receiveBuffer.Dequeue();
-        }
-
-        public void Write(byte[] buffer, int offset, int count)
-        {
-            var copy = new byte[count];
-            Buffer.BlockCopy(buffer, offset, copy, 0, count);
-            Writes.Add(copy);
-
-            if (_queuedResponses.Count == 0)
-            {
-                return;
-            }
-
-            foreach (var value in _queuedResponses.Dequeue())
-            {
-                _receiveBuffer.Enqueue(value);
-            }
-        }
-
-        public void Dispose()
-        {
-            IsOpen = false;
-        }
     }
 }

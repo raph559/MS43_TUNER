@@ -13,10 +13,10 @@ namespace MS43Logger.AvaloniaApp;
 /// <summary>A choice of the "Compare against" picker; "None" has no file.</summary>
 public sealed record BaselineChoice(string Text, string? FileName);
 
-/// <summary>One gear of the speed calibration: "3rd", km/h per 1000 rpm "22.3", the overall ratio "5.18" (performance spec 6.5).</summary>
+/// <summary>One gear of the speed calibration: "3rd", km/h per 1000 rpm "22.3", the overall ratio "5.18".</summary>
 public sealed record CalibrationRow(string Gear, string KmhPer1000, string OverallRatio);
 
-/// <summary>A ready check as the pane lists it; its tick and reading change in place as the samples come (minor review, finding 21).</summary>
+/// <summary>A ready check as the pane lists it; its tick and reading change in place as the samples come.</summary>
 public sealed class ReadyCheckRow : ViewModelBase
 {
     private bool _met;
@@ -43,7 +43,7 @@ public sealed class ReadyCheckRow : ViewModelBase
 }
 
 /// <summary>
-/// The Run side of the Performance tab for the test chosen on the rail (performance spec 6, 9.1): its options, Arm, the
+/// The Run side of the Performance tab for the test chosen on the rail: its options, Arm, the
 /// ready checks, the running view, and the result with Save, Discard and Run again; for the Setup group, the speed
 /// calibration, the car values and the pedal step. One run at a time, fed every sample Live shows, whichever tab is open.
 /// </summary>
@@ -54,10 +54,10 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     private const double MaxKmh = 250;
     private const string PedalFirst = "Calibrate the pedal first.";
     private const string PedalUnit = "°PVS";
-    // A cylinder's bar gets the warning icon and a line from this retard on (spec 9.2); the link test runs 30 s (spec 6.6).
+    // A cylinder's bar gets the warning icon and a line from this retard on; the link test runs 30 s.
     private const double KnockWarnFrom = 1.5;
     private const double LinkSeconds = 30;
-    // The live chart's time axis grows in whole steps past the baseline's length (minor review, finding 49).
+    // The live chart's time axis grows in whole steps past the baseline's length.
     private const double TimeStep = 5;
     // Samples count as stopped after this long without one, as the Tune curve's live cursor (LiveCursorController.StaleAfter).
     private static readonly TimeSpan SilentAfter = LiveCursorController.StaleAfter;
@@ -83,26 +83,27 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     private IReadOnlyList<Point>? _baselineTrace;
     private bool _canArm;
     private string? _armTip;
-    // The band as last loaded, so a reload knows what the owner typed over it.
+    // The band as last loaded, so a reload knows what the user typed over it.
     private string _loadedStartRpm = "";
     private string _loadedEndRpm = "";
     private string _loadedStartKmh = "";
     private string _loadedEndKmh = "";
 
-    // The run and what it was armed with (spec 8: the tune at arm time, the owner may switch bins before saving).
+    // The run and what it was armed with (the tune at arm time, the user may switch bins before saving).
     private PerfRun? _run;
     private PerformanceTestEntry? _runEntry;
     private AnalysisInputs? _runInputs;
     private TuneIdentity? _runTune;
+    private IReadOnlyList<string>? _armedLiveTags;
     private AdxDefinition? _runDefinition;
-    // The baseline taken at Arm stays with the run: its deltas, its choice and its trace (minor review, finding 62).
+    // The baseline taken at Arm stays with the run: its deltas, its choice and its trace.
     private RunFigures? _runBaseline;
     private BaselineChoice _runBaselineChoice = NoBaseline;
     private PerfResult? _runBaselineResult;
     private IReadOnlyList<Point>? _runBaselineTrace;
     private DateTimeOffset _lastArrival;
     // When the last sample reached the tab on the app's clock, and the whole seconds since while a run is on and none came
-    // for over SilentAfter (minor review, finding 42).
+    // for over SilentAfter.
     private DateTimeOffset? _lastSampleAt;
     private int? _silentSeconds;
     private DispatcherTimer? _sampleWatch;
@@ -144,7 +145,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
         LoadOptions();
     }
 
-    // ---- Options -----------------------------------------------------------------------------------------------------
+    // Options
 
     /// <summary>The gears the test runs in: 2nd to 4th for a pull, 4th for the knock check, 3rd or 4th for a roll-on.</summary>
     public IReadOnlyList<int> GearChoices
@@ -224,7 +225,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     public bool HasBaseline => _entry.Kind is PerfTestKind.Pull or PerfTestKind.KnockCheck or PerfTestKind.RollOn or PerfTestKind.StandingStart;
 
     /// <summary>
-    /// Defaults to the most recent (spec 6.1); a choice the owner made stays while it is still listed. While the shown test has
+    /// Defaults to the most recent; a choice the user made stays while it is still listed. While the shown test has
     /// a run, it is the baseline that run was armed with, until Discard or Run again.
     /// </summary>
     public BaselineChoice? SelectedBaseline
@@ -232,7 +233,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
         get => _selectedBaseline;
         set
         {
-            // The picker writes its selection back while its list is replaced: that is not the owner's choice.
+            // The picker writes its selection back while its list is replaced: that is not the user's choice.
             if (_listingBaselines)
             {
                 return;
@@ -287,7 +288,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
 
     public bool CanArm { get => _canArm; private set => SetField(ref _canArm, value); }
 
-    /// <summary>Why Arm is off, in a line the pane shows too (system 5.9); null while it is on.</summary>
+    /// <summary>Why Arm is off, in a line the pane shows too; null while it is on.</summary>
     public string? ArmTip
     {
         get => _armTip;
@@ -302,12 +303,12 @@ public sealed class PerformanceRunViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Arm waits for the pedal step, so the pane offers a way to it (spec 4.4).</summary>
+    /// <summary>Arm waits for the pedal step, so the pane offers a way to it.</summary>
     public bool NeedsPedal => ArmTip == PedalFirst;
 
     /// <summary>
     /// Arm shows until the chosen test has a run: then Cancel, or the result's Save, Discard and Run again take its place, so
-    /// the screen keeps one primary button (system 5.2).
+    /// the screen keeps one primary button.
     /// </summary>
     public bool ShowsArm => HasArm && Shown is not { Stage: RunStage.Waiting or RunStage.Running } && !HasResult;
 
@@ -317,7 +318,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     /// <summary>The line under the options that says why Arm is off, while Arm shows.</summary>
     public bool ShowsArmTip => ShowsArm && ArmTip is not null;
 
-    /// <summary>Arm is the screen's primary once connected; before that the header's Connect is (spec 9.1).</summary>
+    /// <summary>Arm is the screen's primary once connected; before that the header's Connect is.</summary>
     public bool ArmIsPrimary => _owner.Live.IsConnected;
 
     /// <summary>The gear, band and baseline of a waiting or running run cannot change.</summary>
@@ -325,18 +326,18 @@ public sealed class PerformanceRunViewModel : ViewModelBase
 
     /// <summary>
     /// Samples are arriving: live marks are orange; Ink3 once the link is lost or stale, or while a run is on and no sample came
-    /// for over a second (system 1.4).
+    /// for over a second.
     /// </summary>
     public bool IsLive => _owner.Live.IsConnected && !_owner.Live.IsStale && _silentSeconds is null;
 
-    /// <summary>The speed calibration and car values the test will use (spec 6.5: "speed not GPS-checked" when it was not).</summary>
+    /// <summary>The speed calibration and car values the test will use ("speed not GPS-checked" when it was not).</summary>
     public string? InputsText => HasResult && _runInputs is not null
         ? ResultText.InputsLine(_runInputs, _run!.Spec.Gear)
         : _entry.Kind is PerfTestKind.Pull or PerfTestKind.RollOn or PerfTestKind.StandingStart
             ? ResultText.InputsLine(_owner.CurrentInputs(), _entry.Kind == PerfTestKind.StandingStart ? null : SelectedGear)
             : null;
 
-    /// <summary>Live's warm-up banners, at the top of the pane (performance spec 5).</summary>
+    /// <summary>Live's warm-up banners, at the top of the pane.</summary>
     public ObservableCollection<WarmUpBannerViewModel> WarmUp => _owner.Live.WarmUpBanners;
 
     /// <summary>The latest sample's frame, as Live's warm-up monitor read it.</summary>
@@ -344,11 +345,11 @@ public sealed class PerformanceRunViewModel : ViewModelBase
 
     /// <summary>
     /// A line about what just happened on the shown test: the link lost, a calibration or pedal reading saved; null otherwise.
-    /// It stays with the test that raised it (minor review, finding 28).
+    /// It stays with the test that raised it.
     /// </summary>
     public string? Notice => ReferenceEquals(_noticeEntry, _entry) ? _notice : null;
 
-    /// <summary>Arm waits for a run of another test: the line under it offers a way to that test (minor review, finding 29).</summary>
+    /// <summary>Arm waits for a run of another test: the line under it offers a way to that test.</summary>
     public bool ShowsRunningTest => ShowsArmTip && _run is { Stage: RunStage.Waiting or RunStage.Running } && _runEntry is not null
         && !ReferenceEquals(_runEntry, _entry);
 
@@ -361,7 +362,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
         }
     }
 
-    // ---- The run -----------------------------------------------------------------------------------------------------
+    // The run
 
     /// <summary>The stage of the run of the chosen test; null when it has none (the options and Arm show).</summary>
     public RunStage? Stage => Shown?.Stage;
@@ -372,9 +373,12 @@ public sealed class PerformanceRunViewModel : ViewModelBase
 
     public bool IsRunning => Stage == RunStage.Running;
 
+    /// <summary>A run is waiting for its start or recording: the log's extra reads wait, so the samples keep the poll's timing.</summary>
+    internal bool IsRecording => _run is { Stage: RunStage.Waiting or RunStage.Running };
+
     public bool IsFinished => Stage == RunStage.Finished;
 
-    /// <summary>The ready checks: the same rows while their labels stay, changed in place (minor review, finding 21).</summary>
+    /// <summary>The ready checks: the same rows while their labels stay, changed in place.</summary>
     public IReadOnlyList<ReadyCheckRow> Checks
     {
         get
@@ -384,7 +388,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
         }
     }
 
-    /// <summary>The run's own status, or "No samples for 2 s." while it is on and none come (minor review, finding 42).</summary>
+    /// <summary>The run's own status, or "No samples for 2 s." while it is on and none come.</summary>
     public string? Status => _silentSeconds is { } silent && Shown is { Stage: RunStage.Waiting or RunStage.Running }
         ? $"No samples for {silent.ToString(System.Globalization.CultureInfo.InvariantCulture)} s."
         : Shown?.Status;
@@ -404,7 +408,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
 
     /// <summary>
     /// The live chart's time axis, held for the run: the baseline's length, or 5 s, then whole 5 s steps once the run passes
-    /// it, so the chart never rescales with each sample (minor review, finding 49).
+    /// it, so the chart never rescales with each sample.
     /// </summary>
     public double? LiveXMaximum
     {
@@ -427,7 +431,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
 
     public double? LiveYMaximum => LiveRpmRange?.To;
 
-    /// <summary>"Ignition 31.5 °CRK · VANOS in 112.0 °CRK · AFR target 12.8 · intake air 38 °C" from the latest sample (spec 6.1).</summary>
+    /// <summary>"Ignition 31.5 °CRK · VANOS in 112.0 °CRK · AFR target 12.8 · intake air 38 °C" from the latest sample.</summary>
     public string? LiveValuesText => Shown is null || _lastFrame is not { } frame
         ? null
         : string.Join(" · ",
@@ -489,14 +493,14 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     /// <summary>The elapsed time beside the reading; a link test's reading is its elapsed time.</summary>
     public bool ShowsElapsed => Shown?.Spec.Kind is not PerfTestKind.LinkTest;
 
-    /// <summary>The live values line and the rpm-against-time chart, for the tests that drive (spec 6.1).</summary>
+    /// <summary>The live values line and the rpm-against-time chart, for the tests that drive.</summary>
     public bool ShowsLiveChart => Shown?.Spec.Kind is PerfTestKind.Pull or PerfTestKind.KnockCheck or PerfTestKind.RollOn or PerfTestKind.StandingStart;
 
-    /// <summary>The definition logs knock per cylinder (not the stock ones: review focus 2), so the six bars show.</summary>
+    /// <summary>The definition logs knock per cylinder (not the stock ones), so the six bars show.</summary>
     public bool HasKnock => ShowsLiveChart && (_runDefinition ?? _owner.Definition) is { } definition
         && PerfChannels.Missing(definition, PerfTestKind.KnockCheck).Count == 0;
 
-    /// <summary>"Knock retard: cylinder 4 at 1.6 °CRK." for every cylinder at or past 1.5 °CRK (spec 9.2: never colour alone).</summary>
+    /// <summary>"Knock retard: cylinder 4 at 1.6 °CRK." for every cylinder at or past 1.5 °CRK (never colour alone).</summary>
     public string? KnockWarning => HasKnock ? ResultText.KnockLine(Knock, KnockWarnFrom) : null;
 
     /// <summary>The progress bar's scale: the run's rpm band, its speeds, or the link test's 30 s.</summary>
@@ -541,7 +545,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     /// <summary>"Baseline: 3rd pull 14:05", the dashed trace's legend; null without one.</summary>
     public string? BaselineLabel => _selectedBaseline.FileName is null || BaselineTrace is not { Count: > 0 } ? null : $"Baseline: {_selectedBaseline.Text}";
 
-    /// <summary>Arms the chosen test with its options: the tune, the car values and the band are taken now (spec 8, 9.2).</summary>
+    /// <summary>Arms the chosen test with its options: the tune, the car values and the band are taken now.</summary>
     public void Arm()
     {
         RefreshAvailability();
@@ -550,10 +554,11 @@ public sealed class PerformanceRunViewModel : ViewModelBase
             return;
         }
 
-        _runTune = TuneIdentity.From(_owner.Tune.Document, spec.Gear);
+        _armedLiveTags = _owner.LiveTags?.Invoke();
+        _runTune = TuneIdentity.From(_owner.Tune.Document, spec.Gear) is { } tune ? tune with { LiveMaps = _armedLiveTags } : null;
         if (spec.Kind is PerfTestKind.Pull or PerfTestKind.KnockCheck or PerfTestKind.RollOn)
         {
-            // The last band per preset is remembered, so before and after runs normally match (spec 9.2).
+            // The last band per preset is remembered, so before and after runs normally match.
             _owner.Settings.PerformanceBands[spec.Preset] = spec.Kind == PerfTestKind.RollOn
                 ? [spec.StartKmh!.Value, spec.EndKmh!.Value]
                 : [spec.StartRpm!.Value, spec.EndRpm!.Value];
@@ -587,7 +592,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     /// <summary>Stops a waiting or running test; nothing is kept.</summary>
     public void Cancel() => _run?.Cancel();
 
-    // ---- The result --------------------------------------------------------------------------------------------------
+    // The result
 
     public bool HasResult => Shown is { Stage: RunStage.Finished, Outcome: not null };
 
@@ -603,10 +608,10 @@ public sealed class PerformanceRunViewModel : ViewModelBase
 
     public bool HasResultKnock => ResultKnock is not null;
 
-    /// <summary>The line under the stored bars naming each cylinder at or past 1.5 °CRK, as the running view's (minor review, finding 34).</summary>
+    /// <summary>The line under the stored bars naming each cylinder at or past 1.5 °CRK, as the running view's.</summary>
     public string? ResultKnockText => ResultKnock is { } knock ? ResultText.KnockLine(knock, KnockWarnFrom) : null;
 
-    /// <summary>"Flags below: knock, oil cold" beside Save result, for when the flags are below the fold (minor review, finding 43).</summary>
+    /// <summary>"Flags below: knock, oil cold" beside Save result, for when the flags are below the fold.</summary>
     public string? FlagSummary => Flags.Where(flag => !flag.IsInfo).Select(flag => flag.Code.Replace('-', ' ')).Distinct().ToArray() is { Length: > 0 } codes
         ? $"Flags below: {string.Join(", ", codes)}"
         : null;
@@ -646,7 +651,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
         }
     }
 
-    /// <summary>"A" or "B", which way the road was driven (spec 7); null for one direction.</summary>
+    /// <summary>"A" or "B", which way the road was driven; null for one direction.</summary>
     public string? Direction
     {
         get => _direction;
@@ -680,8 +685,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Saved, and the name, description or direction changed since: Save changes writes them into the same file (minor review,
-    /// findings 61 and 64).
+    /// Saved, and the name, description or direction changed since: Save changes writes them into the same file.
     /// </summary>
     public bool HasChangesToSave => IsSaved && _run?.Outcome is { } outcome
         && (NameFor(outcome.Spec) != _savedName || Description.Trim() != _savedDescription || Direction != _savedDirection);
@@ -696,7 +700,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
 
     /// <summary>
     /// A finished run that is not saved, or saved with changes not written yet, whichever test the rail shows: closing the app
-    /// asks about it (spec 2).
+    /// asks about it.
     /// </summary>
     public bool HasUnsavedResult => _run is { Stage: RunStage.Finished, Outcome: not null } && (!IsSaved || HasChangesToSave);
 
@@ -707,7 +711,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     public string? SaveError { get => _saveError; private set => SetField(ref _saveError, value); }
 
     /// <summary>
-    /// Writes the result with its tune, conditions and samples to the results folder (spec 8), recorded with the definition
+    /// Writes the result with its tune, conditions and samples to the results folder, recorded with the definition
     /// that decoded its samples; once saved, writes a changed name, description or direction into the same file.
     /// </summary>
     public void Save()
@@ -733,7 +737,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
         }
         else
         {
-            // The variant of the definition the samples were decoded with, not the picker's (minor review, findings 58, 65, 70).
+            // The variant of the definition the samples were decoded with, not the picker's.
             if (BundledDefinitions.VariantOf(_runDefinition.SourceName) is not { } variant)
             {
                 SaveError = $"Not saved: the samples were decoded with {_runDefinition.SourceName}, which is not a bundled definition";
@@ -769,8 +773,8 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// True when the app may close: no finished run unsaved, it is saved now, or the owner chose not to keep it; otherwise only
-    /// Discard, Run again or arming another test drop one (spec 2).
+    /// True when the app may close: no finished run unsaved, it is saved now, or the user chose not to keep it; otherwise only
+    /// Discard, Run again or arming another test drop one.
     /// </summary>
     public async System.Threading.Tasks.Task<bool> ConfirmCloseAsync()
     {
@@ -816,7 +820,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
         Arm();
     }
 
-    // ---- Setup -------------------------------------------------------------------------------------------------------
+    // Setup
 
     public bool IsCalibration => _entry.Kind == PerfTestKind.SpeedCalibration;
 
@@ -845,7 +849,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     /// <summary>A gear is captured or saved, so the calibration table has rows.</summary>
     public bool HasCaptured => Captured.Count > 0;
 
-    /// <summary>The speed a phone's GPS showed, typed; the speedometer's reading is taken as it is typed (spec 6.5).</summary>
+    /// <summary>The speed a phone's GPS showed, typed; the speedometer's reading is taken as it is typed.</summary>
     public string GpsKmh
     {
         get => _gpsKmh;
@@ -864,7 +868,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
 
     /// <summary>
     /// Stores the captured gears in the settings, every one corrected by GPS / speedometer when both were typed, and ends the
-    /// capture (spec 6.5); the other gears keep their calibration.
+    /// capture; the other gears keep their calibration.
     /// </summary>
     public void SaveCalibration()
     {
@@ -878,13 +882,13 @@ public sealed class PerformanceRunViewModel : ViewModelBase
         foreach (var gear in gears)
         {
             _owner.Settings.KmhPerRpm[gear] = run.Captured[gear] * (factor ?? 1);
-            // VS stays the speedometer's reading, so the slip check needs the ratio it was captured with (spec 4.5).
+            // VS stays the speedometer's reading, so the slip check needs the ratio it was captured with.
             _owner.Settings.SpeedometerKmhPerRpm[gear] = run.Captured[gear];
         }
 
         foreach (var gear in gears)
         {
-            // Each gear keeps the check it was saved with (minor review, findings 9 and 23).
+            // Each gear keeps the check it was saved with.
             _owner.Settings.GpsChecked[gear] = factor is not null;
         }
 
@@ -1012,18 +1016,18 @@ public sealed class PerformanceRunViewModel : ViewModelBase
 
     public bool IsAutomatic { get => Automatic; set { if (value) { Automatic = true; } else { OnPropertyChanged(); } } }
 
-    /// <summary>"Full pedal reads 96.1 °PVS." once calibrated (spec 4.4), in the pedal's ADX unit (PVS and ACCELERATORPED alike).</summary>
+    /// <summary>"Full pedal reads 96.1 °PVS." once calibrated, in the pedal's ADX unit (PVS and ACCELERATORPED alike).</summary>
     public string PedalText => _owner.Settings.FullPedal is { } full
         ? $"Full pedal reads {NumberFormat.Format(full, 1)} {PedalUnit}."
         : "The pedal is not calibrated yet.";
 
-    // ---- Feeding -----------------------------------------------------------------------------------------------------
+    // Feeding
 
     internal void Select(PerformanceTestEntry entry)
     {
         _entry = entry;
         LoadOptions();
-        // Back on the run's own test, its baseline stays as picked (minor review, finding 62).
+        // Back on the run's own test, its baseline stays as picked.
         if (!ReferenceEquals(entry, _runEntry))
         {
             _baselinePicked = false;
@@ -1057,12 +1061,12 @@ public sealed class PerformanceRunViewModel : ViewModelBase
         }
     }
 
-    /// <summary>A higher reading raised the full-pedal value (spec 4.4).</summary>
+    /// <summary>A higher reading raised the full-pedal value.</summary>
     internal void FullPedalChanged() => OnPropertyChanged(nameof(PedalText));
 
     /// <summary>
-    /// A bin was opened on Tune: the band follows its rev limit (spec 6.1), except a run's own and what the owner typed over
-    /// the band last loaded (minor review, finding 27).
+    /// A bin was opened on Tune: the band follows its rev limit, except a run's own and what the user typed over
+    /// the band last loaded.
     /// </summary>
     internal void BinOpened()
     {
@@ -1089,10 +1093,18 @@ public sealed class PerformanceRunViewModel : ViewModelBase
         }
 
         _runDefinition ??= definition;
-        // The result is made when its last sample arrived (plan Task 7 ruling); never the clock at arrival for test math.
+        if (_runTune is { LiveMapsChanged: false } armed && !SameTags(_armedLiveTags, _owner.LiveTags?.Invoke()))
+        {
+            _runTune = armed with { LiveMapsChanged = true };
+        }
+
+        // The result is made when its last sample arrived; never the clock at arrival for test math.
         _lastArrival = sample.Time;
         run.Push(frame, sample.Payload);
     }
+
+    private static bool SameTags(IReadOnlyList<string>? a, IReadOnlyList<string>? b) =>
+        a is null ? b is null : b is not null && a.SequenceEqual(b);
 
     internal void LinkLost()
     {
@@ -1101,8 +1113,8 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// While a run is on, notices that samples stopped coming: the marks turn Ink3 and the status says for how long (minor
-    /// review, finding 42). A timer calls it every second while a run is on; the link's own loss still ends the run.
+    /// While a run is on, notices that samples stopped coming: the marks turn Ink3 and the status says for how long.
+    /// A timer calls it every second while a run is on; the link's own loss still ends the run.
     /// </summary>
     internal void CheckSamples()
     {
@@ -1124,8 +1136,8 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// The band of the chosen preset again, unless its run is on: the last one used, else the preset's own (spec 6.1, 9.2);
-    /// <paramref name="keepTyped"/> keeps what the owner typed over the band last loaded.
+    /// The band of the chosen preset again, unless its run is on: the last one used, else the preset's own;
+    /// <paramref name="keepTyped"/> keeps what the user typed over the band last loaded.
     /// </summary>
     internal void ReloadBand(bool keepTyped = false)
     {
@@ -1157,7 +1169,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     {
         if (Shown is not null)
         {
-            // The run keeps the baseline it was armed with until Discard or Run again (minor review, finding 62).
+            // The run keeps the baseline it was armed with until Discard or Run again.
             ListBaselines([_runBaselineChoice]);
             _baseline = _runBaselineResult;
             _selectedBaseline = _runBaselineChoice;
@@ -1207,7 +1219,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
         OnPropertyChanged(nameof(ShowsRunningTest));
     }
 
-    /// <summary>The link went stale or came back: the live marks follow (system 1.4).</summary>
+    /// <summary>The link went stale or came back: the live marks follow.</summary>
     internal void LiveStateChanged() => OnPropertyChanged(nameof(IsLive));
 
     private PerfRun? Shown => _run is not null && ReferenceEquals(_runEntry, _entry) ? _run : null;
@@ -1231,7 +1243,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
             return "Connect to the car to run a test.";
         }
 
-        // Pull-type tests start on full throttle, which is a share of the calibrated pedal (spec 4.4).
+        // Pull-type tests start on full throttle, which is a share of the calibrated pedal.
         if (kind is PerfTestKind.Pull or PerfTestKind.KnockCheck or PerfTestKind.RollOn && !(Settings.FullPedal > 0))
         {
             return PedalFirst;
@@ -1277,7 +1289,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
             }
             else if (run.Spec.Kind == PerfTestKind.Pedal && run.PedalReading is { } reading)
             {
-                // The settings keep 10 to 130 (spec 4.4); the run only finishes on a reading of 10 or more.
+                // The settings keep 10 to 130; the run only finishes on a reading of 10 or more.
                 Settings.FullPedal = Math.Min(reading, 130);
                 Settings.Save();
                 SetNotice($"Pedal calibrated: full pedal reads {NumberFormat.Format(Settings.FullPedal, 1)} {PedalUnit}.", _runEntry);
@@ -1286,7 +1298,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
         }
 
         _liveTrace = null;
-        // A hidden tab's run view is brought up to date when it is shown (minor review, finding 21).
+        // A hidden tab's run view is brought up to date when it is shown.
         if (_owner.IsVisible)
         {
             Project();
@@ -1411,7 +1423,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
         }
     }
 
-    // The rpm axis of the live chart (finding 49): rpm = km/h ÷ (km/h per rpm) for a roll-on in a calibrated gear.
+    // The rpm axis of the live chart: rpm = km/h ÷ (km/h per rpm) for a roll-on in a calibrated gear.
     private (double From, double To)? LiveRpmRange => Shown?.Spec switch
     {
         null => null,
@@ -1444,7 +1456,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
             return;
         }
 
-        // 3rd is the main pull (spec 6.1).
+        // 3rd is the main pull.
         SetGear(GearChoices.Count == 0 ? null : GearChoices.Contains(3) ? 3 : GearChoices[0]);
         ReloadBand();
     }
@@ -1495,7 +1507,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
         }
     }
 
-    // keepTyped keeps a field the owner typed over the band last loaded; an end of their own is no longer the bin's limit.
+    // keepTyped keeps a field the user typed over the band last loaded; an end of their own is no longer the bin's limit.
     private void ShowBand(PerfTestSpec? spec, string? note, bool keepTyped = false)
     {
         var (startRpm, endRpm, startKmh, endKmh) = (Whole(spec?.StartRpm), Whole(spec?.EndRpm), Whole(spec?.StartKmh), Whole(spec?.EndKmh));
@@ -1571,7 +1583,7 @@ public sealed class PerformanceRunViewModel : ViewModelBase
     private double? RevLimit(int gear) => TuneIdentity.From(_owner.Tune.Document, gear)?.RevLimitRpm;
 
     // The baseline as it reads with the run's car values and speed calibration, so a change of either since it was saved never
-    // shows up as a gain (spec 9.2); no deltas when its samples cannot be decoded again, rather than figures made with others.
+    // shows up as a gain; no deltas when its samples cannot be decoded again, rather than figures made with others.
     private static RunFigures? BaselineFigures(PerfResult? baseline, AnalysisInputs inputs)
     {
         if (baseline is null)

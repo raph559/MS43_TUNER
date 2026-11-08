@@ -166,6 +166,9 @@ public sealed class ChannelListTests
 
         Sample(shell.Live, ("N", 2500));
 
+        // The numbers change at most five times a second (LiveRateTests): the n/a shows at the next turn.
+        Thread.Sleep(250);
+        Dispatcher.UIThread.RunJobs();
         var row = Row(shell.Live, "MAFIGA");
         Assert.Equal("n/a", row.Value);
         Assert.False(row.HasValue);

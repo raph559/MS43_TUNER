@@ -41,7 +41,7 @@ public static class ComparisonText
                 text.Append($"{item.ChangedCells} of {item.Cells} {(item.Cells == 1 ? "cell" : "cells")}");
                 if (item.LargestChange is double largest)
                 {
-                    text.Append("  largest ").Append(BinComparer.FormatDelta(largest, 0, table.Z, raw: false));
+                    text.Append("  largest A - B ").Append(BinComparer.FormatDelta(largest, 0, table.Z, raw: false));
                     if (table.Z.Units.Length > 0)
                     {
                         text.Append(' ').Append(table.Z.Units);
@@ -63,7 +63,8 @@ public static class ComparisonText
             else
             {
                 var units = item.Item is XdfConstant { Units.Length: > 0 } constant && item.Kind == ItemKind.Value ? " " + constant.Units : string.Empty;
-                text.Append(item.ValueA).Append(" → ").Append(item.ValueB).Append(units).Append('\n');
+                // "Was, now": B (the bin compared with) then A (the bin tuned), the way A - B reads.
+                text.Append(item.ValueB).Append(" → ").Append(item.ValueA).Append(units).Append('\n');
             }
         }
 
@@ -81,6 +82,6 @@ public static class ComparisonText
         return text.ToString();
     }
 
-    // No digit grouping (system 3.3): "11907 bytes".
+    // No digit grouping: "11907 bytes".
     private static string Count(int value) => value.ToString(CultureInfo.InvariantCulture);
 }

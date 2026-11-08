@@ -78,6 +78,8 @@ public partial class LiveView : UserControl
 
     private void ShowDetails_Click(object? sender, RoutedEventArgs e) => ViewModel?.ShowConnectionLog();
 
+    private void FaultMemory_Click(object? sender, RoutedEventArgs e) => ViewModel?.ShowFaultMemory();
+
     private void ClearFilter_Click(object? sender, RoutedEventArgs e)
     {
         if (ViewModel is { } live)
@@ -87,7 +89,7 @@ public partial class LiveView : UserControl
         }
     }
 
-    // The tests live on their own tab now (performance spec 9.1); Live's button is the way there.
+    // The tests live on their own tab now; Live's button is the way there.
     private void OpenPerformance_Click(object? sender, RoutedEventArgs e)
     {
         if (TopLevel.GetTopLevel(this) is Window { DataContext: ShellViewModel shell })

@@ -54,8 +54,8 @@
         <Setter Property="BorderThickness" Value="1" />
     </Style>
 
-    <!-- The tab underline grows from its centre: it shows which screen was just picked. -->
-    <Style Selector="ToggleButton.tab /template/ Border#Indicator">
+    <!-- The tab bar grows from its centre: it shows which screen was just picked. -->
+    <Style Selector="ToggleButton.navtab /template/ Border#Indicator">
         <Setter Property="Transitions">
             <Transitions>
                 <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2" Easing="CubicEaseOut" />

@@ -27,7 +27,7 @@ public sealed class HeaderTests : IDisposable
         }
     }
 
-    // The owner could not change the definition: a press on a picker in the header started a window drag, which
+    // The definition could not be changed: a press on a picker in the header started a window drag, which
     // swallowed the release that opens the list. Only the header's empty background (and plain text) drags the window.
     [AvaloniaFact]
     public void OnlyTheHeadersBackgroundDragsTheWindow()
@@ -104,7 +104,8 @@ public sealed class HeaderTests : IDisposable
         Assert.False(Find.Named<Control>(window, "ConnectionPickers").IsEffectivelyVisible);
         Assert.True(Find.Named<Button>(window, "ConnectionButton").IsEffectivelyVisible);
 
-        window.Width = 1440;
+        // The header is full from 1536 px of window (the fifth tab's room).
+        window.Width = 1600;
         Dispatcher.UIThread.RunJobs();
 
         Assert.True(Find.Named<TextBlock>(window, "Wordmark").IsEffectivelyVisible);
@@ -145,7 +146,7 @@ public sealed class HeaderTests : IDisposable
 
     private static readonly string[] HeaderParts =
     {
-        "Brand", "Tabs", "FileMenuButton", "SaveStateChip", "SaveButton", "RateText",
+        "Brand", "FileMenuButton", "SaveStateChip", "SaveButton", "RateText",
         "PortPicker", "RescanButton", "DefinitionPicker", "ConnectionButton", "ConnectButton", "SettingsButton",
     };
 
@@ -175,7 +176,7 @@ public sealed class HeaderTests : IDisposable
                 foreach (var logging in new[] { false, true })
                 {
                     Log(shell.Live, logging);
-                    foreach (var tab in new[] { ShellViewModel.TuneTab, ShellViewModel.LiveTab, ShellViewModel.PerformanceTab })
+                    foreach (var tab in new[] { ShellViewModel.TuneTab, ShellViewModel.LiveTab, ShellViewModel.FunTab, ShellViewModel.PerformanceTab })
                     {
                         shell.SelectedTab = tab;
                         foreach (var (width, height) in new[] { (1024, 680), (1280, 800), (1366, 768), (1440, 900) })
@@ -376,7 +377,7 @@ public sealed class HeaderTests : IDisposable
         Assert.False(Find.Named<Control>(window, "ReadoutsSeg").IsEffectivelyVisible);
     }
 
-    // A test needs the link, so Connect is also the primary action on Performance (performance spec 9.1).
+    // A test needs the link, so Connect is also the primary action on Performance.
     [AvaloniaFact]
     public void ConnectIsPrimaryOnlyOnLiveAndPerformance()
     {

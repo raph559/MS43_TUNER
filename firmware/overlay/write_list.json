@@ -1,0 +1,1082 @@
+[
+ {
+  "offset": "0x10280",
+  "name": "ip_iga_optm_ron98__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x10290",
+  "name": "ip_iga_optm_e85__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x11B92",
+  "name": "ip_tq_max_mon2",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x11BCA",
+  "name": "ip_tq_max_mon2",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x11C00",
+  "name": "ip_tq_loss_mon2",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x11CFE",
+  "name": "ip_iga_ref_mon2",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x11DF2",
+  "name": "ip_tqi_ref_mon2",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x11E4C",
+  "name": "ip_tqi_dif_max_mon2",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x170D2",
+  "name": "ip_temp_sp_tco__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x17110",
+  "name": "ip_temp_sp_toil__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x18B0E",
+  "name": "ip_temp_fac_wall_up__tes__tam",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x18B1E",
+  "name": "ip_temp_fac_wall_down__tes__tam",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x18B2E",
+  "name": "ip_temp_fac_ex_up__tes__tam",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x18B3E",
+  "name": "ip_temp_fac_ex_down__tes__tam",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x1B018",
+  "name": "ip_tps_sp_pvs_add_low_n__n_dif__",
+  "original": "DA0DA609"
+ },
+ {
+  "offset": "0x1B12A",
+  "name": "ip_tps_sp_pvs__pvs__n",
+  "original": "DA0D6801"
+ },
+ {
+  "offset": "0x1B138",
+  "name": "throttle store",
+  "original": "F6F4A486"
+ },
+ {
+  "offset": "0x1D7C8",
+  "name": "ip_iga_aj_ron98__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x1D7D6",
+  "name": "ip_iga_aj_ron91__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x1E876",
+  "name": "ip_t_vls_cycnr_afr_max__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x1E962",
+  "name": "ip_t_vls_cycnr_afl_max__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x1EC8E",
+  "name": "ip_t_vls_cyc_afl_max__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x1ECC0",
+  "name": "ip_t_vls_cyc_afr_max__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x1FC8A",
+  "name": "DS2 6D",
+  "original": "DA09B6FF"
+ },
+ {
+  "offset": "0x29F9C",
+  "name": "ip_temp_sub_ecf_ini__tco__tam",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x2A3AC",
+  "name": "cut mode",
+  "original": "F3F81E13"
+ },
+ {
+  "offset": "0x2A7BC",
+  "name": "overrun cut gate",
+  "original": "8A1704D08A180220"
+ },
+ {
+  "offset": "0x2AAA0",
+  "name": "in-cut re-entry check",
+  "original": "2A244D2B"
+ },
+ {
+  "offset": "0x2AF00",
+  "name": "ip_cam_sp_add_in_ch_2_is_at__tco_st__km_ctr",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x2AF14",
+  "name": "ip_cam_sp_add_ex_ch_2_is_at__tco_st__km_ctr",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x2AF2A",
+  "name": "ip_cam_sp_add_in_ch_2_is_mt__tco_st__km_ctr",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x2AF3E",
+  "name": "ip_cam_sp_add_ex_ch_2_is_mt__tco_st__km_ctr",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x2AF52",
+  "name": "ip_cam_sp_add_cat_pl_ex__tco_st__km_ctr",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x2C3A4",
+  "name": "ip_iga_ron98_is__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x2C3B4",
+  "name": "ip_iga_e85_is__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x2C650",
+  "name": "ip_iga_ron98_pl__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x2C65E",
+  "name": "ip_iga_ron91_pl__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x2C684",
+  "name": "ip_iga_e85_pl__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x2C6C2",
+  "name": "lc_ign",
+  "original": "C2FC3013C2FD3113"
+ },
+ {
+  "offset": "0x2C6CC",
+  "name": "nls_ign",
+  "original": "C2FC3813C2FD3913"
+ },
+ {
+  "offset": "0x2C6D6",
+  "name": "ral_ign",
+  "original": "C2FC3F13C2FD4013"
+ },
+ {
+  "offset": "0x2D424",
+  "name": "spark call",
+  "original": "DA0B845C"
+ },
+ {
+  "offset": "0x2D4CE",
+  "name": "ip_iga_maf_n_is__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x2D508",
+  "name": "ip_iga_maf_n_toil_is__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x2D542",
+  "name": "ip_iga_maf_n_knk_diag__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x2D84E",
+  "name": "ip_t_puc_deacc_2__n__maf_mmv",
+  "original": "DA0D9A04"
+ },
+ {
+  "offset": "0x2D862",
+  "name": "ip_t_puc_deacc_3__n__maf_mmv",
+  "original": "DA0D9A04"
+ },
+ {
+  "offset": "0x2D876",
+  "name": "ip_t_puc_deacc_4__n__maf_mmv",
+  "original": "DA0D9A04"
+ },
+ {
+  "offset": "0x2D88A",
+  "name": "ip_t_puc_deacc_5__n__maf_mmv",
+  "original": "DA0D9A04"
+ },
+ {
+  "offset": "0x2D89E",
+  "name": "ip_t_puc_deacc_1__n__maf_mmv",
+  "original": "DA0D9A04"
+ },
+ {
+  "offset": "0x2FEF0",
+  "name": "ip_n_vim_tia__tia",
+  "original": "DA0D2A02"
+ },
+ {
+  "offset": "0x310BC",
+  "name": "ip_fac_pvs_isa__pvs_cor_rpl__n",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x331DC",
+  "name": "ip_ivvthpwm__tmag__vb",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x33224",
+  "name": "ip_ivvthpwm__tmag__vb",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x339D4",
+  "name": "ip_cam_sp_ron98_in_is__n__maf_ivvt",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x339E4",
+  "name": "ip_cam_sp_e85_in_is__n__maf_ivvt",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x33A00",
+  "name": "ip_cam_sp_ron98_ex_is__n__maf_ivvt",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x33A10",
+  "name": "ip_cam_sp_e85_ex_is__n__maf_ivvt",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x33B48",
+  "name": "ip_cam_sp_ron98_in_pl__n__maf_ivvt",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x33B58",
+  "name": "ip_cam_sp_e85_in_pl__n__maf_ivvt",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x33B74",
+  "name": "ip_cam_sp_ron98_ex_pl__n__maf_ivvt",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x33B84",
+  "name": "ip_cam_sp_e85_ex_pl__n__maf_ivvt",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x33BA2",
+  "name": "ip_cam_sp_ron98_in_pl__n__maf_ivvt",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x33BB2",
+  "name": "ip_cam_sp_e85_in_pl__n__maf_ivvt",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x33BEA",
+  "name": "ip_cam_sp_ron98_ex_pl__n__maf_ivvt",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x33BFA",
+  "name": "ip_cam_sp_e85_ex_pl__n__maf_ivvt",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x348D4",
+  "name": "ip_ti_vo_wup__tco__vo",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x35D1E",
+  "name": "ip_maf_min_knk_ron__n__tco",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x35D2E",
+  "name": "ip_maf_min_knk__n__tco",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x35DE2",
+  "name": "ip_iga_knk_diag_ron__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x35DFE",
+  "name": "ip_iga_knk_diag__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x3CF24",
+  "name": "ip_pvs_dif_cr_neg__pvs_max__n",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x3CF44",
+  "name": "ip_pvs_dif_neg_fac__pvs_max__n",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x3D3B2",
+  "name": "pedal-released skip",
+  "original": "9A220230"
+ },
+ {
+  "offset": "0x3D40A",
+  "name": "ip_af_target_ron98__maf__n",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x3D41A",
+  "name": "ip_af_target_e85__maf__n",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x3D434",
+  "name": "AFR branch",
+  "original": "8A7C0B20"
+ },
+ {
+  "offset": "0x3D43A",
+  "name": "lc_afr",
+  "original": "C2FC3213C2FD3313"
+ },
+ {
+  "offset": "0x3D444",
+  "name": "nls_afr",
+  "original": "C2FC3A13C2FD3B13"
+ },
+ {
+  "offset": "0x3D44E",
+  "name": "ral_afr",
+  "original": "C2FC4113C2FD4213"
+ },
+ {
+  "offset": "0x3D4D4",
+  "name": "AFR display join (V10.2)",
+  "original": "C2FCB891"
+ },
+ {
+  "offset": "0x3FCF2",
+  "name": "lc_config",
+  "original": "F3F82C13"
+ },
+ {
+  "offset": "0x3FD16",
+  "name": "lc_pedal_enter",
+  "original": "43F82E13"
+ },
+ {
+  "offset": "0x3FD24",
+  "name": "lc_speed",
+  "original": "43FA2D13"
+ },
+ {
+  "offset": "0x3FD2E",
+  "name": "lc_pedal_exit",
+  "original": "43F82E13"
+ },
+ {
+  "offset": "0x3FD44",
+  "name": "nls_config",
+  "original": "F3F83413"
+ },
+ {
+  "offset": "0x3FD62",
+  "name": "nls_speed",
+  "original": "43FA3513"
+ },
+ {
+  "offset": "0x3FD6C",
+  "name": "nls_pedal_enter",
+  "original": "43F83613"
+ },
+ {
+  "offset": "0x3FD76",
+  "name": "nls_rpm",
+  "original": "C2FD3713"
+ },
+ {
+  "offset": "0x3FD8E",
+  "name": "nls_pedal_exit",
+  "original": "43F83613"
+ },
+ {
+  "offset": "0x3FDA4",
+  "name": "ral_config",
+  "original": "F3F83C13"
+ },
+ {
+  "offset": "0x3FDBE",
+  "name": "ral_pedal_enter",
+  "original": "43F83D13"
+ },
+ {
+  "offset": "0x3FDC8",
+  "name": "ral_rpm",
+  "original": "C2FD3E13"
+ },
+ {
+  "offset": "0x3FDE8",
+  "name": "ral_pedal_exit",
+  "original": "43F83D13"
+ },
+ {
+  "offset": "0x434BC",
+  "name": "ip_ti_tco_sawup__tco__km_ctr",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x434CC",
+  "name": "ip_ti_tco_sawup_is__tco__km_ctr",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x436BE",
+  "name": "ip_isapwm__tco",
+  "original": "DA0D2A02"
+ },
+ {
+  "offset": "0x4372E",
+  "name": "ip_n_sp_is__tco",
+  "original": "DA0D2A02"
+ },
+ {
+  "offset": "0x4374E",
+  "name": "ip_acin_n_sp_is__tco",
+  "original": "DA0D2A02"
+ },
+ {
+  "offset": "0x43A24",
+  "name": "ip_fac_ron_ad_max__tia__tco",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x43A82",
+  "name": "ip_fac_tia_tco_is__tco__tia",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x43AB2",
+  "name": "ip_fac_toil_facron__toil__facron",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x43AE2",
+  "name": "ip_fac_tia_tco__tco__tia",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x43B12",
+  "name": "ip_fac_knk_diag__tia__tco",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x43B72",
+  "name": "ip_fac_iga_tra__tia__fac_ron",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x43C1C",
+  "name": "ip_tmag__toil__tco",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x43C4C",
+  "name": "ip_fac_is_ivvt__tco__tco_st",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x43C60",
+  "name": "ip_fac_pl_ivvt__tco__tco_st",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x44C34",
+  "name": "ip_ti_cop_nr_1_1__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x44C42",
+  "name": "ip_ti_cop_nr_2_1__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x44C6A",
+  "name": "ip_ti_cop_nr_2_1__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x44C78",
+  "name": "ip_ti_cop_nr_3_1__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x44CA0",
+  "name": "ip_ti_cop_nr_3_1__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x44CAE",
+  "name": "ip_ti_cop_nr_4_1__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x44CD6",
+  "name": "ip_ti_cop_nr_4_1__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x44CE4",
+  "name": "ip_ti_cop_nr_5_1__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x44D0C",
+  "name": "ip_ti_cop_nr_5_1__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x44D46",
+  "name": "ip_ti_cop_nr_1_2__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x44D54",
+  "name": "ip_ti_cop_nr_2_2__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x44D7C",
+  "name": "ip_ti_cop_nr_2_2__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x44D8A",
+  "name": "ip_ti_cop_nr_3_2__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x44DB2",
+  "name": "ip_ti_cop_nr_3_2__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x44DC0",
+  "name": "ip_ti_cop_nr_4_2__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x44DE8",
+  "name": "ip_ti_cop_nr_4_2__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x44DF6",
+  "name": "ip_ti_cop_nr_5_2__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x44E1E",
+  "name": "ip_ti_cop_nr_5_2__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x44E40",
+  "name": "ip_ti_add_cop_step_2__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x4517A",
+  "name": "ip_maf_min_cop_ron__n__iga_dif",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x4519A",
+  "name": "ip_maf_min_cop__n__iga_dif",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x4528A",
+  "name": "ip_maf_min_cop_ron__n__iga_dif",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x452AA",
+  "name": "ip_maf_min_cop__n__iga_dif",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x454E0",
+  "name": "ip_ti_tco_pos_wf__n__tco",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x454F0",
+  "name": "ip_ti_tco_neg_wf__n__tco",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x4552A",
+  "name": "ip_ti_tco_neg_fast_wf__n__tco",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x4553A",
+  "name": "ip_ti_tco_pos_fast_wf__n__tco",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x4583A",
+  "name": "ip_ti_fac_fast_wf__maf__n",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x4586A",
+  "name": "ip_ti_fac_neg_fast_wf__maf__n",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x458A6",
+  "name": "ip_ti_fac_slow_wf__maf__n",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x458D6",
+  "name": "ip_ti_fac_neg_slow_wf__maf__n",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x49C38",
+  "name": "ip_temp_sub_ecf_ini__tco__tam",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x4A912",
+  "name": "ip_ti_cr_cst_e85__cyc__tco",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x4A922",
+  "name": "ip_ti_cr_cst_ron98__cyc__tco",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x4A97C",
+  "name": "ip_fac_rest_e85__t_ast__tco_stop",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x4ABC4",
+  "name": "ip_ti_cr_cast_e85__cyc__tco",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x4ABD4",
+  "name": "ip_ti_cr_cast_ron98__cyc__tco",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x4AD6A",
+  "name": "ip_ti_wup_e85__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x4AD7A",
+  "name": "ip_ti_wup_ron98__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x4B128",
+  "name": "ip_soi_tco_2_is__n__ti",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x4B138",
+  "name": "ip_soi_tco_1_is__n__ti",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x4B174",
+  "name": "ip_soi_tco_2_pl__n__ti",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x4B184",
+  "name": "ip_soi_tco_1_pl__n__ti",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x4B342",
+  "name": "ip_ti_tco_wup_e85__tco__tco_st",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x4B352",
+  "name": "ip_ti_tco_wup_ron98__tco__tco_st",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x4B36E",
+  "name": "ip_ti_tco_wup_is_e85__tco__tco_st",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x4B37E",
+  "name": "ip_ti_tco_wup_is_ron98__tco__tco_st",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x4B3C8",
+  "name": "ip_ti_cast_e85__tia__tco",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x4B3D8",
+  "name": "ip_ti_cast_ron98__tia__tco",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x50168",
+  "name": "reader 4 entry",
+  "original": "C2F36BFB"
+ },
+ {
+  "offset": "0x5022A",
+  "name": "reader 0 entry",
+  "original": "C2F26BFB"
+ },
+ {
+  "offset": "0x50262",
+  "name": "reader 1 entry",
+  "original": "C2F26BFB"
+ },
+ {
+  "offset": "0x5029A",
+  "name": "reader 5 entry",
+  "original": "C2F36BFB"
+ },
+ {
+  "offset": "0x503D2",
+  "name": "reader 6 entry",
+  "original": "C2F36BFB"
+ },
+ {
+  "offset": "0x5042E",
+  "name": "reader 3 entry",
+  "original": "C2F26BFB"
+ },
+ {
+  "offset": "0x5043A",
+  "name": "reader 7 entry",
+  "original": "C2F36BFB"
+ },
+ {
+  "offset": "0x50454",
+  "name": "reader 2 entry",
+  "original": "C2F26BFB"
+ },
+ {
+  "offset": "0x504B0",
+  "name": "descriptor 0 DPP0",
+  "original": "F6F500FE"
+ },
+ {
+  "offset": "0x505C8",
+  "name": "descriptor 1 DPP0",
+  "original": "F6F500FE"
+ },
+ {
+  "offset": "0x506E4",
+  "name": "descriptor 9 DPP0",
+  "original": "F6F500FE"
+ },
+ {
+  "offset": "0x50776",
+  "name": "descriptor 2 DPP0",
+  "original": "F6F500FE"
+ },
+ {
+  "offset": "0x5089E",
+  "name": "descriptor 3 DPP0",
+  "original": "F6F500FE"
+ },
+ {
+  "offset": "0x509BC",
+  "name": "descriptor 4 DPP0",
+  "original": "F6F500FE"
+ },
+ {
+  "offset": "0x50AD6",
+  "name": "descriptor 10 DPP0",
+  "original": "F6F500FE"
+ },
+ {
+  "offset": "0x50B60",
+  "name": "descriptor 5 DPP0",
+  "original": "F6F500FE"
+ },
+ {
+  "offset": "0x50C88",
+  "name": "descriptor 6 DPP0",
+  "original": "F6F500FE"
+ },
+ {
+  "offset": "0x50DA4",
+  "name": "descriptor 11 DPP0",
+  "original": "F6F500FE"
+ },
+ {
+  "offset": "0x50E30",
+  "name": "descriptor 12 DPP0",
+  "original": "F6F500FE"
+ },
+ {
+  "offset": "0x50EC2",
+  "name": "descriptor 7 DPP0",
+  "original": "F6F500FE"
+ },
+ {
+  "offset": "0x50FE2",
+  "name": "descriptor 13 DPP0",
+  "original": "F6F500FE"
+ },
+ {
+  "offset": "0x51018",
+  "name": "descriptor 14 DPP0",
+  "original": "F6F500FE"
+ },
+ {
+  "offset": "0x51052",
+  "name": "descriptor 15 DPP0",
+  "original": "F6F500FE"
+ },
+ {
+  "offset": "0x51092",
+  "name": "descriptor 8 DPP0",
+  "original": "F6FB00FE"
+ },
+ {
+  "offset": "0x5240E",
+  "name": "ip_iga_ref_mon",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x524BE",
+  "name": "ip_tqi_ref_mon",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x5256E",
+  "name": "ip_tqi_dif_max_mon",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x52FBA",
+  "name": "ip_maf_sub_mon",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x5302C",
+  "name": "ip_pq_main_col_tq_mon",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x53ABC",
+  "name": "ip_tq_max_mon",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x53AEA",
+  "name": "ip_tq_loss_mon",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x55CEE",
+  "name": "ip_temp_sub_ecf_ini__tco__tam",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x55F10",
+  "name": "ip_temp_sub_ecf_ini__tco__tam",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x5709A",
+  "name": "ip_fac_er__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x570FC",
+  "name": "ip_fac_igcfb__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x57166",
+  "name": "ip_mis_a_fac__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x585D4",
+  "name": "ip_ivvthpwm__tmag__vb",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x5862C",
+  "name": "ip_ivvthpwm__tmag__vb",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x587A2",
+  "name": "ip_fac_iga_tra_gear__gear__vs",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x58C88",
+  "name": "manual gear limits",
+  "original": "DA0D2E04"
+ },
+ {
+  "offset": "0x58CA2",
+  "name": "lc_rpm",
+  "original": "F3F82F13"
+ },
+ {
+  "offset": "0x58CFC",
+  "name": "cut hysteresis",
+  "original": "C2FDFF0B"
+ },
+ {
+  "offset": "0x58D18",
+  "name": "mode refresh",
+  "original": "F3FCAC81"
+ },
+ {
+  "offset": "0x59B6C",
+  "name": "ip_vls_sp_dly__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x5B882",
+  "name": "ip_fac_t_dly__tco__tco_st",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x5C026",
+  "name": "ip_lam_i_2__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x5C040",
+  "name": "ip_lam_i_1__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x5C092",
+  "name": "ip_lam_neg_p__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x5C0DC",
+  "name": "ip_lam_i_2__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x5C0F6",
+  "name": "ip_lam_i_1__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x5C146",
+  "name": "ip_lam_pos_p__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x5D85C",
+  "name": "ip_iga_tco_ch_is__tco__t_ast",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x5D894",
+  "name": "ip_iga_tco_ch_at__tco__t_ast",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x5D8A6",
+  "name": "ip_iga_tco_ch_mt__tco__t_ast",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x5D9AA",
+  "name": "ip_fac_iga_ch_2__tco__t_ast",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x5DAF4",
+  "name": "ip_iga_ch__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x5DB0C",
+  "name": "ip_iga_ch_cat_var__n__maf",
+  "original": "DA0D9A02"
+ },
+ {
+  "offset": "0x6E3E2",
+  "name": "housekeeping",
+  "original": "DE800D00"
+ },
+ {
+  "offset": "0x6FE00",
+  "name": "program checksum range",
+  "original": "43B50C00"
+ }
+]

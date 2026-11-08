@@ -101,6 +101,8 @@ public partial class CompareView : UserControl
 
         // Both actions rebuild the list; inside the ListBox's own selection change that crashed it (see TuneView's rail).
         var entry = list.SelectedItem;
+        var key = RowKey(entry);
+        var top = ListAnchor.TopOf(list, list.SelectedIndex);
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             switch (entry)
@@ -112,8 +114,21 @@ public partial class CompareView : UserControl
                     compare.ShowBytes();
                     break;
             }
+
+            // The rebuilt list keeps the clicked row where it was, so it never jumps under the pointer.
+            if (key is not null && top is { } at)
+            {
+                ListAnchor.Keep(list, compare.Entries.Select((e, i) => (e, i)).FirstOrDefault(pair => RowKey(pair.e) == key, (null!, -1)).Item2, at);
+            }
         });
     }
+
+    private static string? RowKey(object? entry) => entry switch
+    {
+        CompareRow row => "item/" + row.Difference.Item.Title,
+        CompareBytesRow => "bytes",
+        _ => null,
+    };
 
     private void Copy_Click(object? sender, RoutedEventArgs e) => ViewModel?.CopySelectedFromB();
 
@@ -130,7 +145,7 @@ public partial class CompareView : UserControl
         }
     }
 
-    // The swap seen (system 10.3): each name slides from the other's row into its own, and the swap icon turns half a turn.
+    // The swap seen: each name slides from the other's row into its own, and the swap icon turns half a turn.
     private Task CrossOverAsync()
     {
         // The A and B rows are 32 px apart (their DockPanels' Height). Measured here, mid-swap, the list is still being laid out

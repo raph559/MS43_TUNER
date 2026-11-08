@@ -14,7 +14,7 @@ using MS43Logger.Core.Tuning;
 namespace MS43Logger.AvaloniaApp.Tests;
 
 /// <summary>
-/// The click-through scripts of the gate (plan Task 15): every button, menu item, switch and segment of a screen,
+/// The click-through scripts of the gate: every button, menu item, switch and segment of a screen,
 /// pressed headlessly with its effect asserted. Connect is the one control not pressed: it opens a real serial port.
 /// </summary>
 internal static class GateClickThrough
@@ -24,7 +24,7 @@ internal static class GateClickThrough
     /// <summary>The header and status bar, on every screen; their script is "shell".</summary>
     public static readonly string[] ShellControls =
     [
-        "TabLive", "TabTune", "TabCompare", "TabPerformance", "FileMenuButton", "SaveButton", "ConnectionButton", "ConnectButton", "SettingsButton",
+        "TabLive", "TabTune", "TabLiveTuning", "TabFun", "TabCompare", "TabPerformance", "FileMenuButton", "SaveButton", "ConnectionButton", "ConnectButton", "SettingsButton",
         "NightButton", "DayButton", "ReadoutsTiles", "ReadoutsDials", "RescanButton", "MinimizeButton", "MaximizeButton", "CloseButton",
     ];
 
@@ -63,10 +63,12 @@ internal static class GateClickThrough
     private static Task<GateClicks?> ShellAsync(bool night)
     {
         var scans = 0;
-        var (window, shell) = Open(night, () => { scans++; return ["COM1"]; }, 1440, 900);
+        var (window, shell) = Open(night, () => { scans++; return ["COM1"]; }, 1600, 900);   // the full header: from 1536 px (the fifth tab)
         var c = new GateClicks(window, shell);
 
         c.Press("TabTune", "shows the Tune screen", () => shell.SelectedTab == ShellViewModel.TuneTab);
+        c.Press("TabLiveTuning", "shows the Live tuning screen", () => shell.SelectedTab == ShellViewModel.LiveTuningTab && shell.LiveTuning.LiveCursor.IsVisible);
+        c.Press("TabFun", "shows the Fun screen", () => shell.SelectedTab == ShellViewModel.FunTab && shell.Fun.IsVisible);
         c.Press("TabCompare", "shows the Compare screen", () => shell.SelectedTab == ShellViewModel.CompareTab);
         c.Press("TabPerformance", "shows the Performance screen", () => shell.SelectedTab == ShellViewModel.PerformanceTab && shell.Performance.IsVisible);
         c.Press("TabLive", "shows the Live screen", () => shell.SelectedTab == ShellViewModel.LiveTab);
@@ -138,6 +140,13 @@ internal static class GateClickThrough
         shell.SelectedTab = ShellViewModel.LiveTab;
         Dispatcher.UIThread.RunJobs();
 
+        live.IsConnected = true;                                   // the button works only while connected
+        Dispatcher.UIThread.RunJobs();
+        c.Press("FaultMemoryButton", "opens the fault memory", () => window.GetVisualDescendants().OfType<FaultMemoryView>().Any());
+        c.Dialogs.Close();
+        live.IsConnected = false;
+        Dispatcher.UIThread.RunJobs();
+
         c.Press("PinnedOnlySwitch", "lists the pinned channels only", () => live.ShowPinnedOnly);
         live.ShowPinnedOnly = false;
         Dispatcher.UIThread.RunJobs();
@@ -171,6 +180,8 @@ internal static class GateClickThrough
 
         live.IsConnected = true;
         Dispatcher.UIThread.RunJobs();
+        var logging = live.EnableCsvLogging;
+        c.Press("LogButton", "starts or stops the CSV log while connected (LogSwitchTests)", () => live.EnableCsvLogging != logging);
         c.Audit(window, NotShell);
         var disconnect = c.Named<Button>("ConnectButton");
         Assert.Equal("Disconnect", disconnect.Content);
@@ -262,6 +273,8 @@ internal static class GateClickThrough
         sort.Flyout!.Hide();
         c.Press("PinButton", "pins the item to the top of the rail", () => tune.Settings.IsPinned(item.Title));
         tune.TogglePin(item);
+        c.Press("OpenWindowButton", "opens the map in a window of its own", () => tune.MapWindows.Count == 1 && ReferenceEquals(tune.MapWindows[0].Table, item));
+        tune.CloseMapWindows();
 
         var editor = tune.Editor!;
         double[,] Cells() => (double[,])editor.Values.Physical.Clone();
@@ -375,10 +388,10 @@ internal static class GateClickThrough
         Dispatcher.UIThread.RunJobs();
         c.Press("ViewA", "shows A's values in the map colours", () => compare.View == "a");
         c.Press("ViewB", "shows B's values", () => compare.View == "b");
-        c.Press("ViewDelta", "shows B − A", () => compare.View == "delta");
-        c.Press("DeltaRaw", "reads B − A in stored counts and saves it", () => compare.DeltaMode == DeltaMode.Raw && compare.Settings.CompareDeltaMode == DeltaMode.Raw);
-        c.Press("DeltaPercent", "reads B − A as a percentage of A", () => compare.DeltaMode == DeltaMode.Percent);
-        c.Press("DeltaUnits", "reads B − A in the map's units", () => compare.DeltaMode == DeltaMode.Units);
+        c.Press("ViewDelta", "shows A − B", () => compare.View == "delta");
+        c.Press("DeltaRaw", "reads A − B in stored counts and saves it", () => compare.DeltaMode == DeltaMode.Raw && compare.Settings.CompareDeltaMode == DeltaMode.Raw);
+        c.Press("DeltaPercent", "reads A − B as a percentage of B", () => compare.DeltaMode == DeltaMode.Percent);
+        c.Press("DeltaUnits", "reads A − B in the map's units", () => compare.DeltaMode == DeltaMode.Units);
         c.Press("SwapButton", "asks before swapping A and B", () => c.Dialogs.IsOpen && window.GetVisualDescendants().OfType<ConfirmActionDialog>().Any());
         c.Note(c.Named<Button>("ConfirmActionButton"), "Swap: B opens as A and A becomes B; pressed in CompareSwapTests on copies of both bins");
         c.Press("ConfirmCancelButton", "closes the question and swaps nothing", () => !c.Dialogs.IsOpen && compare.FileB == fileB);
@@ -393,13 +406,13 @@ internal static class GateClickThrough
         compare.Selected = map;
         Dispatcher.UIThread.RunJobs();
         c.Press("EditInTuneButton", "opens this item of A on Tune", () => shell.SelectedTab == ShellViewModel.TuneTab && shell.Tune.SelectedItem?.Title == map.Item.Title);
-        // On Tune with a B open: the map as B or B − A, back to A, and B's values copied into the selection.
+        // On Tune with a B open: the map as B or A − B, back to A, and B's values copied into the selection.
         Dispatcher.UIThread.RunJobs();
         c.Press("TuneViewB", "shows B's values of the map on Tune", () => shell.Tune.GridView == "b");
-        c.Press("TuneViewDelta", "shows B − A on Tune", () => shell.Tune.GridView == "delta");
-        c.Press("TuneDeltaRaw", "reads B − A in stored counts on Tune", () => shell.Tune.DeltaMode == DeltaMode.Raw && shell.Tune.ShownEditor!.DeltaMode == DeltaMode.Raw);
-        c.Press("TuneDeltaPercent", "reads B − A as a percentage of A on Tune", () => shell.Tune.DeltaMode == DeltaMode.Percent);
-        c.Press("TuneDeltaUnits", "reads B − A in the map's units on Tune", () => shell.Tune.DeltaMode == DeltaMode.Units);
+        c.Press("TuneViewDelta", "shows A − B on Tune", () => shell.Tune.GridView == "delta");
+        c.Press("TuneDeltaRaw", "reads A − B in stored counts on Tune", () => shell.Tune.DeltaMode == DeltaMode.Raw && shell.Tune.ShownEditor!.DeltaMode == DeltaMode.Raw);
+        c.Press("TuneDeltaPercent", "reads A − B as a percentage of B on Tune", () => shell.Tune.DeltaMode == DeltaMode.Percent);
+        c.Press("TuneDeltaUnits", "reads A − B in the map's units on Tune", () => shell.Tune.DeltaMode == DeltaMode.Units);
         c.Press("TuneViewA", "shows A again, the one edited", () => shell.Tune.GridView == "a");
         c.Press("CopyFromBTool", "writes B's values into the selected cells", () => shell.Tune.UndoTip.StartsWith("Undo: Copy ", StringComparison.Ordinal),
             () => shell.Tune.Editor!.Selection = new MS43Logger.Core.Tuning.CellRange(3, 3, 3, 3));
@@ -504,7 +517,7 @@ internal static class GateClickThrough
         return Task.FromResult<GateClicks?>(c);
     }
 
-    // The Performance tab (performance spec 9.1, 9.2): the rail; each test's Run side, a pull run through to its result and
+    // The Performance tab: the rail; each test's Run side, a pull run through to its result and
     // the setup steps; then the saved results, two compared, one opened, renamed and deleted. Samples reach the tab through
     // Live, as from the car; Connect itself is the shell's and is not pressed.
     private static Task<GateClicks?> PerformanceAsync(bool night)
@@ -555,7 +568,7 @@ internal static class GateClickThrough
         c.Note(handle, "the rail's edge: an arrow key moves it 16 px and saves the width; dragged as the Compare list's (CompareRailTests, the same RailSizer)");
         performance.SetRailWidth(null, save: true);
 
-        // A pull while disconnected: its gear, band and baseline; Arm is off and says why under it (system 5.9).
+        // A pull while disconnected: its gear, band and baseline; Arm is off and says why under it.
         Assert.Equal("pull", performance.SelectedEntry.Key);
         c.Press("Gear2", "picks 2nd and its band, 1500 to 6400 rpm", () => run.SelectedGear == 2 && run.StartRpm == "1500" && run.EndRpm == "6400");
         c.Press("Gear4", "picks 4th, 1500 to 4500 rpm", () => run.SelectedGear == 4 && run.StartRpm == "1500" && run.EndRpm == "4500");
@@ -575,8 +588,10 @@ internal static class GateClickThrough
         c.Note(arm, "Arm pull is off while disconnected, the reason in the line under it: \"Connect to the car to run a test.\"");
         c.Audit(window, NotShell);
 
-        // Connected with the pedal not calibrated: the way to the Pedal step (spec 4.4).
+        // Connected with the pedal not calibrated: the way to the Pedal step.
         PerfFeed.Connect(shell);
+        var perfLogging = shell.Live.EnableCsvLogging;
+        c.Press("LogButton", "starts or stops the CSV log while connected (LogSwitchTests)", () => shell.Live.EnableCsvLogging != perfLogging);
         Dispatcher.UIThread.RunJobs();
         Assert.Equal("Calibrate the pedal first.", run.ArmTip);
         c.PressLast(c.Named<Button>("CalibratePedalButton"), window, "Calibrate the pedal (shown until it is): opens the Pedal step",
@@ -679,7 +694,7 @@ internal static class GateClickThrough
         run.MassKg = "1480";
         run.TyreSize = "205/55 R16";
 
-        // The saved results (spec 9.1).
+        // The saved results.
         performance.IsResultsMode = true;
         Dispatcher.UIThread.RunJobs();
         Assert.Equal(3, results.Rows.Count);
@@ -694,9 +709,9 @@ internal static class GateClickThrough
         c.Press(Row<CheckBox>("PickBox", "Baseline"), "ticks a result to compare (each row's tick)", () => results.PickedCount == 1 && !c.Named<Button>("CompareButton").IsEffectivelyEnabled);
         GateClicks.Activate(Row<CheckBox>("PickBox", "Ignition +1.5"));
         Assert.True(results.CanCompare);
-        c.Press("CompareButton", "compares the two ticked results, the earlier as A", () => results.HasComparison && !results.ShowsList);
+        c.Press("CompareButton", "compares the two ticked results, the newer as A", () => results.HasComparison && !results.ShowsList);
         var compare = c.Named<RunChart>("CompareChart");
-        Assert.True(compare.TraceA is { Count: > 0 } && compare.TraceB is { Count: > 0 } && compare.LabelA == "A: Baseline");
+        Assert.True(compare.TraceA is { Count: > 0 } && compare.TraceB is { Count: > 0 } && compare.LabelA == "A: Ignition +1.5");
         c.Note(compare, "A solid and B dashed against rpm (asserted both traces; their look in RunChartTests)");
         foreach (var (name, metric, what) in new[]
                  {

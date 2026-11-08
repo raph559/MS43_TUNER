@@ -10,7 +10,7 @@ using MS43Logger.Core.Tuning;
 
 namespace MS43Logger.AvaloniaApp;
 
-/// <summary>One saved result in the library (performance spec 9.1): name, test, date, tune, headline and flag tags, and its tick.</summary>
+/// <summary>One saved result in the library: name, test, date, tune, headline and flag tags, and its tick.</summary>
 public sealed class ResultRow : ViewModelBase
 {
     private readonly Action<ResultRow> _picked;
@@ -59,7 +59,7 @@ public sealed class ResultRow : ViewModelBase
     /// <summary>A cold or invalid run: its tags take the red warning icon, other doubts the amber one.</summary>
     public bool HasSevereFlag => Header.Flags.Any(flag => flag.Severity is FlagSeverity.Invalid or FlagSeverity.Cold);
 
-    /// <summary>Made on a cold engine: not comparable, hidden until "Show cold runs" (spec 5, 9.2).</summary>
+    /// <summary>Made on a cold engine: not comparable, hidden until "Show cold runs".</summary>
     public bool IsCold { get; }
 
     /// <summary>Made by a newer version of the app: it can be opened and compared, never rewritten.</summary>
@@ -82,7 +82,7 @@ public sealed class ResultRow : ViewModelBase
         new[] { Name, Description, TestText, DateText, TuneText, Headline }.Any(text => text.Contains(word, StringComparison.OrdinalIgnoreCase));
 }
 
-/// <summary>The trace the compare chart overlays (performance spec 9.2).</summary>
+/// <summary>The trace the compare chart overlays.</summary>
 public enum ComparisonMetric
 {
     Power,
@@ -96,7 +96,7 @@ public enum ComparisonMetric
 }
 
 /// <summary>
-/// One figure of both runs: "6.97" and "6.84" s, "-0.13" (B − A); "n/a" where a run has none. <see cref="DetailA"/> and
+/// One figure of both runs: "6.84" and "6.97" s, "-0.13" (A − B); "n/a" where a run has none. <see cref="DetailA"/> and
 /// <see cref="DetailB"/> are each run's companion, such as the rpm of its peak power.
 /// </summary>
 public sealed record DeltaRow(string Key, string Label, string A, string B, string Delta, string Unit, string? DetailA = null, string? DetailB = null)
@@ -115,8 +115,8 @@ public sealed record DeltaRow(string Key, string Label, string A, string B, stri
 public sealed record TableChangeRow(string Title, string Detail);
 
 /// <summary>
-/// Two results compared (performance spec 9.2): both recomputed with the current car values and speed calibration over the
-/// band they share, A (the earlier) solid and B dashed, B − A for every figure, the conditions that differ and the tables
+/// Two results compared: both recomputed with the current car values and speed calibration over the
+/// band they share, A (the newer) solid and B (the older) dashed, A − B for every figure, the conditions that differ and the tables
 /// that changed between the two tunes.
 /// </summary>
 public sealed class PerformanceComparisonViewModel : ViewModelBase
@@ -137,8 +137,8 @@ public sealed class PerformanceComparisonViewModel : ViewModelBase
             _ => ComparisonMetric.Rpm,
         };
 
-        // Two gears or two tests take different times for the same marks: those are named, not subtracted (minor review,
-        // finding 26). The rpm of a peak goes beside each run's peak, not in a row of its own (finding 69).
+        // Two gears or two tests take different times for the same marks: those are named, not subtracted.
+        // The rpm of a peak goes beside each run's peak, not in a row of its own.
         var timesApart = comparison.Mismatches.Any(mismatch => mismatch.Code is "gear" or "test");
         Deltas = comparison.Deltas.Where(delta => (delta.A is not null || delta.B is not null) && !ResultText.IsCompanion(delta.Key))
             .Select(delta => new DeltaRow(delta.Key, delta.Label,
@@ -159,7 +159,7 @@ public sealed class PerformanceComparisonViewModel : ViewModelBase
             ? $"Compared over {NumberFormat.Format(from, 0)} to {NumberFormat.Format(to, 0)} {unit}, the band both runs share."
             : null;
         // An empty list always says why: one saved image, the comparison's reason (the XDF to open, two XDFs, a snapshot that
-        // cannot be read), no bin open, or no change (minor review, findings 12, 13 and 25).
+        // cannot be read), no bin open, or no change.
         TablesNote = Tables.Count > 0
             ? null
             : comparison.SameTune
@@ -220,8 +220,7 @@ public sealed class PerformanceComparisonViewModel : ViewModelBase
     public IReadOnlyList<Point> TraceA => Points(TraceOf(_comparison.A, Metric));
 
     /// <summary>
-    /// Why a segment is off: "No airflow trace in either run."; null while either run has the trace, so the segment is on
-    /// (minor review, finding 37).
+    /// Why a segment is off: "No airflow trace in either run."; null while either run has the trace, so the segment is on.
     /// </summary>
     public string? PowerTip => Tip(ComparisonMetric.Power);
 
@@ -260,7 +259,7 @@ public sealed class PerformanceComparisonViewModel : ViewModelBase
 
     public bool HasFlagsB => FlagsB.Count > 0;
 
-    /// <summary>"Intake air 31 and 38 °C: more than 5 °C apart." and the like (spec 7: no correction, so mismatches are named).</summary>
+    /// <summary>"Intake air 31 and 38 °C: more than 5 °C apart." and the like (no correction, so mismatches are named).</summary>
     public IReadOnlyList<string> Mismatches { get; }
 
     public bool HasMismatches => Mismatches.Count > 0;
@@ -288,7 +287,7 @@ public sealed class PerformanceComparisonViewModel : ViewModelBase
     /// <summary>"Noise ±0.04 s over the saved runs of this tune." with three or more such runs; null otherwise.</summary>
     public string? NoiseText { get; }
 
-    /// <summary>Said when the stored figures were made with other car values or another calibration (spec 9.2).</summary>
+    /// <summary>Said when the stored figures were made with other car values or another calibration.</summary>
     public string? RecomputedNote { get; }
 
     /// <summary>"Compared over 2000 to 6400 rpm, the band both runs share."; null when the runs share none.</summary>
@@ -358,11 +357,12 @@ public sealed class PerformanceComparisonViewModel : ViewModelBase
             return $"largest change {ResultText.Signed(largest, 1)}{(units.Length > 0 ? " " + units : "")}";
         }
 
-        return $"{difference.ValueA ?? "n/a"} → {difference.ValueB ?? "n/a"}";
+        // Was, now: the older run's tune (B) then the newer's (A).
+        return $"{difference.ValueB ?? "n/a"} → {difference.ValueA ?? "n/a"}";
     }
 }
 
-/// <summary>A saved result opened from the library: its full result view, read-only except name, description and direction (spec 9.1).</summary>
+/// <summary>A saved result opened from the library: its full result view, read-only except name, description and direction.</summary>
 public sealed class OpenResultViewModel : ViewModelBase
 {
     private readonly PerformanceResultsViewModel _owner;
@@ -383,7 +383,7 @@ public sealed class OpenResultViewModel : ViewModelBase
         _name = _savedName = result.Name;
         _description = _savedDescription = result.Description;
         _direction = _savedDirection = result.Direction;
-        // Titled with its name, the test and headline beside it (minor review, finding 46).
+        // Titled with its name, the test and headline beside it.
         Headline = string.IsNullOrWhiteSpace(result.Figures.Headline) ? result.Spec.ShortName : $"{result.Spec.ShortName} · {result.Figures.Headline}";
         Figures = ResultText.Figures(result.Figures);
         Knock = ResultText.KnockByCylinder(result.Figures);
@@ -413,7 +413,7 @@ public sealed class OpenResultViewModel : ViewModelBase
 
     public bool HasKnock => Knock is not null;
 
-    /// <summary>The line under the bars naming each cylinder at or past 1.5 °CRK (minor review, finding 34).</summary>
+    /// <summary>The line under the bars naming each cylinder at or past 1.5 °CRK.</summary>
     public string? KnockText { get; }
 
     /// <summary>The tune it was made with, for the tune line's file name, firmware id and edits.</summary>
@@ -474,7 +474,7 @@ public sealed class OpenResultViewModel : ViewModelBase
     public bool HasChanges => !IsReadOnly
         && (Name.Trim() != _savedName.Trim() || Description.Trim() != _savedDescription.Trim() || Direction != _savedDirection);
 
-    /// <summary>What Save changes does, or why it is off (system 5.2: every disabled control says why).</summary>
+    /// <summary>What Save changes does, or why it is off (every disabled control says why).</summary>
     public string SaveTip => IsReadOnly
         ? "A newer version of the app made this result, so it cannot be changed."
         : HasChanges
@@ -518,7 +518,7 @@ public sealed class OpenResultViewModel : ViewModelBase
 }
 
 /// <summary>
-/// The Results side of the Performance tab (performance spec 9.1, 9.2): the saved results with search and "Show cold runs",
+/// The Results side of the Performance tab: the saved results with search and "Show cold runs",
 /// rename, description and delete with confirmation, a tick on two rows and Compare, and a result opened read-only.
 /// </summary>
 public sealed class PerformanceResultsViewModel : ViewModelBase
@@ -553,7 +553,7 @@ public sealed class PerformanceResultsViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Cold runs are hidden by default (spec 9.2).</summary>
+    /// <summary>Cold runs are hidden by default.</summary>
     public bool ShowCold
     {
         get => _showCold;
@@ -580,7 +580,7 @@ public sealed class PerformanceResultsViewModel : ViewModelBase
     /// <summary>Exactly two rows ticked.</summary>
     public bool CanCompare => _picked.Count == 2;
 
-    /// <summary>"perf-….json: not a result file" for each file the list left out (review focus 3).</summary>
+    /// <summary>"perf-….json: not a result file" for each file the list left out.</summary>
     public IReadOnlyList<string> Skipped
     {
         get => _skipped;
@@ -666,7 +666,7 @@ public sealed class PerformanceResultsViewModel : ViewModelBase
         return Update(row.FileName, result => (result.Name, (text ?? "").Trim(), result.Direction));
     }
 
-    /// <summary>Deletes the file once the owner confirmed (the confirm dialog); false when they did not or it failed.</summary>
+    /// <summary>Deletes the file once the user confirmed (the confirm dialog); false when they did not or it failed.</summary>
     public async Task<bool> DeleteAsync(ResultRow row)
     {
         ArgumentNullException.ThrowIfNull(row);
@@ -691,7 +691,7 @@ public sealed class PerformanceResultsViewModel : ViewModelBase
         return true;
     }
 
-    /// <summary>Compares the two ticked results, the earlier as A, so B − A is what the change did (spec 9.2).</summary>
+    /// <summary>Compares the two ticked results, the newer as A and the older as B, so A − B is what the change did, as in Compare.</summary>
     public void Compare()
     {
         if (!CanCompare)
@@ -700,7 +700,7 @@ public sealed class PerformanceResultsViewModel : ViewModelBase
         }
 
         var picked = Rows.Where(row => row.IsPicked).OrderBy(row => row.Header.Created).ThenBy(row => row.FileName, StringComparer.OrdinalIgnoreCase).ToArray();
-        if (picked.Length != 2 || Load(picked[0].FileName) is not { } a || Load(picked[1].FileName) is not { } b)
+        if (picked.Length != 2 || Load(picked[1].FileName) is not { } a || Load(picked[0].FileName) is not { } b)
         {
             return;
         }
@@ -732,7 +732,7 @@ public sealed class PerformanceResultsViewModel : ViewModelBase
 
     /// <summary>
     /// Back to the list (or Ctrl K): what was typed into the result is written first, and one that cannot be written keeps the
-    /// result open with why (minor review, finding 30).
+    /// result open with why.
     /// </summary>
     public void CloseOpened()
     {
@@ -781,7 +781,7 @@ public sealed class PerformanceResultsViewModel : ViewModelBase
         return result;
     }
 
-    // The noise is the spread over the saved, warm runs of A's test and tune (spec 9.2); PerfCompare takes the first one's tune.
+    // The noise is the spread over the saved, warm runs of A's test and tune; PerfCompare takes the first one's tune.
     private IReadOnlyList<PerfResult>? SameTune(PerfResult a)
     {
         if (a.Tune?.SavedSha256 is not { } hash)
@@ -810,14 +810,14 @@ public sealed class PerformanceResultsViewModel : ViewModelBase
 
             var row = new ResultRow(header, ResultText.Test(header.Kind, header.Preset), ResultText.Date(header.Created, _owner.Time), cold,
                 _picked.Contains(header.FileName), OnPicked);
-            // A ticked row stays in view whatever the search, so A and B can each be found by search (minor review, finding 63).
+            // A ticked row stays in view whatever the search, so A and B can each be found by search.
             if (row.IsPicked || words.All(row.Matches))
             {
                 rows.Add(row);
             }
         }
 
-        // A row out of view (deleted, or hidden as cold) is never ticked, so Compare never takes one the owner cannot see.
+        // A row out of view (deleted, or hidden as cold) is never ticked, so Compare never takes one the user cannot see.
         _picked.IntersectWith(rows.Select(row => row.FileName));
         Rows.Clear();
         foreach (var row in rows)

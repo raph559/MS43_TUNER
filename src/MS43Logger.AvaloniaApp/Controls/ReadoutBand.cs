@@ -8,17 +8,21 @@ using Avalonia.Media;
 namespace MS43Logger.AvaloniaApp.Controls;
 
 /// <summary>
-/// Live's readout band (system 8, layout B): five cells, rpm, load, advance, gear and speed, framed by one 1 px Hairline
-/// with a 12 px radius and Hairline dividers. Wide, they stand in four columns (11 : 6 : 6 : 5, gear over speed in the
-/// last); <see cref="Stacked"/> (below 1200 px) keeps rpm on the left and puts load and advance over gear and speed.
+/// Live's readout band (layout B): five cells, rpm, load, advance, gear with speed, and knock,
+/// framed by one 1 px Hairline with a 12 px radius and Hairline dividers. Wide, they stand in four columns (18: 12: 12: 14,
+/// gear and speed over knock in the last, knock the taller); <see cref="Stacked"/> (below 1200 px) keeps rpm on the left
+/// and puts load and advance over gear and speed beside knock.
 /// </summary>
 public sealed class ReadoutBand : Panel
 {
     public static readonly StyledProperty<bool> StackedProperty = AvaloniaProperty.Register<ReadoutBand, bool>(nameof(Stacked));
 
     private const double WideHeight = 252;
-    private const double StackedHeight = 224;
+    private const double StackedHeight = 280;
     private const double TopRow = 144;
+
+    // Wide, the gear and speed cell takes this share of the last column; knock, the rest.
+    private const double GearShare = 0.4;
 
     static ReadoutBand()
     {
@@ -84,7 +88,7 @@ public sealed class ReadoutBand : Panel
             var left = R(width * 0.395);
             var right = width - left;
             var half = R(right / 2);
-            var gear = R(right * 0.635);
+            var gear = R(right * 0.5);
             var top = double.IsInfinity(height) ? TopRow : Math.Min(TopRow, height);
             var bottom = double.IsInfinity(height) ? double.PositiveInfinity : height - top;
             return
@@ -97,11 +101,11 @@ public sealed class ReadoutBand : Panel
             ];
         }
 
-        var unit = width / 28;
-        var x1 = R(unit * 11);
-        var x2 = R(unit * 17);
-        var x3 = R(unit * 23);
-        var halfHeight = double.IsInfinity(height) ? double.PositiveInfinity : R(height / 2);
+        var unit = width / 56;
+        var x1 = R(unit * 18);
+        var x2 = R(unit * 30);
+        var x3 = R(unit * 42);
+        var halfHeight = double.IsInfinity(height) ? double.PositiveInfinity : R(height * GearShare);
         var lower = double.IsInfinity(height) ? double.PositiveInfinity : height - halfHeight;
         return
         [

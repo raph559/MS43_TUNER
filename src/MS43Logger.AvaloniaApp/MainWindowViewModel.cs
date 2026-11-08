@@ -30,11 +30,19 @@ public class MainWindowViewModel : INotifyPropertyChanged
     private string _statusText = "Disconnected";
     private int _sampleCount;
     private Ds2Session _session;
+    private MS43Logger.Core.LiveTuning.WatchingPayloadSource _watching;
+    private DiagnosticPayloadSource _diagnostics;              // the log's fault and state columns, around the logger's source
+    private bool _overlayState;                               // the ECU runs overlay 10: its pops and blip state is logged
+    private uint? _watchAsked;
     private CancellationTokenSource _pollingCts;
+    private CancellationTokenSource _reconnectCts;
+    private bool _isReconnecting;
     private DispatcherTimer _uiTimer;
     private readonly Stopwatch _sessionStopwatch = new();
     private LiveLogger _logger;
     private StreamWriter _csvWriter;
+    private readonly object _csvLock = new();                 // the logger thread writes rows; the UI opens and closes the file
+    private IReadOnlyList<AdxValueDefinition> _csvChannels;   // the session's channels, for a log started while connected
     private static readonly HashSet<string> StatusInputs = new(StringComparer.Ordinal)
     {
         nameof(IsConnected), nameof(IsConnecting), nameof(SelectedPort), nameof(SelectedVariant),
@@ -131,13 +139,51 @@ public class MainWindowViewModel : INotifyPropertyChanged
             {
                 OnPropertyChanged(nameof(IsNotConnected));
                 OnPropertyChanged(nameof(ConnectionButtonText));
+                OnPropertyChanged(nameof(ShowsKnock));
             }
         }
     }
 
     public bool IsNotConnected => !IsConnected;
 
-    public string ConnectionButtonText => IsConnecting ? "Connecting…" : IsConnected ? "Disconnect" : "Connect";
+    public string ConnectionButtonText => IsConnecting ? "Connecting…" : IsConnected || IsReconnecting ? "Disconnect" : "Connect";
+
+    /// <summary>
+    /// True while the session dropped without Disconnect (a key-off: the ECU stopped answering after it had answered) and a
+    /// connect is tried every <see cref="ReconnectInterval"/>; the log stays open (live tuning spec 5.4).
+    /// </summary>
+    public bool IsReconnecting
+    {
+        get => _isReconnecting;
+        private set
+        {
+            if (SetField(ref _isReconnecting, value))
+            {
+                OnPropertyChanged(nameof(ConnectionButtonText));
+            }
+        }
+    }
+
+    /// <summary>How each session is made: a serial port by default; tests give one on a scripted port.</summary>
+    internal Func<AdxDefinition, string, Ds2Session> SessionFactory { get; init; } = Ds2Session.Create;
+
+    /// <summary>The pause between two reconnect attempts.</summary>
+    internal TimeSpan ReconnectInterval { get; init; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>The connected session's line for other requests (the live-tuning overlay); null while not connected.</summary>
+    internal MS43Logger.Core.LiveTuning.IDs2Line Line => IsConnected ? _session : null;
+
+    /// <summary>
+    /// The live maps' CSV cell, set by the shell: when set, each row's <c>live_maps</c> cell says which version of each map
+    /// was live (live tuning spec 5.7). One cell whatever the catalogue, so a row is never wider than the header.
+    /// </summary>
+    internal Func<string> LiveMaps { get; set; }
+
+    /// <summary>True while the log's extra reads must wait: a Performance run recording times its samples by the poll alone.</summary>
+    internal Func<bool> DiagnosticsPaused { get; set; }
+
+    /// <summary>Raised when <see cref="Line"/> comes or goes: a connect, a drop, a reconnect, a disconnect.</summary>
+    public event EventHandler LineChanged;
 
     /// <summary>True from Connect until the ECU answers or the attempt fails.</summary>
     public bool IsConnecting
@@ -250,11 +296,39 @@ public class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    /// <summary>
+    /// The Write CSV log switch. Before connecting it says whether the session logs; while connected, turning it on starts
+    /// a new file at once and turning it off closes the file.
+    /// </summary>
     public bool EnableCsvLogging
     {
         get => _enableCsvLogging;
-        set => SetField(ref _enableCsvLogging, value);
+        set
+        {
+            if (!SetField(ref _enableCsvLogging, value))
+            {
+                return;
+            }
+
+            OnPropertyChanged(nameof(LogButtonText));
+            if (_session is null || _csvChannels is null)
+            {
+                return;                                          // not connected: the connect opens it
+            }
+
+            if (value)
+            {
+                StartCsvLog();
+            }
+            else
+            {
+                StopCsvLog();
+            }
+        }
     }
+
+    /// <summary>The header's log button while connected: what pressing it does.</summary>
+    public string LogButtonText => EnableCsvLogging ? "Stop log" : "Start log";
 
     public string CsvPath
     {
@@ -333,7 +407,10 @@ public class MainWindowViewModel : INotifyPropertyChanged
     /// <summary>The channel list's right column: the channels not pinned, through the filter; empty with Pinned only.</summary>
     public ObservableCollection<DecodedValueViewModel> OtherValues { get; } = new();
 
-    /// <summary>Every pinned channel, in title order, for the tiles under the band; the filter never hides a tile.</summary>
+    /// <summary>
+    /// Every pinned channel the band does not already show, in title order, for the tiles under the band; the filter never
+    /// hides a tile.
+    /// </summary>
     public ObservableCollection<DecodedValueViewModel> TileValues { get; } = new();
 
     /// <summary>"No channel matches "xyz"." while the filter leaves both columns empty (system 7.2); null otherwise.</summary>
@@ -342,7 +419,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
         : null;
 
     /// <summary>No channel is pinned: the Pinned column says how to pin one (system 5.6).</summary>
-    public bool ShowsNoPins => TileValues.Count == 0 && string.IsNullOrWhiteSpace(SearchText);
+    public bool ShowsNoPins => PinnedCount == 0 && string.IsNullOrWhiteSpace(SearchText);
 
     /// <summary>The trend window in seconds (Settings: 10, 30 or 60). A change keeps the samples that still fit.</summary>
     public int TrendSeconds
@@ -441,6 +518,11 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     public void ShowConnectionLog() => ShowConnectionLogRequested?.Invoke(this, EventArgs.Empty);
 
+    /// <summary>"Fault memory" on the Live tab: the window opens the read-only fault list.</summary>
+    public event EventHandler ShowFaultMemoryRequested;
+
+    public void ShowFaultMemory() => ShowFaultMemoryRequested?.Invoke(this, EventArgs.Empty);
+
     /// <summary>Connect failed: the banner names the cause and the fix.</summary>
     internal void ReportConnectFailure(Exception error)
     {
@@ -453,6 +535,14 @@ public class MainWindowViewModel : INotifyPropertyChanged
     /// <summary>The logger stopped: the banner says why and what was kept; values freeze in Ink3 if any arrived.</summary>
     internal void ReportLoggingStopped(Exception error)
     {
+        // After samples, timeouts are the ECU going quiet (a key-off, a reset): the app reconnects on its own and keeps the
+        // log open. Before any sample they mean the faster baud was refused, and every other failure stops as before.
+        if (error is TimeoutException && SampleCount > 0)
+        {
+            BeginReconnect(error);
+            return;
+        }
+
         var context = new StopContext(SelectedPort, EnableCsvLogging && !string.IsNullOrWhiteSpace(CsvPath) ? Path.GetFileName(CsvPath) : null,
             SampleCount, _time.GetUtcNow() - _sessionStart);
         var frozen = SampleCount > 0 && _lastSampleAt is not null;
@@ -538,6 +628,9 @@ public class MainWindowViewModel : INotifyPropertyChanged
         {
             reading.Resolve(channels, SanitizeUnits);
         }
+
+        // The tiles leave out what the band shows, so they follow its channels.
+        ApplyFilter();
     }
 
     public bool ShowPinnedOnly
@@ -614,7 +707,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task ToggleConnectionAsync()
     {
-        if (IsConnected)
+        if (IsConnected || IsReconnecting)
         {
             Disconnect();
             return;
@@ -655,8 +748,12 @@ public class MainWindowViewModel : INotifyPropertyChanged
                 OpenCsvWriter(channels);
             }
 
-            _session = Ds2Session.Create(CurrentDefinition, SelectedPort);
+            _csvChannels = channels;
+
+            _session = SessionFactory(CurrentDefinition, SelectedPort);
             await Task.Run(() => _session.Connect());
+            var connected = _session;
+            _watching = await Task.Run(() => Watching(connected));
 
             BeginSession();
             ResetRate();
@@ -665,8 +762,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
             BuildChannelRows(channels);
 
-            _pollingCts = new CancellationTokenSource();
-            _ = PollSensorsAsync(channels, _pollingCts.Token);
+            StartPolling(channels);
             _sessionStopwatch.Restart();
             _uiTimer = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) =>
             {
@@ -674,11 +770,118 @@ public class MainWindowViewModel : INotifyPropertyChanged
                 UpdateSampleRate();
             });
             _uiTimer.Start();
+            LineChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex)
         {
             Disconnect();
             ReportConnectFailure(ex);
+        }
+    }
+
+    private void StartPolling(IReadOnlyList<AdxValueDefinition> channels)
+    {
+        _pollingCts = new CancellationTokenSource();
+        _ = PollSensorsAsync(channels, _pollingCts.Token);
+    }
+
+    /// <summary>The ECU went quiet after answering: the session goes, the log and the values stay, and a connect is retried.</summary>
+    private void BeginReconnect(Exception error)
+    {
+        ConnectionLog = error.ToString();
+        _pollingCts?.Cancel();
+        _pollingCts = null;
+        var dropped = _session;
+        _session = null;
+        _retryText = null;
+        IsConnected = false;
+        // As at a disconnect: a performance run ends on the link loss with the warm-up state it ran in (review focus 1).
+        ResetWarmUp();
+        IsReconnecting = true;
+        var csv = _csvWriter is not null && !string.IsNullOrWhiteSpace(CsvPath) ? Path.GetFileName(CsvPath) : null;
+        if (csv is null && EnableCsvLogging && !string.IsNullOrWhiteSpace(CsvPath))
+        {
+            csv = Path.GetFileName(CsvPath);
+        }
+
+        SetBanner(ConnectionMessages.Reconnecting(SelectedPort, csv, SampleCount));
+        IsStale = _lastSampleAt is not null;
+        RefreshStaleLine();
+        if (IsStale && _staleTimer is null && Avalonia.Application.Current is not null)
+        {
+            _staleTimer = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => RefreshStaleLine());
+            _staleTimer.Start();
+        }
+
+        LineChanged?.Invoke(this, EventArgs.Empty);
+        _reconnectCts = new CancellationTokenSource();
+        _ = ReconnectAsync(dropped, _reconnectCts.Token);
+    }
+
+    private async Task ReconnectAsync(Ds2Session dropped, CancellationToken token)
+    {
+        // The dropped session closes its port first, off the UI thread: its disconnect waits for a reply that will not come.
+        await Task.Run(() => Close(dropped));
+        while (!token.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(ReconnectInterval, token);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            Ds2Session session = null;
+            try
+            {
+                session = SessionFactory(CurrentDefinition, SelectedPort);
+                await Task.Run(() => session.Connect(), CancellationToken.None);
+                var reconnected = session;
+                _watching = await Task.Run(() => Watching(reconnected), CancellationToken.None);
+            }
+            catch (Exception)
+            {
+                await Task.Run(() => Close(session));
+                continue;
+            }
+
+            if (token.IsCancellationRequested)
+            {
+                await Task.Run(() => Close(session));
+                return;
+            }
+
+            Resume(session);
+            return;
+        }
+    }
+
+    private void Resume(Ds2Session session)
+    {
+        _session = session;
+        _reconnectCts = null;
+        IsReconnecting = false;
+        StopStaleTimer();
+        IsStale = false;
+        BannerDetail = null;
+        SetBanner(null);
+        IsConnected = true;
+        var channels = CurrentDefinition.MatchChannels(Array.Empty<string>());
+        StartPolling(channels);
+        StatusText = BuildConnectedStatus(channels.Count);
+        LineChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private static void Close(Ds2Session session)
+    {
+        try
+        {
+            session?.Dispose();
+        }
+        catch
+        {
         }
     }
 
@@ -730,10 +933,21 @@ public class MainWindowViewModel : INotifyPropertyChanged
     {
         var logger = new LiveLogger();
         _logger = logger;
+        // Every sample goes to the CSV here and to the screen in order; at most 64 wait for the screen (Backlog).
+        var backlog = new Backlog(limit: 64);
         logger.SampleReceived += (_, sample) =>
         {
-            WriteCsvRow(sample.Values);
-            Dispatcher.UIThread.Post(() => ShowSample(sample));
+            WriteCsvRow(sample.Values, sample.Payload);
+            if (!backlog.Enter(token))
+            {
+                return;
+            }
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                backlog.Leave();
+                ShowSample(sample);
+            });
         };
         logger.Status += (_, status) => Dispatcher.UIThread.Post(() =>
         {
@@ -750,14 +964,17 @@ public class MainWindowViewModel : INotifyPropertyChanged
             ReportLoggingStopped(error);
         });
 
-        return logger.RunAsync(_session, CurrentDefinition, channels, token);
+        // The log's extra reads go out only while a CSV is open and no Performance run records (the V10.1 review).
+        var source = _diagnostics = new DiagnosticPayloadSource((IPayloadSource)_watching ?? _session, _session, _overlayState,
+            () => _csvWriter is not null && !(DiagnosticsPaused?.Invoke() ?? false));
+        return logger.RunAsync(source, CurrentDefinition, channels, token);
     }
 
     /// <summary>The definition the logger decodes with; set on connect.</summary>
     public AdxDefinition CurrentDefinition
     {
         get => _currentDefinition;
-        internal set => SetField(ref _currentDefinition, value);
+        internal set { if (SetField(ref _currentDefinition, value)) OnPropertyChanged(nameof(ShowsKnock)); }
     }
 
     /// <summary>Raised on the UI thread after each sample has been shown.</summary>
@@ -777,8 +994,132 @@ public class MainWindowViewModel : INotifyPropertyChanged
     /// </summary>
     internal PerfFrame? LastFrame { get; private set; }
 
+    private IReadOnlyList<double?> _knock = Array.Empty<double?>();
+    private int _knockVersion;
+
+    /// <summary>Knock retard per cylinder from the last sample, degrees, positive; empty when not connected (owner, 2026-10-28).</summary>
+    public IReadOnlyList<double?> Knock
+    {
+        get => _knock;
+        private set
+        {
+            if (SetField(ref _knock, value))
+            {
+                OnPropertyChanged(nameof(KnockWarning));
+                OnPropertyChanged(nameof(KnockShort));
+            }
+        }
+    }
+
+    /// <summary>Raised with each sample so the bars draw again.</summary>
+    public int KnockVersion { get => _knockVersion; private set => SetField(ref _knockVersion, value); }
+
+    /// <summary>"Knock retard: cylinder 4 at 1.6 °CRK." for every cylinder at or past 1.5 °CRK, as in Performance.</summary>
+    public string? KnockWarning => ResultText.KnockLine(Knock, 1.5);
+
+    /// <summary>The same cylinders for the knock cell's title line: "cyl 4 · 1.5°", "cyl 2 · 1.9°, cyl 4 · 1.5°".</summary>
+    public string? KnockShort
+    {
+        get
+        {
+            var knocking = Knock.Select((value, index) => (Value: value, Cylinder: index + 1))
+                .Where(pair => pair.Value is { } retard && double.IsFinite(retard) && retard >= 1.5)
+                .Select(pair => $"cyl {pair.Cylinder} · {NumberFormat.Format(pair.Value!.Value, 1)}°").ToArray();
+            return knocking.Length > 0 ? string.Join(", ", knocking) : null;
+        }
+    }
+
+    /// <summary>The bars show unless the connected definition has no knock per cylinder (the stock ones).</summary>
+    public bool ShowsKnock => !IsConnected || CurrentDefinition is null
+        || !Core.Performance.PerfChannels.Missing(CurrentDefinition, Core.Performance.PerfTestKind.KnockCheck).Contains("knock per cylinder");
+
     /// <summary>The clock this screen reads; the Performance tab names its results by it.</summary>
     internal TimeProvider Time => _time;
+
+    // Faster logging (owner, 2026-10-28): numbers change at most five times a second, the latest one shown; the knock bars
+    // hold each cylinder's highest retard of the last second, so a one-sample knock cannot flash by.
+    private static readonly TimeSpan NumberInterval = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan KnockHold = TimeSpan.FromSeconds(1);
+    private readonly Dictionary<DecodedValueViewModel, string> _pendingRows = new();
+    private readonly Queue<(DateTimeOffset At, IReadOnlyList<double?> Retard)> _knockSeen = new();
+    private DateTimeOffset? _numbersShownAt;
+    private ITimer? _numbersTimer;
+
+    private IReadOnlyList<double?> HoldKnock(IReadOnlyList<double?>? retard)
+    {
+        if (retard is null)
+        {
+            _knockSeen.Clear();
+            return Array.Empty<double?>();
+        }
+
+        var now = _time.GetUtcNow();
+        _knockSeen.Enqueue((now, retard));
+        while (_knockSeen.Peek().At <= now - KnockHold)
+        {
+            _knockSeen.Dequeue();
+        }
+
+        return Enumerable.Range(0, retard.Count)
+            .Select(cylinder => _knockSeen.Select(seen => cylinder < seen.Retard.Count ? seen.Retard[cylinder] : null).OfType<double>()
+                .Where(double.IsFinite).Select(value => (double?)value).DefaultIfEmpty(null).Max())
+            .ToArray();
+    }
+
+    private void SetRow(DecodedValueViewModel row, string text, bool show)
+    {
+        if (show)
+        {
+            row.Value = text;
+        }
+        else
+        {
+            _pendingRows[row] = text;
+        }
+    }
+
+    /// <summary>The numbers held back since the last ones shown; armed when a sample's numbers wait.</summary>
+    private void ShowNumbers()
+    {
+        foreach (var reading in Readings)
+        {
+            reading.ShowLatest();
+        }
+
+        foreach (var (row, text) in _pendingRows)
+        {
+            row.Value = text;
+        }
+
+        _pendingRows.Clear();
+        _numbersShownAt = _time.GetUtcNow();
+    }
+
+    private void ArmNumbers(DateTimeOffset now)
+    {
+        var due = _numbersShownAt!.Value + NumberInterval - now;
+        if (due < TimeSpan.Zero)
+        {
+            due = TimeSpan.Zero;
+        }
+
+        _numbersTimer ??= _time.CreateTimer(_ => Dispatcher.UIThread.Post(() =>
+        {
+            if (_pendingRows.Count > 0 || Readings.Any(reading => reading.Display != NumberFormat.Format(reading.Value, reading.Decimals)))
+            {
+                ShowNumbers();
+            }
+        }), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        _numbersTimer.Change(due, Timeout.InfiniteTimeSpan);
+    }
+
+    private void ResetNumbers()
+    {
+        _numbersTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        _pendingRows.Clear();
+        _numbersShownAt = null;
+        _knockSeen.Clear();
+    }
 
     internal void ShowSample(LiveSample sample)
     {
@@ -798,6 +1139,9 @@ public class MainWindowViewModel : INotifyPropertyChanged
         {
             WarmUp.Push(frame);
         }
+
+        Knock = HoldKnock(LastFrame?.KnockRetard);
+        KnockVersion++;
 
         SampleShown?.Invoke(this, sample);
     }
@@ -836,8 +1180,10 @@ public class MainWindowViewModel : INotifyPropertyChanged
     internal void ShowSample(IReadOnlyList<DecodedValue> decoded, DateTimeOffset? time = null)
     {
         var at = time ?? _time.GetUtcNow();
-        _lastSampleAt = _time.GetUtcNow();
+        var now = _time.GetUtcNow();
+        _lastSampleAt = now;
         SampleCount++;
+        var show = _numbersShownAt is not { } shown || now - shown >= NumberInterval;
 
         // The band shows what the last sample held: a channel missing from it reads n/a (system 7.2).
         var inSample = new Dictionary<string, double>(StringComparer.Ordinal);
@@ -848,13 +1194,13 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
         foreach (var reading in Readings)
         {
-            reading.Value = reading.ChannelId is { } channel && inSample.TryGetValue(channel, out var reached) ? reached : null;
+            reading.SetValue(reading.ChannelId is { } channel && inSample.TryGetValue(channel, out var reached) ? reached : null, show);
         }
 
         // So do the rows: a channel the sample did not hold reads n/a until it comes back; its trend stays.
         foreach (var row in _allLiveValues.Where(row => !inSample.ContainsKey(row.Id)))
         {
-            row.Value = "n/a";
+            SetRow(row, "n/a", show);
         }
 
         foreach (var decodedValue in decoded)
@@ -864,7 +1210,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
             if (vm is not null)
             {
                 var digits = Math.Clamp(decodedValue.Definition.DigitCount, 0, 6);
-                vm.Value = NumberFormat.Format(decodedValue.Value, digits);
+                SetRow(vm, NumberFormat.Format(decodedValue.Value, digits), show);
                 vm.Push(at, decodedValue.Value);
             }
 
@@ -872,6 +1218,16 @@ public class MainWindowViewModel : INotifyPropertyChanged
             {
                 EngineSpeedLevel = Math.Clamp(decodedValue.Value / 8000.0, 0, 1);
             }
+        }
+
+        if (show)
+        {
+            _pendingRows.Clear();
+            _numbersShownAt = now;
+        }
+        else
+        {
+            ArmNumbers(now);
         }
     }
 
@@ -883,9 +1239,63 @@ public class MainWindowViewModel : INotifyPropertyChanged
     /// <summary>Disconnects; every value goes back to n/a and the next log gets a new name.</summary>
     public void Disconnect() => Disconnect(keepValues: false);
 
+    /// <summary>The V9 watch: the screens set the map it records. Null unless the ECU runs overlay 9 or later.</summary>
+    public MS43Logger.Core.LiveTuning.IWatchTarget Watch => _watching is null ? null : _watchTarget ??= new WatchTarget(this);
+
+    private WatchTarget _watchTarget;
+
+    /// <summary>Remembers what the screens asked, so a reconnect watches the same map again.</summary>
+    private sealed class WatchTarget(MainWindowViewModel owner) : MS43Logger.Core.LiveTuning.IWatchTarget
+    {
+        public void SetWatch(uint? address) { owner._watchAsked = address; owner._watching?.SetWatch(address); }
+        public uint? Watched => owner._watching?.Watched;
+    }
+
+    /// <summary>
+    /// After the connect, before the first poll: the overlay header (DS2 06 at 0C:B544). With version 9 or 10 and its magic
+    /// (C0D9, C0DA) the logger polls with the watch; otherwise, an overlay this app does not know included, or when the read
+    /// fails, it polls with 0B B0 as before.
+    /// </summary>
+    private MS43Logger.Core.LiveTuning.WatchingPayloadSource Watching(Ds2Session session)
+    {
+        _overlayState = false;
+        try
+        {
+            var header = MS43Logger.Core.LiveTuning.Ds2Memory.Read(session, MS43Logger.Core.LiveTuning.OverlayContract.HeaderAddress, 16);
+            if (MS43Logger.Core.LiveTuning.OverlayHeader.Parse(header) is not
+                    { Version: >= MS43Logger.Core.LiveTuning.OverlayV9.Version and <= MS43Logger.Core.LiveTuning.OverlayV10.Version } parsed
+                || header[14] != 0xD0 + parsed.Version || header[15] != 0xC0)
+                return null;
+            _overlayState = parsed.Version == MS43Logger.Core.LiveTuning.OverlayV10.Version;
+        }
+        catch (Exception error) when (error is TimeoutException or InvalidDataException or IOException or MS43Logger.Core.LiveTuning.Ds2RefusedException)
+        {
+            return null;
+        }
+        var watching = new MS43Logger.Core.LiveTuning.WatchingPayloadSource(session, session) { Quiet = OverlayQuiet };
+        if (_watchAsked is { } address) watching.SetWatch(address);
+        return watching;
+    }
+
+    /// <summary>True while the live-tuning session has stopped: V9's log frames would keep the overlay's live settings on.</summary>
+    internal bool OverlayQuiet { get; private set; }
+
+    /// <summary>
+    /// The live-tuning session stopped (<paramref name="quiet"/>), or a new one started: while quiet, a V9 ECU is logged with
+    /// 0B B0, so the overlay hears nothing and puts its live settings back to flash after 3 s, as on V8.
+    /// </summary>
+    internal void QuietOverlay(bool quiet)
+    {
+        OverlayQuiet = quiet;
+        if (_watching is { } watching) watching.Quiet = quiet;
+    }
+
     // After a failure the values stay, frozen, under the banner that explains them.
     private void Disconnect(bool keepValues)
     {
+        _reconnectCts?.Cancel();
+        _reconnectCts = null;
+        IsReconnecting = false;
         _pollingCts?.Cancel();
         _pollingCts = null;
 
@@ -907,6 +1317,9 @@ public class MainWindowViewModel : INotifyPropertyChanged
             {
                 row.Clear();
             }
+
+            ResetNumbers();
+            Knock = Array.Empty<double?>();
         }
 
         ElapsedTime = "00:00:00";
@@ -930,12 +1343,18 @@ public class MainWindowViewModel : INotifyPropertyChanged
             _session = null;
         }
 
-        _csvWriter?.Dispose();
-        _csvWriter = null;
+        lock (_csvLock)
+        {
+            _csvWriter?.Dispose();
+            _csvWriter = null;
+        }
+
+        _csvChannels = null;
         StatusText = "Disconnected.";
 
         // Connecting again never overwrites the log just closed.
         CsvPath = NextCsvPath;
+        LineChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Live's undo history: channel pins. Tune's edits have their own, so Ctrl Z here never changes the bin.</summary>
@@ -993,8 +1412,10 @@ public class MainWindowViewModel : INotifyPropertyChanged
         PinnedCount = _allLiveValues.Count(value => value.IsPinned);
         VisibleChannelCount = LiveValues.Count;
 
-        // The tiles follow the pins only, never the filter.
-        var pins = _allLiveValues.Where(value => value.IsPinned).OrderBy(value => value.Title, StringComparer.OrdinalIgnoreCase).ToList();
+        // The tiles follow the pins only, never the filter; a channel the band already shows is not repeated (owner, 2026-10-28).
+        var inBand = Readings.Select(reading => reading.ChannelId).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var pins = _allLiveValues.Where(value => value.IsPinned && !inBand.Contains(value.Id))
+            .OrderBy(value => value.Title, StringComparer.OrdinalIgnoreCase).ToList();
         if (!pins.SequenceEqual(TileValues))
         {
             TileValues.Clear();
@@ -1008,6 +1429,38 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
         OnPropertyChanged(nameof(NoMatchText));
         OnPropertyChanged(nameof(ShowsNoPins));
+    }
+
+    /// <summary>Starts a log while connected, in a new file: the path shown if no file has it yet, else the next one.</summary>
+    private void StartCsvLog()
+    {
+        if (string.IsNullOrWhiteSpace(CsvPath) || File.Exists(CsvPath))
+        {
+            CsvPath = NextCsvPath;
+        }
+
+        try
+        {
+            OpenCsvWriter(_csvChannels);
+        }
+        catch (CsvWriteException error)
+        {
+            SetField(ref _enableCsvLogging, false, nameof(EnableCsvLogging));
+            OnPropertyChanged(nameof(LogButtonText));
+            StatusText = error.Message;
+        }
+    }
+
+    /// <summary>Stops a log while connected; the next start writes a new file.</summary>
+    private void StopCsvLog()
+    {
+        lock (_csvLock)
+        {
+            _csvWriter?.Dispose();
+            _csvWriter = null;
+        }
+
+        CsvPath = NextCsvPath;
     }
 
     private void OpenCsvWriter(IReadOnlyList<AdxValueDefinition> channels)
@@ -1026,12 +1479,22 @@ public class MainWindowViewModel : INotifyPropertyChanged
                 Directory.CreateDirectory(directory);
             }
 
-            _csvWriter?.Dispose();
-            _csvWriter = new StreamWriter(path, append: false);
             var header = new List<string> { "timestamp_utc", "sample_index" };
             header.AddRange(channels.Select(channel => channel.Id));
-            _csvWriter.WriteLine(string.Join(",", header));
-            _csvWriter.Flush();
+            header.AddRange(PayloadStates.CsvHeader);
+            header.AddRange(DiagnosticPayloadSource.CsvHeader);
+            if (LiveMaps is not null)
+            {
+                header.Add("live_maps");
+            }
+
+            lock (_csvLock)
+            {
+                _csvWriter?.Dispose();
+                _csvWriter = new StreamWriter(path, append: false);
+                _csvWriter.WriteLine(string.Join(",", header));
+                _csvWriter.Flush();
+            }
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
@@ -1039,7 +1502,15 @@ public class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
-    private void WriteCsvRow(IReadOnlyList<DecodedValue> decoded)
+    private void WriteCsvRow(IReadOnlyList<DecodedValue> decoded, ReadOnlyMemory<byte> payload)
+    {
+        lock (_csvLock)
+        {
+            WriteCsvRowLocked(decoded, payload.Span);
+        }
+    }
+
+    private void WriteCsvRowLocked(IReadOnlyList<DecodedValue> decoded, ReadOnlySpan<byte> payload)
     {
         if (_csvWriter is null)
         {
@@ -1057,6 +1528,12 @@ public class MainWindowViewModel : INotifyPropertyChanged
             var digits = Math.Clamp(value.Definition.DigitCount, 0, 6);
             return value.Value.ToString($"F{digits}", CultureInfo.InvariantCulture);
         }));
+        row.AddRange(PayloadStates.CsvValues(CurrentDefinition, payload));
+        row.AddRange(_diagnostics?.CsvValues() ?? DiagnosticPayloadSource.EmptyCsvValues);
+        if (LiveMaps is not null)
+        {
+            row.Add(LiveMaps());
+        }
 
         try
         {

@@ -4,10 +4,11 @@
 
 # MS43 Tuner
 
-**Live logging, map editing, bin compare and road performance tests for the Siemens MS43 ECU.**
+**Live logging, map editing, live tuning, bin compare and road performance tests for the Siemens MS43 ECU.**
 
 A Windows desktop app, with a command-line tool next to it, for BMW's M54B22, M54B25 and M54B30 engines,<br>
-on stock MS430069-family software or on MS43X001, the community firmware from the MS4X project.
+on stock MS430069-family software or on MS43X001, the community firmware from the MS4X project.<br>
+Live tuning needs MS43X001 with this project's live-tuning overlay, built from source on your own bin.
 
 [![CI](https://github.com/raph559/MS43_TUNER/actions/workflows/ci.yml/badge.svg)](https://github.com/raph559/MS43_TUNER/actions/workflows/ci.yml)
 [![License: GPL-3.0-only](https://img.shields.io/badge/license-GPL--3.0--only-blue.svg)](LICENSE)
@@ -23,11 +24,11 @@ on stock MS430069-family software or on MS43X001, the community firmware from th
 <img src="docs/screenshots/tune-map.png" alt="The Tune tab: the RON98 part-load ignition map as a colour grid, with edit tools above it and a 3D surface preview on the right">
 
 > [!WARNING]
-> MS43 Tuner never writes ECU flash. It saves edited bin files on your PC, and you flash them yourself with MS4X Flasher, which also corrects the checksum. Wheel power is an estimate, not a dyno figure. Run performance tests only on a closed road or a track.
+> MS43 Tuner never writes ECU flash. It saves edited bin files on your PC, and you flash them yourself with MS4X Flasher, which also corrects the checksum. Live tuning changes the ECU's RAM only, through the overlay, and a power cycle brings back the flashed values. Wheel power is an estimate, not a dyno figure. Use the Fun features and run performance tests only on a closed road or a track.
 
 ## What it does
 
-The window has four tabs: Live, Tune, Compare and Performance. There are Night and Day themes (or follow Windows), and animations follow the Windows animation setting.
+The window has six tabs: Live, Tune, Live tuning, Fun, Compare and Performance. Live tuning needs the overlay; Fun edits the open bin without it, and the ECU live with it. There are Night and Day themes (or follow Windows), and animations follow the Windows animation setting.
 
 ### Live
 
@@ -65,6 +66,26 @@ Open a bin with its TunerPro XDF and edit it, as a grid (the picture at the top 
 - Draws maps as a 3D surface you can turn, zoom and edit (Ctrl-drag a point to raise or lower it). Curves, single values, switches and flags each have their own view.
 - Live cursor: while connected, the map shows the cell the engine is on and whether the ECU is using that map right now.
 - Saves the bin, keeping a `.bak` copy of the file as it was before the first save and adding your changes to an edit log next to it, in TunerPro format. Both are on by default and can be turned off in Settings.
+
+### Live tuning
+
+Change maps while the engine runs, with no reflash. This needs an MS43X001 bin with the live-tuning overlay (see [The live-tuning overlay](#the-live-tuning-overlay)); on any other bin the tab says so and does nothing.
+
+- The overlay runs in MS43X001's free flash space. It copies the maps you pick into the ECU's RAM and has the firmware read them from there. The app sends your edits over DS2 on the K-line.
+- Edit a live map like any map in Tune, then Send it, or Send all changed. Switch between the edited and the flashed values at once (A / B) to hear and log the difference.
+- Revert all puts every map back to the flashed one; your edits stay in the app, unsent. Free RAM is shown, and a map that is switched off can be removed from RAM to make room.
+- Copy to Tune puts the values the ECU confirmed into the open bin, to save and flash as usual. Until then, nothing you send survives a power cycle.
+- The rev limiter (rpm, hysteresis, fuel or ignition cut) can be set live too.
+
+### Fun
+
+The extra features, one page each, every one off until you turn it on. With the overlay, a change goes to the ECU live; without it, it edits the open bin.
+
+- **Launch control, no-lift shift and rolling anti-lag**: MS43X001's own features, with their speed, pedal and rpm conditions, ignition offset and AFR target per fuel.
+- **Hardcut**: the rev limiter, as above.
+- **Pops & bangs** on lift-off (overlay only): duration, ignition angle, throttle opening, AFR target, and the minimum engine speed, coolant temperature and vehicle speed.
+- **Downshift blip** (overlay only): an automatic rev-match on braking downshifts, chosen per gear, with its opening, hold, spark angle and lead, a spark cap above the target engine speed, and limits on vehicle speed, engine speed and time.
+- Pops and the blip can stay armed all the time, or follow a switch in the car: cruise control armed, ASC off or A/C on.
 
 ### Compare
 
@@ -111,6 +132,7 @@ Time pulls, roll-ons and standing starts from the same data stream.
 | **Cable** | A K+DCAN USB cable, or another K-line interface that holds 125000 baud reliably, set up as a COM port |
 | **Car** | A BMW with the Siemens MS43 ECU (M54B22, M54B25 or M54B30 engine) |
 | **ECU software** | MS43X001, or stock MS430069-family software with the MS4X extended logging patch: logging uses the MS4X logging command (`0B B0`) |
+| **Live tuning** | An MS43X001 bin with the live-tuning overlay, built from [`firmware/overlay`](firmware/overlay) on your own bin |
 | **Flashing** | MS4X Flasher, to flash the bins you edit |
 | **Building** | The .NET 10 SDK, only to build from source |
 
@@ -230,8 +252,8 @@ src/MS43Logger.Cli/                 the command-line tool
 tests/MS43Logger.Core.Tests/        xUnit tests for the core
 tests/MS43Logger.AvaloniaApp.Tests/ headless UI tests
 definitions/                        bundled MS4X logging definitions and the MS43X001 live cursor rules
-docs/firmware/map-use/              firmware notes behind the map-use rules
-docs/superpowers/                   design specs and implementation plans
+firmware/overlay/                   the live-tuning overlay's source and its build
+docs/firmware/                      firmware notes: the map-use rules and the overlay
 docs/screenshots/                   images for this README
 scripts/                            release packaging and the live-inputs generator
 ```
@@ -251,11 +273,17 @@ The logging definitions in [`definitions/`](definitions) are by the MS4x Dev Tea
 | `Siemens_MS43_Extended_Log_v2.9_M54B30.adx` | `b30` |
 | `Siemens_MS43_MS43X001_Logging.adx` | `ms43x` |
 
-These files have no stated license and are not covered by this project's license. Permission from MS4X is being requested, and the files will be removed if MS4X asks. [NOTICE.md](NOTICE.md) has the details and the third-party packages the app uses.
+The MS43X001 logging definition is GPL-3.0, as MS4X publishes it in [MS43X-Custom-Firmware](https://github.com/ms4x-net/MS43X-Custom-Firmware). The three Extended Log files have no stated license and are not covered by this project's license; permission from MS4X is being requested, and they will be removed if MS4X asks. [NOTICE.md](NOTICE.md) has the details and the third-party packages the app uses.
 
-The MS43X001 map definition (the `Siemens_MS43_MS43X001_512K` XDF by the MS4x Dev Team: 1479 tables, 2293 constants, `BASEOFFSET` 0x70000) is not in this repository, because it has no stated license either. Get it from the [MS4X project](https://www.ms4x.net) and open it in the app. Tune and Compare read TunerPro XDF files and are tested with this one. The live cursor's rules ([`definitions/ms43x001_map_use.json`](definitions/ms43x001_map_use.json) and [`definitions/ms43x001_live_inputs.json`](definitions/ms43x001_live_inputs.json)) are written for MS43X001 only; the firmware notes behind them are in [`docs/firmware/map-use`](docs/firmware/map-use).
+The MS43X001 map definition (the `Siemens_MS43_MS43X001_512K` XDF by the MS4x Dev Team: 1479 tables, 2293 constants, `BASEOFFSET` 0x70000) is not in this repository. Get it from the [MS4X project](https://github.com/ms4x-net/MS43X-Custom-Firmware) and open it in the app. Tune and Compare read TunerPro XDF files and are tested with this one. The live cursor's rules ([`definitions/ms43x001_map_use.json`](definitions/ms43x001_map_use.json) and [`definitions/ms43x001_live_inputs.json`](definitions/ms43x001_live_inputs.json)) are written for MS43X001 only; the firmware notes behind them are in [`docs/firmware/map-use`](docs/firmware/map-use).
 
 Bins are never committed. Keep your own bins and XDF out of issues and pull requests.
+
+### The live-tuning overlay
+
+The overlay's source is in [`firmware/overlay`](firmware/overlay), under GPL-3.0 like MS43X001, which it modifies. Its build takes your own MS43X001 bin and writes a patched copy next to it; no bin is published. MS43X001 itself is by the MS4X project and is built on Siemens's MS430069 software.
+
+It has been tested in an emulator that runs the real firmware, on scripted drives (starts, idle, full load, overrun, blips), and in one car. It has not been validated more widely. Keep your original bin, and flash the overlay bin only if you can flash back.
 
 Sources for the logger:
 
@@ -271,8 +299,6 @@ The app is built with [Avalonia](https://avaloniaui.net/) and tested with [xUnit
 - More performance tests: coast-down, part-throttle cell sweep, throttle response, idle quality, rev-limiter check, 0 to 400 m, braking, warm-up log, repeatability sets, and export.
 - Log replay from CSV with time spent per map cell.
 
-The design documents are in the source contract and the source contract.
-
 ## Contributing
 
 Bug reports, logs from other engines and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before you open a pull request. Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md). Report security problems privately, as [SECURITY.md](SECURITY.md) describes. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
@@ -281,7 +307,7 @@ Bug reports, logs from other engines and pull requests are welcome. Read [CONTRI
 
 MS43 Tuner's own code and documentation are licensed under the GNU General Public License v3.0 only (GPL-3.0-only). See [LICENSE](LICENSE).
 
-The exception is the four ADX logging definitions in [`definitions/`](definitions), which are by the MS4x Dev Team. They are bundled with credit, have no stated license, and are not covered by the GPL; they will be removed if MS4X asks. The MS43X001 XDF and bins are not in the repository. See [NOTICE.md](NOTICE.md).
+The live-tuning overlay in [`firmware/overlay`](firmware/overlay) is GPL-3.0 as a modification of MS43X001. The ADX logging definitions in [`definitions/`](definitions) are by the MS4x Dev Team and bundled with credit: the MS43X001 one is GPL-3.0; the three Extended Log ones have no stated license, are not covered by the GPL, and will be removed if MS4X asks. The MS43X001 XDF and bins are not in the repository. See [NOTICE.md](NOTICE.md).
 
 ## Disclaimer
 

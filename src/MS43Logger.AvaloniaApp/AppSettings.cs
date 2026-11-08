@@ -110,7 +110,7 @@ public sealed class AppSettings
 
     public bool CompareRailCollapsed { get; set; }
 
-    /// <summary>How Compare's B − A reads: in the map's units, in stored counts, or as a percentage of A.</summary>
+    /// <summary>How Compare's A − B reads: in the map's units, in stored counts, or as a percentage of B.</summary>
     public DeltaMode CompareDeltaMode { get; set; } = DeltaMode.Units;
 
     /// <summary>Which way Tune's Interpolate and Smooth work on a map: X, Y or both (TunerPro's choice).</summary>

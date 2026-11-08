@@ -154,7 +154,7 @@ public sealed class MapGrid : Control
         return row >= 0 && row < values.Rows && col >= 0 && col < values.Cols;
     }
 
-    /// <summary>The exact text drawn in a cell: the raw value, the B - A difference, or the value with an ASCII minus.</summary>
+    /// <summary>The exact text drawn in a cell: the raw value, the A - B difference, or the value with an ASCII minus.</summary>
     public string CellText(int row, int col)
     {
         if (Editor is not TableEditorViewModel editor)

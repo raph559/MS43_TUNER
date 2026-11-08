@@ -15,7 +15,7 @@ using Avalonia.VisualTree;
 namespace MS43Logger.AvaloniaApp.Shell;
 
 /// <summary>
-/// Shows one modal dialog inside the main window (system 5.9): a scrim over the whole window and the dialog card
+/// Shows one modal dialog inside the main window: a scrim over the whole window and the dialog card
 /// centred on it. Esc closes it, Enter presses its primary button, Tab stays inside it, and focus goes back to where
 /// it was. While a dialog is open the window's shortcuts stand still (MainWindow checks <see cref="IsOpen"/>).
 /// </summary>
@@ -44,6 +44,9 @@ public sealed class DialogHost : Panel
 
     public bool IsOpen => _result is not null;
 
+    /// <summary>A dialog opened where none was, or the last one closed; one dialog taking another's place raises nothing.</summary>
+    public event EventHandler? IsOpenChanged;
+
     /// <summary>The dialog shown, or null.</summary>
     public Control? Content => _card.Child as Control;
 
@@ -55,7 +58,8 @@ public sealed class DialogHost : Panel
     /// </summary>
     public Task<object?> ShowAsync(Control content, NavigationMethod focusWith = NavigationMethod.Unspecified)
     {
-        Close();
+        var wasOpen = IsOpen;
+        Close(null, notify: false);
 
         // The caller resumes after Close has finished, never inside it (Close runs from key and click handlers).
         _result = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -64,10 +68,17 @@ public sealed class DialogHost : Panel
         _card.Child = content;
         IsVisible = true;
         Dispatcher.UIThread.Post(() => FocusFirst(focusWith), DispatcherPriority.Loaded);
+        if (!wasOpen)
+        {
+            IsOpenChanged?.Invoke(this, EventArgs.Empty);
+        }
+
         return _result.Task;
     }
 
-    public void Close(object? result = null)
+    public void Close(object? result = null) => Close(result, notify: true);
+
+    private void Close(object? result, bool notify)
     {
         if (_result is not { } pending)
         {
@@ -80,6 +91,10 @@ public sealed class DialogHost : Panel
         _returnFocus?.Focus();
         _returnFocus = null;
         pending.SetResult(result);
+        if (notify)
+        {
+            IsOpenChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     /// <summary>Closes the dialog that holds <paramref name="content"/>.</summary>

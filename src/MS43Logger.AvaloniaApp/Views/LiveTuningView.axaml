@@ -1,0 +1,228 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:MS43Logger.AvaloniaApp"
+             xmlns:controls="using:MS43Logger.AvaloniaApp.Controls"
+             x:Class="MS43Logger.AvaloniaApp.Views.LiveTuningView"
+             x:DataType="local:LiveTuningViewModel">
+    <UserControl.Styles>
+        <!-- The map list (live tuning spec 4, mockup A): 256 px on Frame, as the Tune and Performance rails. -->
+        <Style Selector="Border#LiveTuningRail">
+            <Setter Property="Width" Value="256" />
+        </Style>
+        <Style Selector="ListBox#LiveTuningMaps ListBoxItem">
+            <Setter Property="Padding" Value="12,8" />
+        </Style>
+        <Style Selector="TextBlock.state">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid ColumnDefinitions="Auto,*,Auto">
+        <!-- The catalogue is shown only after the connected ECU's overlay has been verified. -->
+        <Border Name="LiveTuningRail" Background="{DynamicResource FrameBrush}" BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="0,0,1,0"
+                Padding="8,16">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="4,0,4,12">
+                    <TextBlock Classes="label" Text="Live maps" />
+                    <TextBlock Name="LiveCatalogueText" Classes="state" Text="{Binding CatalogueText}" TextWrapping="Wrap" />
+                    <TextBox Name="LiveMapSearch" Text="{Binding MapSearch}" Watermark="Search name, category, description…"
+                             IsVisible="{Binding HasVerifiedCatalogue}" AutomationProperties.Name="Search supported live maps" />
+                    <CheckBox Content="Loaded only" IsChecked="{Binding LoadedOnly}" IsVisible="{Binding HasVerifiedCatalogue}" />
+                </StackPanel>
+            <!-- As the Tune rail: XDF categories that open and close, the matches alone while searching, the description on hover. -->
+            <ListBox Name="LiveTuningMaps" ItemsSource="{Binding Rail}" SelectionChanged="Maps_SelectionChanged" Background="Transparent"
+                     IsVisible="{Binding HasVerifiedCatalogue}">
+                <ListBox.DataTemplates>
+                    <DataTemplate DataType="local:LiveRailCategory">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ToolTip.Tip="{Binding Count, StringFormat='{}{0} live maps in this category'}">
+                            <Panel Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center">
+                                <controls:StrokeIcon Data="{StaticResource Icon.ChevronRight}" Width="14" Height="14" IsVisible="{Binding !IsExpanded}" />
+                                <controls:StrokeIcon Data="{StaticResource Icon.ChevronDown}" Width="14" Height="14" IsVisible="{Binding IsExpanded}" />
+                            </Panel>
+                            <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="2" Classes="state" Text="{Binding Count}" Margin="6,0,0,0" VerticalAlignment="Center" />
+                        </Grid>
+                    </DataTemplate>
+                    <DataTemplate DataType="local:LiveMapRow">
+                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto">
+                            <ToolTip.Tip>
+                                <StackPanel Spacing="4" MaxWidth="360">
+                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
+                                    <TextBlock Classes="label" Text="{Binding Detail}" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </ToolTip.Tip>
+                            <TextBlock Classes="label" Text="{Binding Group}" />
+                            <TextBlock Grid.Row="1" Classes="mono13" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Row="2" Classes="state" Text="{Binding StateText}" />
+                            <TextBlock Grid.Row="3" Classes="state" Text="{Binding CapacityText}" TextWrapping="Wrap" />
+                            <ToggleSwitch Grid.Column="1" Grid.RowSpan="3" IsChecked="{Binding IsOn}" IsEnabled="{Binding CanSwitch}" OnContent="" OffContent="" VerticalAlignment="Center"
+                                          AutomationProperties.Name="Use the edited map" ToolTip.Tip="On: the ECU reads the edited map. Off: the flashed map." />
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.DataTemplates>
+            </ListBox>
+            </DockPanel>
+        </Border>
+
+        <!-- Middle: the selected map's grid, edited as on the Tune tab, with the engine's live cursor on it. -->
+        <DockPanel Grid.Column="1" Margin="24,16,24,24">
+            <TextBlock DockPanel.Dock="Top" Classes="mono13" Text="{Binding Selected.Title}" TextWrapping="Wrap" Margin="0,0,0,12"
+                       IsVisible="{Binding HasVerifiedCatalogue}" />
+            <DockPanel Name="LiveTuningReadOnly" DockPanel.Dock="Top" Margin="0,0,0,12" IsVisible="{Binding IsReadOnly}">
+                <controls:StrokeIcon Data="{StaticResource Icon.Info}" Margin="0,1,8,0" VerticalAlignment="Top" />
+                <TextBlock Name="LiveTuningReadOnlyText" Classes="body" Text="{Binding ReadOnlyReason}" TextWrapping="Wrap" Foreground="{DynamicResource Ink2Brush}" />
+            </DockPanel>
+            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12" IsVisible="{Binding BinDiffers, Converter={x:Static ObjectConverters.IsNotNull}}">
+                <controls:StrokeIcon Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource WarnBrush}" Width="16" Height="16" Margin="0,1,8,0" VerticalAlignment="Top" />
+                <TextBlock Name="LiveTuningBinDiffers" Classes="body" Text="{Binding BinDiffers}" TextWrapping="Wrap" />
+            </DockPanel>
+
+            <WrapPanel Name="LiveTuningTools" DockPanel.Dock="Top" ItemSpacing="12" LineSpacing="8" IsEnabled="{Binding !IsReadOnly}"
+                       IsVisible="{Binding HasTableEditor}">
+                <TextBox Name="LiveTuningValue" Width="120" Height="32" Classes="data13 commits" Watermark="Value" Text="{Binding ToolValue}" KeyDown="Value_KeyDown"
+                         AutomationProperties.Name="Value">
+                    <TextBox.InnerRightContent>
+                        <TextBlock Classes="meta" Text="{Binding Editor.Units}" VerticalAlignment="Center" Margin="6,0,10,0" />
+                    </TextBox.InnerRightContent>
+                </TextBox>
+                <Border Classes="toolgroup">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Set" Tag="Set" Click="Tool_Click" ToolTip.Tip="Set the selected cells to the value (Enter)" />
+                        <Button Content="Add" Tag="Add" Click="Tool_Click" ToolTip.Tip="Add the value to the selected cells" />
+                        <Button Content="Scale %" Tag="Scale" Click="Tool_Click" ToolTip.Tip="Change the selected cells by that many percent" />
+                    </StackPanel>
+                </Border>
+                <Border Classes="toolgroup">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Undo" Click="Undo_Click" />
+                        <Button Content="Redo" Click="Redo_Click" />
+                    </StackPanel>
+                </Border>
+            </WrapPanel>
+
+            <StackPanel DockPanel.Dock="Bottom" Spacing="4" Margin="0,12,0,0" IsVisible="{Binding HasTableEditor}">
+                <DockPanel IsVisible="{Binding Editor.Message, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <controls:StrokeIcon DockPanel.Dock="Left" Data="{StaticResource Icon.Warn}" Foreground="{DynamicResource WarnBrush}" Width="14" Height="14"
+                                         Margin="0,1,8,0" VerticalAlignment="Top" />
+                    <TextBlock Classes="body" Text="{Binding Editor.Message}" TextWrapping="Wrap" />
+                </DockPanel>
+                <WrapPanel ItemSpacing="24" LineSpacing="4">
+                    <controls:NumberText Value="{Binding Editor.ChangedText}" IsVisible="{Binding Editor.ChangedText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    <TextBlock Text="{Binding LiveCursor.Readout}" IsVisible="{Binding LiveCursor.Readout, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                </WrapPanel>
+            </StackPanel>
+
+            <ScrollViewer Margin="0,16,0,0" HorizontalScrollBarVisibility="Auto">
+                <StackPanel>
+                <controls:MapGrid Name="LiveTuningGrid" Editor="{Binding Editor}" VerticalAlignment="Top" HorizontalAlignment="Left"
+                                  IsVisible="{Binding HasTableEditor}" IsEnabled="{Binding !IsReadOnly}" />
+                <StackPanel Name="LiveScalarPanel" IsVisible="{Binding HasScalarEditor}" IsEnabled="{Binding !IsReadOnly}" Spacing="12">
+                    <TextBlock Classes="body" Text="{Binding ScalarNote}" TextWrapping="Wrap"
+                               IsVisible="{Binding ScalarNote, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Undo" Click="Undo_Click" />
+                        <Button Content="Redo" Click="Redo_Click" />
+                    </StackPanel>
+                    <ItemsControl ItemsSource="{Binding ScalarFields}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="local:LiveScalarRow">
+                                <Border BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="0,0,0,1" Padding="0,8,0,12">
+                                    <StackPanel Spacing="6">
+                                        <TextBlock Classes="label" Text="{Binding Label}" ToolTip.Tip="{Binding Description}" />
+                                        <TextBlock Classes="meta" Text="{Binding Key}" />
+                                        <ComboBox ItemsSource="{Binding Editor.Choices}" SelectedItem="{Binding Editor.SelectedChoice}"
+                                                  IsVisible="{Binding Editor.IsSwitch}" HorizontalAlignment="Stretch"
+                                                  AutomationProperties.Name="{Binding Label}">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate x:DataType="local:ChoiceItem">
+                                                    <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                        <WrapPanel IsVisible="{Binding Editor.IsValue}" ItemSpacing="12" LineSpacing="6">
+                                            <TextBlock VerticalAlignment="Center" MinWidth="96"><Run Text="{Binding Editor.ReadingText, Mode=OneWay}" /> <Run Text="{Binding Editor.ReadingUnits, Mode=OneWay}" /></TextBlock>
+                                            <TextBox Width="120" Text="{Binding Editor.Input}" Watermark="New value" Classes="data13"
+                                                     KeyDown="ScalarValue_KeyDown" AutomationProperties.Name="{Binding Label}" />
+                                            <Button Content="Set" Click="ScalarSet_Click" />
+                                            <TextBlock Text="{Binding Editor.Units}" VerticalAlignment="Center" />
+                                        </WrapPanel>
+                                        <TextBlock Classes="state" Text="{Binding Editor.Message}" TextWrapping="Wrap"
+                                                   IsVisible="{Binding Editor.Message, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </DockPanel>
+
+        <!-- Right: the A/B switch, Send, Revert all (always there), and the link to the ECU's overlay. -->
+        <Border Grid.Column="2" Width="288" Background="{DynamicResource FrameBrush}" BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="1,0,0,0"
+                Padding="16">
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Spacing="12">
+                <TextBlock Classes="label" Text="Live RAM" />
+                <TextBlock Name="LiveMemoryText" Classes="body" Text="{Binding MemoryText}" TextWrapping="Wrap" />
+                <ProgressBar Name="LiveMemoryBar" Minimum="0" Maximum="{Binding MemoryCapacity}" Value="{Binding MemoryUsed}" Height="8"
+                             AutomationProperties.Name="Live map RAM usage" />
+                <TextBlock Classes="state" Text="{Binding AllocationText}" TextWrapping="Wrap" />
+                <TextBlock Classes="label" Text="A / B" />
+                <ToggleSwitch Name="LiveTuningAB" IsChecked="{Binding AllEdited, Mode=OneWay}" OnContent="Edited settings" OffContent="Flashed settings"
+                              IsEnabled="{Binding !IsReadOnly}" Click="AB_Click" AutomationProperties.Name="Flashed or edited settings" />
+                <Button Name="LiveTuningSend" Classes="primary" Content="Send" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        IsEnabled="{Binding CanSendSelected}" Click="Send_Click" ToolTip.Tip="Load the selection if needed, send its changes, and switch it on" />
+                <Button Name="LiveTuningSendAll" Content="Send all changed" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        IsEnabled="{Binding !IsReadOnly}" Click="SendAll_Click" />
+                <Button Name="LiveTuningRevert" Content="Revert all" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="Revert_Click"
+                        ToolTip.Tip="Every map back to the flashed one in the ECU; your edits stay here, unsent" />
+                <Button Name="LiveTuningFree" Content="Remove selection from RAM" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        IsEnabled="{Binding !IsReadOnly}" Click="Free_Click"
+                        ToolTip.Tip="Release the selected allocation (it must be off) to make room; its edits stay here" />
+                <Button Name="LiveTuningCopy" Content="Copy to Tune" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        IsEnabled="{Binding !IsReadOnly}" Click="Copy_Click"
+                        ToolTip.Tip="Copy confirmed sent values into the Tune tab's bin, to save and flash as usual" />
+                <TextBlock Name="LiveTuningKept" Classes="body" Text="{Binding KeptForOtherFlash}" TextWrapping="Wrap" Foreground="{DynamicResource Ink2Brush}"
+                           IsVisible="{Binding KeptForOtherFlash, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                <TextBlock Name="LiveTuningProblem" Classes="body" Text="{Binding Problem}" TextWrapping="Wrap" Foreground="{DynamicResource WarnBrush}"
+                           IsVisible="{Binding Problem, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                <Expander Name="LiveLimiterPanel" Header="Hardcut / rev limiter" Theme="{StaticResource SidebarExpander}" IsVisible="{Binding IsV4}">
+                    <StackPanel Spacing="8" IsEnabled="{Binding !IsReadOnly}">
+                        <TextBlock Classes="state" Text="Manual gearbox limits · RPM in steps of 32" TextWrapping="Wrap" />
+                        <ItemsControl ItemsSource="{Binding LimiterGears}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="local:LimiterRpmRow">
+                                    <Grid ColumnDefinitions="*,96" Margin="0,0,0,4">
+                                        <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                        <TextBox Grid.Column="1" Text="{Binding Rpm}" Classes="data13" AutomationProperties.Name="{Binding Label}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="Cut return hysteresis (RPM)" />
+                        <TextBox Name="LiveLimiterHysteresis" Text="{Binding LimiterHysteresis}" Classes="data13" AutomationProperties.Name="Limiter hysteresis in RPM" />
+                        <TextBlock Text="Cut mode" />
+                        <ComboBox Name="LiveLimiterMode" SelectedIndex="{Binding LimiterMode}" HorizontalAlignment="Stretch" AutomationProperties.Name="Limiter cut mode">
+                            <ComboBoxItem Content="Fuel cut" />
+                            <ComboBoxItem Content="Ignition cut" />
+                        </ComboBox>
+                        <CheckBox Name="LiveLimiterEnabled" Content="Use live limiter settings" IsChecked="{Binding LimiterEnabled}" />
+                        <Button Name="LiveLimiterSend" Content="Send limiter settings" Click="LimiterSend_Click" HorizontalAlignment="Stretch" />
+                        <Button Name="LiveLimiterCopy" Content="Copy limiter to Tune" Click="LimiterCopy_Click" HorizontalAlignment="Stretch"
+                                ToolTip.Tip="Copy the last confirmed limiter values into the Tune bin" />
+                        <TextBlock Name="LiveLimiterState" Classes="state" Text="{Binding LimiterState}" TextWrapping="Wrap" />
+                        <TextBlock Classes="state" Text="{Binding LimiterScopeText}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Expander>
+                <TextBlock Classes="label" Text="Link" Margin="0,12,0,0" />
+                <TextBlock Name="LiveTuningLink" Classes="body" Text="{Binding LinkText}" TextWrapping="Wrap" />
+                <TextBlock Name="LiveTuningNotProven" Classes="body" TextWrapping="Wrap" Foreground="{DynamicResource Ink2Brush}"
+                           Text="The live-tuning overlay has been tested in the emulator. Real ECU operation remains unvalidated." />
+            </StackPanel>
+            </ScrollViewer>
+        </Border>
+    </Grid>
+</UserControl>

@@ -15,6 +15,8 @@ Nothing has been released yet, so everything is under "Unreleased". Until the fi
 - CLI logging with channel selection, sample count or duration limits, and a custom ADX (`--definition`).
 - Connection states with banners; "Show details" opens the full connection log to copy into a report.
 - Each sample carries the time of the request that answered it.
+- After a key-off or a reset the app reconnects on its own, every second, and carries on in the same CSV log; Disconnect stops it. Timeouts before any sample still stop as before.
+- With the Live tuning page, each CSV row says which version of each live map was in use.
 
 ### Tune
 
@@ -27,13 +29,25 @@ Nothing has been released yet, so everything is under "Unreleased". Until the fi
 - Save and Save as write through a temporary file, keep one `.bak` of the file as it was before the first save in a session, and append a TunerPro-style edit log. Both can be turned off in Settings.
 - Live cursor: while logging, the shown map, curve or axis marks where the engine is, found the way the ECU searches its axes, with the surrounding cells weighted, a fading trail and the interpolated value. Gear-indexed tables read the gear from the top bits of the rpm word. Tables whose inputs the logger does not carry say why.
 - Map use: next to the live readout, whether the ECU is using the map on screen: "In use", "Not in use", a blend such as "RON98 72 % · RON91 28 %", "Possibly in use" or "Selection unknown". It covers VE 1 to 8, ignition part load, idle and optimum, the full-load AFR target, the VANOS maps (part load told from full load) and the catalyst-heating maps. The rules are data in `definitions/ms43x001_map_use.json`, with their evidence in `docs/firmware/map-use/`.
-- Compare with B inside Tune: A, B or B − A on the map, read as units, raw counts or %, and Copy from B. The remembered B opens with A.
+- Compare with B inside Tune: A, B or A − B on the map, read as units, raw counts or %, and Copy from B. The remembered B opens with A.
+- Map windows, as in TunerPro: a map, curve or axis opens in a window of its own from a double-click in the rail, the row's menu or Open in window, any number at once. Each has the edit tools, the grid, the key line and the live cursor on every tab; all edit the bin through its one undo history, Ctrl S saves, and they close with the bin.
+
+### Live tuning
+
+- A Live tuning tab for an ECU running the live-tuning overlay bin (MS43LAB plan 6; proven in the emulator, not yet on a real ECU): the RON98 ignition, idle ignition, RON98 λ target and both part-load cam targets, edited with the Tune tab's tools and the live cursor.
+- The app finds the overlay with the read-only DS2 command 06 before it sends anything; without it the page is read-only and says why. The base of every edit is the ECU's own flashed maps.
+- Edits stay in the app until Send, which uploads only the changed cells and switches the map on. A/B for all maps and per map, Free, and an always-visible Revert all, which leaves the edits in the app.
+- A status every second keeps the overlay alive. After a key cycle or a stall, whatever had been sent is sent again and the live maps go back on once the engine runs. A λ cell leaner than flashed is refused before anything is sent.
+- Edits are kept between sessions. Copy to Tune puts them into the Tune tab's bin, to save and flash as usual (no checksum is touched; MS4X Flasher corrects them), and warns when that bin is not the overlay bin.
+- A Performance run made with maps live records them, and says when they changed during the run.
+- The header compacts below 1536 px of window to make room for the fifth tab.
 
 ### Compare
 
 - Compares the open bin (A) with a second bin (B) through A's XDF: every map, curve, value, switch and flag that differs, with the changed cells, the largest change and any axis that differs, plus the bytes that differ outside every XDF item, by flash area.
-- Compare tab: a kind filter, items grouped by category, the B − A grid on a diverging scale and the A and B grids, B − A as units, raw counts or %, "Copy B into A" through the undo history, "Edit in Tune", and a "Differs from B" filter on the Tune rail.
+- Compare tab: a kind filter, items grouped by category, the A − B grid on a diverging scale and the A and B grids, A − B as units, raw counts or % of B, "Copy B into A" through the undo history, "Edit in Tune", and a "Differs from B" filter on the Tune rail.
 - The list resizes and collapses like the Tune rail and has hover cards. A and B can be swapped after a confirmation.
+- A − B reads how far the bin tuned (A) is from the one compared with (B): coral where A is higher, % relative to B. A value, switch or flag row reads "was, now", from B to A ("3520 → 4512"), and a switch's choices show as wrapping text.
 - The CLI lists the same differences with `diff A.bin B.bin --xdf PATH`.
 
 ### Performance
@@ -41,7 +55,7 @@ Nothing has been released yet, so everything is under "Unreleased". Until the fi
 - A Performance tab next to Live, Tune and Compare, fed by the live DS2 samples with no extra requests.
 - Tests: full-throttle pull in 2nd, 3rd or 4th up to the bin's rev limit, knock check, roll-ons 60 to 100 and 80 to 120 km/h, standing starts 0 to 100, 0 to 200 and 100 to 200 km/h, speed calibration with an optional GPS correction, car values, pedal step and link test.
 - Each run has a ready check, a live view (rpm, progress, knock per cylinder, rpm against time over a baseline) and a result: interpolated band times, wheel power and torque estimates, knock, conditions, flags and the tune it ran on.
-- Results are saved with a name, a description and the raw samples, then listed, renamed, deleted and compared: overlaid power, torque, ignition, knock, VANOS and AFR traces, B − A, condition mismatches and the tables that differ, with both runs recomputed from the current car values.
+- Results are saved with a name, a description and the raw samples, then listed, renamed, deleted and compared: overlaid power, torque, ignition, knock, VANOS and AFR traces, A − B with the newer run as A, condition mismatches and the tables that differ, with both runs recomputed from the current car values.
 - Warm-up warnings on Live and Performance: a red coolant banner and an amber oil banner while the temperature is below 80 °C. Each clears after 10 s at 80 °C or more and comes back below 75 °C. A cold engine keeps a run from starting.
 - Car values: the tyre size is picked from width (135 to 355 mm), profile (25 to 85) and rim (13 to 22 in), and a size saved in another form still selects its parts.
 - Removed: the old performance dashboard window, replaced by the tab.
@@ -64,5 +78,7 @@ Nothing has been released yet, so everything is under "Unreleased". Until the fi
 - A press on the value slider no longer writes a value, a locked edit log no longer reads as a failed save, and a disconnect is no longer reported as a logging failure.
 - Trimmed names have tooltips, the arrow keys keep the active cell in view, and the search icon sits inside its field.
 - A fix to the theme switch.
+- The Definition and Port pickers in the header open again: only the header's background drags the window.
+- Clicking a row in the Tune rail or the Compare list no longer moves the list: the clicked row stays where it was while Recent grows or the list is rebuilt.
 
 [Unreleased]: https://github.com/raph559/MS43_LOGGER/commits/main

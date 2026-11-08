@@ -1,12 +1,16 @@
 using System.IO.Ports;
+using MS43Logger.Core.LiveTuning;
 
 namespace MS43Logger.Core;
 
-public sealed class Ds2Session : IDisposable, IPayloadSource
+public sealed class Ds2Session : IDisposable, IPayloadSource, IDs2Line
 {
     private const int PollRetryCount = 2;
     private readonly AdxDefinition _definition;
     private readonly ISerialPortAdapter _port;
+
+    // One exchange on the wire at a time: the polls, the requests, the connect and the disconnect take turns.
+    private readonly object _line = new();
     private bool _connected;
     private bool _disposed;
 
@@ -37,7 +41,10 @@ public sealed class Ds2Session : IDisposable, IPayloadSource
         EnsurePortOpen();
         ConfigurePort(_definition.Header.InitialBaud, _definition.Header.InitialParity);
 
-        ExecuteExchange(_definition.GetConnectExchange());
+        lock (_line)
+        {
+            ExecuteExchange(_definition.GetConnectExchange());
+        }
 
         var activeBaud = _definition.GetMonitorExchange().Request.Baud ?? _definition.Header.InitialBaud;
         ConfigurePort(activeBaud, _definition.Header.InitialParity);
@@ -61,7 +68,12 @@ public sealed class Ds2Session : IDisposable, IPayloadSource
             {
                 // Each attempt sends the request again: the reply's values are latched after this one went out.
                 var sentAt = System.Diagnostics.Stopwatch.GetTimestamp();
-                var responseFrame = ExecuteExchange(exchange);
+                byte[] responseFrame;
+                lock (_line)
+                {
+                    responseFrame = ExecuteExchange(exchange);
+                }
+
                 var payload = ExtractPayload(responseFrame, exchange.Response);
                 LastRequestTimestamp = sentAt;
                 LastAttempts = attempt;
@@ -76,6 +88,25 @@ public sealed class Ds2Session : IDisposable, IPayloadSource
         throw lastTimeout ?? new TimeoutException($"Timed out waiting for '{exchange.Response.Id}' on {PortName}.");
     }
 
+    /// <inheritdoc />
+    public byte[] Request(IReadOnlyList<byte> payload, int listenMilliseconds = 400)
+    {
+        ThrowIfDisposed();
+        if (!_connected)
+        {
+            throw new InvalidOperationException("The DS2 session is not connected.");
+        }
+
+        var request = OverlayContract.Frame(payload);
+        lock (_line)
+        {
+            _port.DiscardInBuffer();
+            _port.DiscardOutBuffer();
+            _port.Write(request, 0, request.Length);
+            return ReadResponseFrame(request, new AdxListenPacket("request", "request", null, new byte[] { 0x12 }, 0, listenMilliseconds));
+        }
+    }
+
     public void Disconnect()
     {
         if (_disposed)
@@ -87,7 +118,11 @@ public sealed class Ds2Session : IDisposable, IPayloadSource
         {
             if (_port.IsOpen && _connected)
             {
-                ExecuteExchange(_definition.GetDisconnectExchange());
+                lock (_line)
+                {
+                    ExecuteExchange(_definition.GetDisconnectExchange());
+                }
+
                 ConfigurePort(_definition.Header.InitialBaud, _definition.Header.InitialParity);
             }
         }

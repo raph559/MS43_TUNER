@@ -65,12 +65,12 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
         Mark = mark;
     }
 
-    /// <summary>A read-only grid of fixed values (a comparison's A, B or B − A); <paramref name="marked"/> get the changed-cell dot.</summary>
+    /// <summary>A read-only grid of fixed values (a comparison's A, B or A − B); <paramref name="marked"/> get the changed-cell dot.</summary>
     public static TableEditorViewModel Snapshot(TableValues values, IReadOnlySet<(int Row, int Col)> marked, bool isDelta = false, CellMark mark = CellMark.Changed,
         DeltaMode deltaMode = DeltaMode.Units) =>
         new(values ?? throw new ArgumentNullException(nameof(values)), marked ?? throw new ArgumentNullException(nameof(marked)), isDelta, mark, deltaMode);
 
-    /// <summary>How a B − A grid's cells read (its values are already in that measure): units, counts or percent.</summary>
+    /// <summary>How a A − B grid's cells read (its values are already in that measure): units, counts or percent.</summary>
     public DeltaMode DeltaMode { get; }
 
     /// <summary>Cells that differ from the compare bin B, ringed in their top-left corner on Tune's A view.</summary>
@@ -114,7 +114,7 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
     /// <summary>True for snapshots: edits are refused with <see cref="ReadOnlyMessage"/>.</summary>
     public bool IsReadOnly => _document is null;
 
-    /// <summary>True when the values are B − A differences, drawn on the diverging scale.</summary>
+    /// <summary>True when the values are A − B differences, drawn on the diverging scale.</summary>
     public bool IsDelta { get; }
 
     /// <summary>Raised after an edit was written, with the cells it touched.</summary>
@@ -397,6 +397,20 @@ public sealed class TableEditorViewModel : ViewModelBase, IDisposable
         WithUnits(first == last ? Point(axis, first) : $"{Point(axis, first)} to {Point(axis, last)}", axis.Units);
 
     private static string WithUnits(string text, string units) => units.Length > 0 && units != "-" ? $"{text} {units}" : text;
+
+    /// <summary>A toolbar operation on the selection; Set, Add and Scale % read <paramref name="typed"/>, the toolbar's value box.</summary>
+    public bool ApplyTool(EditKind kind, string typed)
+    {
+        var value = 0.0;
+        if (kind is EditKind.Set or EditKind.Add or EditKind.Scale &&
+            !double.TryParse(typed.Replace('−', '-').Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out value))
+        {
+            Message = typed.Trim().Length == 0 ? "Type a value first." : $"'{typed}' is not a number.";
+            return false;
+        }
+
+        return Apply(new EditRequest(kind, value));
+    }
 
     /// <summary>Writes the edit through the history; a refused edit leaves the bin unchanged and explains why in <see cref="Message"/>.</summary>
     public bool Apply(EditRequest request)

@@ -363,12 +363,12 @@
                                 IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}">
                         <Border Classes="seg" IsVisible="{Binding ShowsTable}" AutomationProperties.Name="Grid">
                             <StackPanel Orientation="Horizontal" Spacing="2">
-                                <ToggleButton Name="ViewDelta" Classes="seg" Content="B − A" IsChecked="{Binding IsDeltaView}" />
+                                <ToggleButton Name="ViewDelta" Classes="seg" Content="A − B" IsChecked="{Binding IsDeltaView}" />
                                 <ToggleButton Name="ViewA" Classes="seg" Content="A" IsChecked="{Binding IsAView}" />
                                 <ToggleButton Name="ViewB" Classes="seg" Content="B" IsChecked="{Binding IsBView}" />
                             </StackPanel>
                         </Border>
-                        <!-- How B − A reads, as TunerPro's compare offers: in units, in stored counts, or as a percentage of A. -->
+                        <!-- How A − B reads, as TunerPro's compare offers: in units, in stored counts, or as a percentage of B. -->
                         <Border Classes="seg" AutomationProperties.Name="Difference as">
                             <Border.IsVisible>
                                 <MultiBinding Converter="{x:Static BoolConverters.And}">
@@ -378,11 +378,11 @@
                             </Border.IsVisible>
                             <StackPanel Orientation="Horizontal" Spacing="2">
                                 <ToggleButton Name="DeltaUnits" Classes="seg" Content="Units" IsChecked="{Binding IsDeltaUnits}"
-                                              ToolTip.Tip="B − A in the map's units" />
+                                              ToolTip.Tip="A − B in the map's units" />
                                 <ToggleButton Name="DeltaRaw" Classes="seg" Content="Raw" IsChecked="{Binding IsDeltaRaw}"
-                                              ToolTip.Tip="B − A in stored counts" />
+                                              ToolTip.Tip="A − B in stored counts" />
                                 <ToggleButton Name="DeltaPercent" Classes="seg" Content="%" IsChecked="{Binding IsDeltaPercent}"
-                                              ToolTip.Tip="B − A as a percentage of A" AutomationProperties.Name="Percent of A" />
+                                              ToolTip.Tip="A − B as a percentage of B" AutomationProperties.Name="Percent of B" />
                             </StackPanel>
                         </Border>
                         <Button Name="CopyFromB" Content="Copy B into A" Click="Copy_Click" ToolTip.Tip="Write B's value of this item into A. Undo with Ctrl Z." />
@@ -393,9 +393,9 @@
                     <StackPanel DockPanel.Dock="Bottom" Spacing="8" Margin="0,12,0,0">
                         <WrapPanel Name="CompareScale" ItemSpacing="24" LineSpacing="8" IsVisible="{Binding ShowsTable}">
                             <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsDeltaView}">
-                                <TextBlock Classes="key" Text="B lower" />
+                                <TextBlock Classes="key" Text="A lower" />
                                 <controls:DeltaScale Low="{Binding ScaleLow}" High="{Binding ScaleHigh}" VerticalAlignment="Center" />
-                                <TextBlock Classes="key" Text="B higher" />
+                                <TextBlock Classes="key" Text="A higher" />
                             </StackPanel>
                             <controls:ColourScale Width="200" MinLabel="{Binding ScaleMinLabel}" MidLabel="{Binding ScaleMidLabel}" MaxLabel="{Binding ScaleMaxLabel}"
                                                   IsVisible="{Binding !IsDeltaView}" />

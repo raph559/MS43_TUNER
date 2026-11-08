@@ -39,7 +39,7 @@
                 <TextBlock Name="SettingsNote" Text="Changes apply right away and are saved." Foreground="{DynamicResource Ink2Brush}"
                            Margin="0,4,0,0" IsVisible="{Binding !HasSaveError}" />
             </StackPanel>
-            <Button Name="CloseButton" Grid.Column="1" Classes="quiet icon" Click="Close_Click" VerticalAlignment="Top" Margin="12,-5,-8,0"
+            <Button Name="CloseButton" Grid.Column="1" Classes="quiet icon" Click="Close_Click" VerticalAlignment="Top" Margin="12,0,0,0"
                     ToolTip.Tip="Close (Esc)" AutomationProperties.Name="Close">
                 <controls:StrokeIcon Data="{StaticResource Icon.Close}" />
             </Button>

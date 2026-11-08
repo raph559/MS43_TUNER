@@ -15,7 +15,7 @@ using MS43Logger.Core.Tests;
 
 namespace MS43Logger.AvaloniaApp.Tests;
 
-/// <summary>The Performance tab as drawn (performance spec 9.1, 9.2): rail, Run and Results, the header's primary button and shortcuts.</summary>
+/// <summary>The Performance tab as drawn: rail, Run and Results, the header's primary button and shortcuts.</summary>
 public sealed class PerformanceViewTests : IDisposable
 {
     private readonly string _folder = TestShell.NewFolder();
@@ -77,7 +77,7 @@ public sealed class PerformanceViewTests : IDisposable
         Assert.True(Shown(window, "PerformanceRail"));
         Assert.True(Find.Named<ToggleButton>(window, "RunModeButton").IsChecked);
         Assert.Equal("Arm pull", Find.Named<Button>(window, "ArmButton").Content);
-        // The reason Arm is off is a line in the pane too, not only a tooltip (system 5.9).
+        // The reason Arm is off is a line in the pane too, not only a tooltip.
         Assert.Contains(view.GetVisualDescendants().OfType<NumberText>(), text => text.Value == "Connect to the car to run a test." && text.IsEffectivelyVisible);
         Screens.Save(window, "performance-run-night-1440");
     }
@@ -109,8 +109,8 @@ public sealed class PerformanceViewTests : IDisposable
         Assert.False(shell.ConnectIsPrimary);
     }
 
-    // A finished run not saved when the link drops: Save result is the one primary, not Connect too (minor review, findings 20
-    // and 33); once saved, Connect is again.
+    // A finished run not saved when the link drops: Save result is the one primary, not Connect too;
+    // once saved, Connect is again.
     [AvaloniaFact]
     public void SaveResultIsTheOnePrimaryAfterTheLinkDrops()
     {
@@ -131,7 +131,7 @@ public sealed class PerformanceViewTests : IDisposable
         Assert.Contains("primary", Find.Named<Button>(window, "ConnectButton").Classes);
     }
 
-    // Ctrl S on Performance saves the result there is to save, never the bin (minor review, finding 31).
+    // Ctrl S on Performance saves the result there is to save, never the bin.
     [AvaloniaFact]
     public void CtrlSSavesTheResultOnPerformance()
     {
@@ -151,7 +151,7 @@ public sealed class PerformanceViewTests : IDisposable
         Assert.Single(Directory.GetFiles(Path.Combine(_folder, "results"), "*.json"));
     }
 
-    // Live's red coolant banner shows at the top of the Performance pane too (minor review, finding 77).
+    // Live's red coolant banner shows at the top of the Performance pane too.
     [AvaloniaFact]
     public void PerformanceShowsTheRedCoolantBanner()
     {
@@ -167,7 +167,7 @@ public sealed class PerformanceViewTests : IDisposable
             Assert.Single(banner.GetVisualDescendants().OfType<NumberText>()).Value);
     }
 
-    // The tip on another test names the one that is on, with a way to it (minor review, finding 29).
+    // The tip on another test names the one that is on, with a way to it.
     [AvaloniaFact]
     public void TheRunningTestIsOneClickAway()
     {
@@ -185,7 +185,7 @@ public sealed class PerformanceViewTests : IDisposable
         Assert.True(Shown(window, "CancelRunButton"));
     }
 
-    // Ctrl K from an opened result keeps what was typed into it (minor review, finding 30).
+    // Ctrl K from an opened result keeps what was typed into it.
     [AvaloniaFact]
     public void CtrlKKeepsTheEditsOfAnOpenedResult()
     {
@@ -263,7 +263,7 @@ public sealed class PerformanceViewTests : IDisposable
         Assert.True(Shown(window, "DiscardResultButton"));
         Assert.True(Shown(window, "RunAgainButton"));
         Assert.Equal("3rd pull 12:00", Find.Named<TextBox>(window, "ResultNameBox").Text);
-        // Exactly one primary button on the screen (system 5.2).
+        // Exactly one primary button on the screen.
         Assert.Single(window.GetVisualDescendants().OfType<Button>(), button => button.IsEffectivelyVisible && button.Classes.Contains("primary"));
         Screens.Save(window, "performance-result-night-1440");
 
@@ -275,7 +275,7 @@ public sealed class PerformanceViewTests : IDisposable
         Assert.Equal("Baseline", Assert.Single(shell.Performance.Results.Rows).Name);
     }
 
-    // A knock check's result shows each cylinder's worst retard as the six bars, in Ink2 since it is stored (spec 6.2, 9.2).
+    // A knock check's result shows each cylinder's worst retard as the six bars, in Ink2 since it is stored.
     [AvaloniaFact]
     public void KnockCheckResultShowsTheBars()
     {
@@ -294,7 +294,7 @@ public sealed class PerformanceViewTests : IDisposable
         Assert.False(bars.IsLive);
         Assert.Equal(1.5, bars.Values![3]!.Value, 2);
         Assert.Equal(0, bars.Values[0]!.Value);
-        // The cylinder is named in words under the bars, and its icon takes the knock flag's amber (minor review, finding 34).
+        // The cylinder is named in words under the bars, and its icon takes the knock flag's amber.
         var line = Find.Named<NumberText>(window, "ResultKnockText");
         Assert.Equal("Knock retard: cylinder 4 at 1.5 °CRK.", line.Value);
         Assert.True(line.IsEffectivelyVisible);
@@ -331,10 +331,10 @@ public sealed class PerformanceViewTests : IDisposable
         Assert.True(chart.IsEffectivelyVisible);
         Assert.NotEmpty(chart.TraceA!);
         Assert.NotEmpty(chart.TraceB!);
-        Assert.Equal("A: Baseline", chart.LabelA);
+        Assert.Equal("A: Ignition +1.5", chart.LabelA);
         Assert.Equal("kW", chart.YUnits);
         Assert.True(Find.Named<ToggleButton>(window, "MetricPower").IsChecked);
-        // The analysis' own name for MAF (minor review, finding 36).
+        // The analysis' own name for MAF.
         Assert.Equal("Airflow", Find.Named<ToggleButton>(window, "MetricMaf").Content);
         Assert.Equal("Engine speed over time", Find.Named<ToggleButton>(window, "MetricRpm").Content);
         Assert.False(Shown(window, "ResultsList"));
@@ -349,7 +349,7 @@ public sealed class PerformanceViewTests : IDisposable
         Assert.True(Shown(window, "ResultsList"));
     }
 
-    // The difference panel shows each run's flags (final review, finding 5).
+    // The difference panel shows each run's flags.
     [AvaloniaFact]
     public void CompareShowsAColdRunsFlag()
     {
@@ -367,9 +367,9 @@ public sealed class PerformanceViewTests : IDisposable
         results.Compare();
         Dispatcher.UIThread.RunJobs();
 
-        Assert.False(Shown(window, "FlagsA"));
-        Assert.True(Shown(window, "FlagsB"));
-        Assert.Contains(Find.Named<ItemsControl>(window, "FlagsB").GetVisualDescendants().OfType<NumberText>(),
+        Assert.False(Shown(window, "FlagsB"));
+        Assert.True(Shown(window, "FlagsA"));
+        Assert.Contains(Find.Named<ItemsControl>(window, "FlagsA").GetVisualDescendants().OfType<NumberText>(),
             text => text.Value == "Engine cold: not comparable." && text.IsEffectivelyVisible);
         Screens.Save(window, "performance-compare-cold-night-1440");
     }
@@ -387,7 +387,7 @@ public sealed class PerformanceViewTests : IDisposable
         Screens.Save(window, "performance-results-empty-night-1024");
     }
 
-    // One unreadable file is named with why, and the others still list (review focus 3).
+    // One unreadable file is named with why, and the others still list.
     [AvaloniaFact]
     public void ABadFileIsNamedAndTheOthersStillList()
     {
@@ -398,7 +398,7 @@ public sealed class PerformanceViewTests : IDisposable
         Dispatcher.UIThread.RunJobs();
 
         Assert.Single(shell.Performance.Results.Rows);
-        // A file name is UI text, not numbers and ids (system 3.1; minor review, finding 35).
+        // A file name is UI text, not numbers and ids.
         Assert.Contains(Find.Named<ItemsControl>(window, "SkippedFiles").GetVisualDescendants().OfType<TextBlock>(),
             text => text is not NumberText && text.Text == "perf-20261021-110000.json: not a result file" && text.IsEffectivelyVisible);
     }
@@ -416,7 +416,7 @@ public sealed class PerformanceViewTests : IDisposable
         Assert.True(shell.Performance.Results.HasOpened);
         var name = Find.Named<TextBox>(window, "OpenedNameBox");
         Assert.True(name.IsFocused);
-        // Titled with its name; Save changes waits for a change (minor review, finding 46).
+        // Titled with its name; Save changes waits for a change.
         Assert.Equal("Baseline", Find.Named<TextBlock>(window, "OpenedTitle").Text);
         var saveDetails = Find.Named<Button>(window, "SaveDetailsButton");
         Assert.False(saveDetails.IsEffectivelyEnabled);
@@ -540,7 +540,7 @@ public sealed class PerformanceViewTests : IDisposable
         Assert.False(shell.Performance.RailCollapsed);
         Assert.True(Shown(window, "PerformanceCollapseButton"));
 
-        // Ctrl K opens the results on their search (performance spec 9.1).
+        // Ctrl K opens the results on their search.
         window.KeyPress(Key.K, RawInputModifiers.Control, PhysicalKey.K, "k");
         Dispatcher.UIThread.RunJobs();
         Assert.True(shell.Performance.IsResultsMode);
@@ -563,19 +563,20 @@ public sealed class PerformanceViewTests : IDisposable
         shell.Live.ShowRate(new RateStats(8, 125, 110, 140, 100));
         Dispatcher.UIThread.RunJobs();
 
-        // The words "slow link" give way under the compact header; the rate and its icon stay (performance spec 9.1).
+        // The words "slow link" give way under the compact header; the rate and its icon stay.
         Assert.False(Shown(window, "SlowLinkText"));
         Assert.True(shell.Live.IsSlowLink);
-        Assert.Equal(new Thickness(8, 0), Find.Named<ToggleButton>(window, "TabPerformance").Padding);
+        // The tabs live in the column on the left (2026-10-28), narrower below 1280 px.
+        Assert.Equal(new Thickness(6, 0), Find.Named<ToggleButton>(window, "TabPerformance").Padding);
 
-        window.Width = 1440;
+        window.Width = 1600;
         Dispatcher.UIThread.RunJobs();
         Assert.True(Shown(window, "SlowLinkText"));
-        Assert.Equal(new Thickness(12, 0), Find.Named<ToggleButton>(window, "TabPerformance").Padding);
+        Assert.Equal(new Thickness(14, 0), Find.Named<ToggleButton>(window, "TabPerformance").Padding);
     }
 
     // Every state of the tab at both sizes and in both themes, for review; nothing may run past the window's right edge
-    // (system 8: no horizontal page scroll, nothing clipped).
+    // (no horizontal page scroll, nothing clipped).
     [AvaloniaFact]
     public void PerformanceScreensForReview()
     {
@@ -673,8 +674,7 @@ public sealed class PerformanceViewTests : IDisposable
         Assert.True(problems.Count == 0, string.Join("\n", problems.Distinct().Take(30)));
     }
 
-    // The warm-up banners stay at the top of the pane, out of the scrolling part, on Run and on Results (minor review,
-    // finding 32).
+    // The warm-up banners stay at the top of the pane, out of the scrolling part, on Run and on Results.
     [AvaloniaFact]
     public void WarmUpBannersStayInViewOnRunAndResults()
     {
@@ -690,7 +690,7 @@ public sealed class PerformanceViewTests : IDisposable
         Assert.True(banner.IsEffectivelyVisible);
     }
 
-    // Numbers in Bahnschrift, the firmware id in Cascadia, file names in plain UI text (system 3.1; minor review, finding 35).
+    // Numbers in Bahnschrift, the firmware id in Cascadia, file names in plain UI text.
     [AvaloniaFact]
     public void NumbersIdsAndFileNamesTakeTheirFonts()
     {
@@ -723,8 +723,7 @@ public sealed class PerformanceViewTests : IDisposable
         Assert.Contains("num", Assert.Single(runs, run => run.Text == "3").Classes);
     }
 
-    // The action bar comes after what it acts on in tab order, so Tab from the last field reaches Save (minor review,
-    // finding 39).
+    // The action bar comes after what it acts on in tab order, so Tab from the last field reaches Save.
     [AvaloniaFact]
     public void TheActionBarComesLastInTabOrder()
     {
@@ -746,7 +745,7 @@ public sealed class PerformanceViewTests : IDisposable
             KeyboardNavigationHandler.GetNext(Find.Named<ToggleButton>(window, "OpenedDirectionB"), NavigationDirection.Next));
     }
 
-    // A group heading on the rail is a heading: no focus, no hover, no press (minor review, finding 40).
+    // A group heading on the rail is a heading: no focus, no hover, no press.
     [AvaloniaFact]
     public void GroupHeadingsAreNotRows()
     {
@@ -760,7 +759,7 @@ public sealed class PerformanceViewTests : IDisposable
     }
 
     // The knock line keeps its room while a run is on, so the chart under it never jumps as a cylinder starts or stops
-    // knocking (minor review, finding 41); in a short window that room costs no height, so the chart stays in view at
+    // knocking; in a short window that room costs no height, so the chart stays in view at
     // 1024 x 680 (ruling: the bars beside the reading there).
     [AvaloniaTheory]
     [InlineData(1440, 900)]
@@ -796,7 +795,7 @@ public sealed class PerformanceViewTests : IDisposable
     }
 
     // At 1024 x 680 under two warm-up banners the flags sit below the fold under the figures: a line beside Save result
-    // names them (minor review, finding 43).
+    // names them.
     [AvaloniaFact]
     public void FlagsBelowTheFoldAreNamedBesideSave()
     {
@@ -823,7 +822,7 @@ public sealed class PerformanceViewTests : IDisposable
         Assert.False(summary.IsEffectivelyVisible);
     }
 
-    // An empty Results side leads to Run, and the rail marks no test while Results show (minor review, finding 44).
+    // An empty Results side leads to Run, and the rail marks no test while Results show.
     [AvaloniaFact]
     public void EmptyResultsLeadToRunAndTheRailMarksNoTest()
     {

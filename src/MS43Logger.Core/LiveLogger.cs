@@ -18,10 +18,12 @@ public interface IPayloadSource
 /// <param name="Time">The wall clock once the reply was decoded; for display and file names only.</param>
 /// <param name="Payload">The frame's data bytes as polled; channels' raw values are read from it.</param>
 /// <param name="RequestedAt">When the request went out, on the run's monotonic clock (zero at the run's start): the closest
-/// stamp to when the DME latched the values, so test math uses it (performance spec 4.2).</param>
+/// stamp to when the DME latched the values, so test math uses it.</param>
 /// <param name="RepliedAt">When the reply had been read, on the same clock.</param>
 /// <param name="Retries">Requests the source sent again inside the poll after a timeout; <paramref name="RequestedAt"/> is the
 /// one that got the reply.</param>
+/// <param name="Watch">With a V9 ECU, the reply's watch record; null otherwise.</param>
+/// <param name="WatchedAddress">The map address the record belongs to: the one acknowledged when the poll went out.</param>
 public sealed record LiveSample(
     DateTimeOffset Time,
     long Index,
@@ -29,23 +31,31 @@ public sealed record LiveSample(
     ReadOnlyMemory<byte> Payload = default,
     TimeSpan RequestedAt = default,
     TimeSpan RepliedAt = default,
-    int Retries = 0);
+    int Retries = 0,
+    LiveTuning.WatchRecord? Watch = null,
+    uint? WatchedAddress = null);
 
 /// <summary>
-/// The polling loop: poll, decode, publish, pause. Same rules as before the move out of the window:
-/// up to 3 timeouts in a row are retried after 50 ms, any other error stops the loop, and a pause follows every sample.
+/// Polls, decodes and publishes samples. Retries the first two consecutive timeouts after 50 ms; the third
+/// timeout or any other error stops the loop. An optional pause follows each sample; the default is zero.
 /// </summary>
 public sealed class LiveLogger
 {
     public const int TimeoutLimit = 3;
 
     private readonly TimeSpan _pause;
+
+    /// <summary>The shortest time from one poll to the next, whatever the source.</summary>
+    public static readonly TimeSpan MinInterval = TimeSpan.FromMilliseconds(10);
+
+    /// <summary>The wait after each sample.</summary>
+    public TimeSpan Pause => _pause;
     private readonly SampleRateMeter _rate = new();
     private readonly object _rateLock = new();
 
     public LiveLogger(TimeSpan? pause = null)
     {
-        _pause = pause ?? TimeSpan.FromMilliseconds(20);
+        _pause = pause ?? TimeSpan.Zero;
     }
 
     /// <summary>Raised on the polling thread for every decoded sample.</summary>
@@ -68,6 +78,17 @@ public sealed class LiveLogger
             }
         }
     }
+
+    /// <summary>
+    /// The watch record of the source's last poll and the address it belongs to, through the log's diagnostic columns;
+    /// nulls for a source without one.
+    /// </summary>
+    public static (LiveTuning.WatchRecord? Record, uint? Address) WatchOf(IPayloadSource source) => source switch
+    {
+        LiveTuning.WatchingPayloadSource watching => (watching.LastRecord, watching.LastRecordWatched),
+        DiagnosticPayloadSource diagnostic => WatchOf(diagnostic.Inner),
+        _ => (null, null),
+    };
 
     public Task RunAsync(IPayloadSource source, AdxDefinition definition, IReadOnlyList<AdxValueDefinition> channels, CancellationToken token)
     {
@@ -96,7 +117,7 @@ public sealed class LiveLogger
                 var payload = source.PollPayload();
                 var repliedAt = System.Diagnostics.Stopwatch.GetElapsedTime(started);
                 // A source that retried inside the call stamps the request that got the reply: the first one timed out
-                // about a listen timeout before the values were latched (performance spec 4.2).
+                // about a listen timeout before the values were latched.
                 if (source.LastRequestTimestamp is { } sent
                     && System.Diagnostics.Stopwatch.GetElapsedTime(started, sent) is var resent && resent > requestedAt && resent <= repliedAt)
                 {
@@ -116,10 +137,15 @@ public sealed class LiveLogger
                     Status?.Invoke(this, "Resumed");
                 }
 
-                SampleReceived?.Invoke(this, new LiveSample(DateTimeOffset.UtcNow, index++, values, payload, requestedAt, repliedAt, retries));
-                if (_pause > TimeSpan.Zero)
+                var (watch, watched) = WatchOf(source);
+                SampleReceived?.Invoke(this, new LiveSample(DateTimeOffset.UtcNow, index++, values, payload, requestedAt, repliedAt, retries,
+                    watch, watched));
+                // A poll takes at least MinInterval: a real line takes about 40 ms and never waits here, a source that answers at
+                // once is held to 100 polls a second so it cannot flood the screen.
+                var wait = Math.Max(_pause.Ticks, (MinInterval - (System.Diagnostics.Stopwatch.GetElapsedTime(started) - requestedAt)).Ticks);
+                if (wait > 0)
                 {
-                    await Task.Delay(_pause, token);
+                    await Task.Delay(TimeSpan.FromTicks(wait), token);
                 }
             }
             catch (OperationCanceledException)

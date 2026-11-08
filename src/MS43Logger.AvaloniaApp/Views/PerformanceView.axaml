@@ -10,12 +10,23 @@
         <Style Selector="Border#PerformanceRail">
             <Setter Property="Width" Value="256" />
         </Style>
+        <!-- 200 px (the side panels' minimum) since the tab column took the screens' left edge (2026-10-28): the run's options stay on one line at 1024 px. -->
         <Style Selector="Window.compact Border#PerformanceRail">
-            <Setter Property="Width" Value="224" />
+            <Setter Property="Width" Value="200" />
         </Style>
         <!-- Collapsed (Ctrl B): the 48 px strip; RailSizer sets the width. -->
         <Style Selector="Border#PerformanceRail.collapsed">
             <Setter Property="Padding" Value="8,12,8,8" />
+        </Style>
+        <!-- Below 1280 px, beside the tab column, the run's options keep one line: tighter gaps and band boxes. -->
+        <Style Selector="Window.compact WrapPanel#RunOptions">
+            <Setter Property="ItemSpacing" Value="16" />
+        </Style>
+        <Style Selector="TextBox.band">
+            <Setter Property="Width" Value="104" />
+        </Style>
+        <Style Selector="Window.compact TextBox.band">
+            <Setter Property="Width" Value="96" />
         </Style>
         <Style Selector="Border#PerformancePane">
             <Setter Property="Padding" Value="24" />
@@ -377,7 +388,7 @@
                                     <Button Name="ArmButton" VerticalAlignment="Top" MinWidth="104" Content="{Binding Run.ArmText}" Classes.solo="{Binding !Run.HasOptions}"
                                             Classes.primary="{Binding Run.ArmIsPrimary}" IsEnabled="{Binding Run.CanArm}" IsVisible="{Binding Run.ShowsArm}"
                                             ToolTip.Tip="{Binding Run.ArmTip}" ToolTip.ShowOnDisabled="True" Click="Arm_Click" />
-                                    <WrapPanel ItemSpacing="24" LineSpacing="12" IsEnabled="{Binding Run.CanChangeOptions}" IsVisible="{Binding Run.HasOptions}">
+                                    <WrapPanel Name="RunOptions" ItemSpacing="24" LineSpacing="12" IsEnabled="{Binding Run.CanChangeOptions}" IsVisible="{Binding Run.HasOptions}">
                                         <Border Name="GearSeg" Classes="seg" IsVisible="{Binding Run.HasGear}" AutomationProperties.Name="Gear">
                                             <StackPanel Orientation="Horizontal" Spacing="2">
                                                 <ToggleButton Name="Gear2" Classes="seg" Content="2nd" IsChecked="{Binding Run.IsGear2}" IsVisible="{Binding Run.OffersGear2}" />
@@ -387,13 +398,13 @@
                                         </Border>
                                         <StackPanel Name="RpmBand" Orientation="Horizontal" Spacing="8" IsVisible="{Binding Run.HasRpmBand}">
                                             <TextBlock Classes="field" Text="From" />
-                                            <TextBox Name="StartRpmBox" Classes="data13" Width="104" Text="{Binding Run.StartRpm}" AutomationProperties.Name="Start rpm">
+                                            <TextBox Name="StartRpmBox" Classes="data13 band" Text="{Binding Run.StartRpm}" AutomationProperties.Name="Start rpm">
                                                 <TextBox.InnerRightContent>
                                                     <TextBlock Classes="suffix" Text="rpm" />
                                                 </TextBox.InnerRightContent>
                                             </TextBox>
                                             <TextBlock Classes="field" Text="to" />
-                                            <TextBox Name="EndRpmBox" Classes="data13" Width="104" Text="{Binding Run.EndRpm}" AutomationProperties.Name="End rpm">
+                                            <TextBox Name="EndRpmBox" Classes="data13 band" Text="{Binding Run.EndRpm}" AutomationProperties.Name="End rpm">
                                                 <TextBox.InnerRightContent>
                                                     <TextBlock Classes="suffix" Text="rpm" />
                                                 </TextBox.InnerRightContent>
@@ -401,13 +412,13 @@
                                         </StackPanel>
                                         <StackPanel Name="SpeedBand" Orientation="Horizontal" Spacing="8" IsVisible="{Binding Run.HasSpeedBand}">
                                             <TextBlock Classes="field" Text="From" />
-                                            <TextBox Name="StartKmhBox" Classes="data13" Width="104" Text="{Binding Run.StartKmh}" AutomationProperties.Name="Start speed">
+                                            <TextBox Name="StartKmhBox" Classes="data13 band" Text="{Binding Run.StartKmh}" AutomationProperties.Name="Start speed">
                                                 <TextBox.InnerRightContent>
                                                     <TextBlock Classes="suffix" Text="km/h" />
                                                 </TextBox.InnerRightContent>
                                             </TextBox>
                                             <TextBlock Classes="field" Text="to" />
-                                            <TextBox Name="EndKmhBox" Classes="data13" Width="104" Text="{Binding Run.EndKmh}" AutomationProperties.Name="End speed">
+                                            <TextBox Name="EndKmhBox" Classes="data13 band" Text="{Binding Run.EndKmh}" AutomationProperties.Name="End speed">
                                                 <TextBox.InnerRightContent>
                                                     <TextBlock Classes="suffix" Text="km/h" />
                                                 </TextBox.InnerRightContent>
@@ -878,7 +889,7 @@
 
                                         <Border Name="DifferencePanel" Grid.Column="2" Classes="panel" VerticalAlignment="Top">
                                             <StackPanel Spacing="8">
-                                                <TextBlock Classes="h3" Text="B − A" />
+                                                <TextBlock Classes="h3" Text="A − B" />
                                                 <!-- Each run's invalid, cold and suspect flags beside the deltas, as the result view shows them. -->
                                                 <StackPanel IsVisible="{Binding Results.Comparison.HasFlagsA, FallbackValue=False}">
                                                     <controls:NumberText Classes="label" Value="{Binding Results.Comparison.LabelA, FallbackValue=''}" TextTrimming="CharacterEllipsis" />
