@@ -298,6 +298,13 @@ The app is built with [Avalonia](https://avaloniaui.net/) and tested with [xUnit
 - More performance tests: coast-down, part-throttle cell sweep, throttle response, idle quality, rev-limiter check, 0 to 400 m, braking, warm-up log, repeatability sets, and export.
 - Log replay from CSV with time spent per map cell.
 
+## Related projects
+
+This project is one of three that work together:
+
+- [MS43 Emulator](https://github.com/raph559/MS43_EMULATOR): runs an MS43 bin from power-on on your PC, with an engine and a car around it, to test a bin before you flash it.
+- [MS43X001 Custom](https://github.com/raph559/MS43X001_CUSTOM): MS43X001 with the live-tuning overlay that MS43 Tuner talks to, plus pops & bangs and a downshift blip.
+
 ## Contributing
 
 Bug reports, logs from other engines and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before you open a pull request. Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md). Report security problems privately, as [SECURITY.md](SECURITY.md) describes. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
