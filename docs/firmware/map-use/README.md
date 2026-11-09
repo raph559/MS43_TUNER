@@ -1,6 +1,6 @@
 # Map use: firmware evidence
 
-These notes are the evidence behind `definitions/ms43x001_map_use.json`, the rules the Tune tab uses to say whether the ECU is using the map on screen. They come from read-only disassembly of the car bin (`testdata/local/CAR_current_43X001_SP95_STAGE1.bin`) with the tools of the sibling lab repository `../MS43LAB/tools/` (`dis.py`, `xref.py`, `c167dis.py`), on 2026-10-21. Tags: [obs] read in the code or data, [inf] inference.
+These notes are the evidence behind `definitions/ms43x001_map_use.json`, the rules the Tune tab uses to say whether the ECU is using the map on screen. They come from read-only disassembly of the car bin (`testdata/local/CAR_current_43X001_SP95_STAGE1.bin`) on 2026-10-21. The analysis used `dis.py`, `xref.py` and `c167dis.py` from the private MS43LAB repository; those tools and the input bin are not distributed here. Tags: [obs] read in the code or data, [inf] inference.
 
 | File | Maps |
 |---|---|

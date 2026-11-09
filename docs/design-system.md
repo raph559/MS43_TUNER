@@ -361,3 +361,279 @@ Mockups: `tune-items-{day,night}.html`. The shell, rail and inspector stay as fo
 
 A newly opened item selects its first cell (as `TuneViewModel` does), so Interpolate starts disabled with its reason.
 
+### 5.14 Value slider
+
+A value (an XDF constant that is not a switch) shows a slider under its reading, with − at the low end and + at the high end; the Value field and Set stay above it for an exact number. Mockup: `tune-items-*.html` (main frame, drag frame, XDF-range frame).
+
+- Span: each end is the XDF range's end where the XDF range narrows the storable range there, otherwise the storable end. When the current value lies outside the span by more than half a raw step, the span widens to include it. Typed values outside the XDF range are still stored, with the existing warning.
+- Steps: the arrow keys and − and + move one raw step and write at once, one undo step each (like + and − on a map); Page Up and Page Down move 10 steps; Home and End go to the span's ends. Dragging shows the value under the thumb in the reading and in the key line ("Release to set 4000 rpm. Esc cancels."); releasing writes it as one undo step, and Esc cancels the drag.
+- Look: track 4 px with square ends, `Ink2` from the span's start to the value and `Edge` beyond it (`Track` measured 1.10:1 Day and 1.25:1 Night on Pane, so the span's end vanished; `Edge` is 4.22 / 4.29); thumb a 20 px `Ink1` circle with a 2 px `Pane` ring, which is also the focus gap; the span's ends labelled under the track in Data 12 `Ink3` with units. Each XDF end on the span is a short `Ink2` tick with a 1 px `Pane` casing on each side, explained by one legend line ("Ticks: the XDF range, 480 to 8160 rpm. Typed values from 0 to 65535 rpm are stored, with a warning outside the ticks."). No orange: nothing on the slider is live.
+- − and + are secondary 32 px icon buttons named "One step down" and "One step up", with the step as their tooltip ("-32 rpm", "+32 rpm").
+- Focus: the ring of 1.3 round the thumb. Tab order: Value, Set, Undo, Redo, −, thumb, +.
+
+### 5.15 Compare list and pane
+
+Mockups: `compare-{day,night}.html`.
+
+- List pane 280 px (224 at 1024): the A and B file block (A, B, "Change…"), a search field (5.3, Ctrl K; the build adds a text filter to `CompareViewModel`), the kind filter as a segmented control with each count under its label (All, Maps, Curves, Axes, Values; 44 px tall, so the five labels and counts fit one row), then the differing items under their category headings. Each row is two lines: kind glyph and id in Cascadia `Ink1`; summary ("293 of 320", or "3520 → 4512": B then A, read as "was, now") and the unit in `Ink3` (raised to `Ink2` on a hovered or pressed selected row, where `Ink3` drops below 4.5:1). The last row opens the bytes outside the XDF: "18 ranges, 11907 bytes outside the XDF (11436 differ)".
+- Pane: title row; the axis banner when an axis differs (info banner without "Hide": it explains how every cell is compared, so it stays while the item is shown); the segmented control A − B / A / B; "Copy B into A" (secondary) and "Edit in Tune" (quiet); the grid (rows flex from 26 down to 20 px before the grid scrolls); the scale with the A − B range of this item ("A − B: -61.1 to +21.0 °CRK, 293 of 320 cells differ").
+- A value item shows A and B as Data 56 readings side by side with "A − B: +992 rpm" under them. A switch shows its two choices as wrapping UI 20 text instead.
+- The bytes view is a four-column table: Range ("0x03C43 to 0x03C9B"), Bytes, Differ, Area.
+- After Copy B into A the copied item drops out of the list and the selection moves to the first listed item, as today.
+
+---
+
+### 5.16 Scroll bars
+
+No arrow buttons; no track. The thumb is an `Edge` pill (radius 5, 3:1 on every surface) that stays a thin line until the pointer comes near, then widens to 10 px (`ScrollBarSize`), `Ink3` on hover. A map grid that scrolls sideways keeps 12 px empty under its last row for the bar (`MapGrid.ScrollBarRoom`); a grid that fits keeps none, so a curve's key line stays right under it.
+
+### 5.17 Run charts and knock bars (Performance)
+
+- **RunChart** (`Controls/RunChart.cs`): two runs against rpm (pulls) or seconds from the start (rpm over time, speed tests), on the Tune curve's frame: `Pane` fill, 1 px `Hairline` edge, radius 8, hairline grid on the y ticks, `Ink2` axes 1.5 px, 12 px tick labels in Bahnschrift `Ink3` (five steps across, four up, the first and last on the plot's edges), units in UI `Ink3`. **A is `Ink1` 2 px solid, B is `Ink2` 1.5 px dashed (4 on, 2 off)**, B drawn under A, with a legend line at the top left (a 16 px sample of each stroke and its label, UI 12 `Ink2`): the stroke, not the hue, tells the two apart (2.4). Traces are data, never orange or coral; a gap in the samples breaks the line instead of bridging it.
+- A run being recorded (the Run side's live chart) draws A in `Ink2` with its newest point as the `Now` dot on a `Pane` halo, as the Tune curve's live cursor; when samples stop the dot becomes an `Ink3` ring. The baseline chosen under "Compare against" is B, dashed behind it, so being ahead or behind shows at once.
+- **Knock bars** (`Controls/CylinderBars.cs`): knock retard per cylinder, six `Track` bars numbered 1 to 6 under them in Data 12 `Ink3`, a bar full at 4 degrees. Filled `Now` while a run is live, `Ink2` in a stored result. A cylinder at or past 1.5 degrees also gets the warning icon above its bar in `Caution`, the colour of the run's knock flag (one event, one colour, in the run and in a stored result), and a text line under the bars ("Knock retard: cylinder 4 at 1.6 °CRK."), never colour alone; a cylinder without a value draws no fill and reads n/a.
+- The live chart keeps its axes for the run: rpm over the pull's band (a calibrated roll-on's speeds in its gear, else 0 to 8000 rpm), seconds to the baseline's length or 5 s, then in whole 5 s steps; a stored chart fits its traces. A legend label that does not fit over the plot is trimmed in the middle; the full names are in the A − B panel.
+- Sizes: the live chart is 240 px tall (200 below 1280 px wide, 180 in a window under 760 px tall); the compare chart 320 px (240 below 1280).
+
+### 5.18 Map windows
+
+- A map, curve or axis opens in a window of its own: a double-click on its rail row (the window is the row the first click was on, though Recent moves under it), the row's menu (Open in window, then Pin or Unpin; a right click opens it without selecting the row, Shift F10 or the menu key from the keyboard), or the Open in window icon button in the Tune title row, before Pin (icon only, so long ids keep their room at 1024 px). Any number at once; opening one that is open brings its window to the front. Values, switches and flags stay in the pane.
+- The window is owned by the main one (above it, minimized and closed with it) and has the same chrome: a 48 px `Frame` header with a hairline below, the kind glyph, the id in Cascadia 13 `Ink1`, the description in UI 13 `Ink2` trimmed with a tooltip, the Read-only chip, and the three 46 px window buttons. Its background moves the window, a double-click maximizes.
+- Below the header, on `Pane` with 24 px padding: the read-only and axis info lines, the Tune toolbar's cell tools (value box, Set, Add, Scale %, Interpolate, Smooth, X / Y / XY, Undo, Redo), then the axis line, the grid and the key line as on the Tune tab, live cursor included on every tab. No surface, compare strip or inspector.
+- It opens at the size its grid wants, up to 90 % of the screen's working area, cascaded 64 px from the main window's top left plus 32 px per window open (eight steps, then round again). After that its size and place are the person's.
+- One bin, one history: an edit shows at once wherever the table is open, Undo and Redo anywhere take back the bin's last step (its label names the table), Ctrl S and Ctrl Shift S save the bin. X / Y / XY is one remembered choice for the tab and every window. The windows close when another bin or XDF opens and when the app closes; they do not reopen at the next start. From an open's save prompt until the new bin is read they take no edits (the file picker blocks only the main window). While a prompt is open in the main window they step aside (hidden) and come back when it closes, so no map covers it. A save from a window that fails shows the Tune banner's line in the window too.
+
+## 6. Icons
+
+One set, drawn for this app: 16 px grid, 1.5 px stroke, **butt caps and mitre joins**, so terminals are cut square like Bahnschrift's strokes instead of the rounded Lucide look. Colour is the text colour of the control (`Ink2`, `Ink1` on hover and selection). Never orange, except the live dot, which is a mark rather than an icon. In Avalonia: `Path` with `StrokeLineCap="Flat"` and `StrokeJoin="Miter"`, geometry in one resource file.
+
+| Icon | Where | Why it exists |
+|---|---|---|
+| Search (lens) | search fields | Marks the field as search. |
+| Clear (×) | search fields with text | Clears the query; icon only. |
+| Pin (pushpin; outline = not pinned, filled = pinned) | rail rows, Tune title row, Live rows | The action is "pin"; a star would mean "favourite" (the old ★/☆ goes). |
+| Chevron | pickers (down), rail categories (right / down) | Shows that something opens or expands in place. |
+| Rescan (two arrows on a circle) | next to Port | Finds a cable plugged in after launch; icon only. |
+| Warning (triangle with !) | warning banners, inline errors | Pairs with `Warn` so the state is not colour only. |
+| Info (i in a circle) | info banners, clamp notes | |
+| Check | "Saved" chip | Confirms the clean state. |
+| Kind glyphs: map (3 × 3 grid), curve (polyline), value (single bar), switch, flag, axis (ruler) | rail rows, title line | Tell item kinds apart in a list of ids. |
+| Markers: changed (triangle), differs (ring), live (dot) | grid cells, rail, header chip, legends | One shape per meaning across the app. |
+| Minus, plus | − and + beside a value slider | One raw step down or up. |
+| Gear (six flat, square-cut teeth and a hub) | header, opens Settings | Settings is the one place for preferences; the gear is the conventional sign for it, drawn in this set's square-cut style. |
+| App mark (open 270 degree dial and needle, 20 px) | header, left of the wordmark | The app's dial mark; see 5.1. |
+| Close (×) | dialogs | Closes the dialog; tooltip "Close (Esc)". |
+| Open in window (a frame with an arrow leaving its top-right corner) | Tune title row, icon only; tooltip and name "Open in window" | Opens the table in a window of its own (5.18). |
+
+Dropped: file icon in the header, plug on Connect, folder in the CSV field, stopwatch, moon and sun (the segments say Night and Day), undo and redo arrows (the buttons say Undo and Redo), star, sparkle of any kind.
+
+Icon-only buttons (Rescan ports, Clear search, row pins, the slider's − and +) have a tooltip, an `AutomationProperties.Name`, a 32 × 32 hit area and the focus ring. The name equals the tooltip ("Rescan ports", "Clear search", "Pin to top" / "Unpin"), except − and +, named "One step down" and "One step up" with the step as their tooltip ("-32 rpm", "+32 rpm").
+
+---
+
+## 7. States
+
+Each state names its cause and gives one next action. Copy marked "existing" is already in the app; the rest replaces the app's text when the screen is rebuilt.
+
+### 7.1 Tune
+
+| State | Cause | What shows | Copy | Action |
+|---|---|---|---|---|
+| First run, no bin | Nothing opened yet | Rail and inspector hidden; empty-state block in the pane; header "No bin open" | "Open a bin to start tuning" / "Choose the 512 KiB file you flash with MS4X Flasher. The XDF you last used for its firmware opens with it; otherwise you are asked for one." (existing) | Primary "Open bin…", secondary "Open XDF…" |
+| Opening | Reading the bin, then parsing the XDF (3776 items in 65 categories for MS43X001) | Loading block on first run; otherwise the previous bin stays visible, a 2 px bar runs under the header, controls are disabled | "Reading CAR_current_43X001_SP95_STAGE1.bin…" then "Reading Siemens_MS43_MS43X001_512K.xdf…" | none (it finishes or fails) |
+| XDF needed | No remembered XDF for this firmware | The file picker opens; if cancelled, the empty block shows the line | "Choose the XDF for firmware 43X001." (existing) | Primary "Open XDF…" |
+| Wrong-size file | File is not 524288 bytes | Warning banner; the open bin (if any) stays | "Not opened: backup.bin is 262144 bytes. An MS43 bin is exactly 524288 bytes (512 KiB)." | "Open bin…" |
+| Unreadable file or XDF | Read error or XDF does not parse | Warning banner | "Not opened: <file> could not be read (<reason>)." | "Open bin…" or "Open XDF…" |
+| Firmware mismatch | XDF title firmware differs from the bin's id | Warning banner above the toolbar, stays while this pair is open (safety) | "This XDF describes <XDF title>, but the bin is firmware <id>. Values may be wrong." (existing) | "Use another XDF…" |
+| Nothing selected | Bin open, no item picked | Empty block in the pane | "Pick a map, curve or value on the left" / "Search with Ctrl K. Pinned items stay at the top." (existing) | none |
+| Search finds nothing | Query matches no id or title | Rail list replaced by one line | "No map or value matches "ign_x"." | Quiet "Clear search" |
+| Changed only, none | Filter on, nothing changed | Rail group header | "No changes since the last save" (existing) | none |
+| Read-only item | XDF storage the app cannot write | "Read-only" chip in the title row, toolbar disabled, info line under the title | "'<title>' is read-only: 32-bit elements are not supported." (existing pattern) | none |
+| Dragging a value | The slider's thumb is held | Reading and key line show the value under the thumb; the inspector keeps the value the bin holds | "Release to set 4000 rpm. Esc cancels." | Release writes it as one undo step; Esc cancels |
+| Edit refused | Bad input or no selection | Inline message under the grid with the warning icon | "Select cells first." / "Type a value first." / "'abc' is not a number." (existing) / "'<title>' is an axis: breakpoint 5 would fall below breakpoint 4. Axis values must not go down." (existing) | none |
+| Edit clamped | Value beyond the storable range (-23.6 to 72.0 °CRK here) | Inline message with the info icon | "'ip_iga_ron98_pl__n__maf' cannot hold 80.0; it was set to its limit, 72.0." (existing) | none |
+| Single cell, Interpolate | Interpolate needs a range | Interpolate disabled | Tooltip: "Select a range first: Interpolate fills between its corners." | none |
+| Unsaved | Items differ from the file | Header chip and enabled Save | "1 item not saved"; key line "2 cells changed since the last save" | "Save" |
+| Save failed | Write error | Warning banner | "Not saved: <reason>. The file on disk is unchanged." | "Save as…" |
+| Leaving with changes | Open, close or switch bin while dirty | Dialog | Title "Save the changes to CAR_current_43X001_SP95_STAGE1.bin?" (existing) / "Saving keeps a .bak of the file as it was and adds the changes to its edit log." (existing) | Cancel, Don't save, primary Save |
+| Live cursor idle | Not connected | Inspector note with an `Ink2` outline dot | "Live input: N (rpm) on rows, MAFIGA (mg/stk) on columns. Connect to see the engine's position on this map." | none (Connect is in the header) |
+| Live cursor live | Logging, table bound | Cursor on the grid; key line readout in `NowText` | "Live 2480 rpm · 112.4 mg/stk · map 27.5 °CRK" | none |
+| No live input | Table has no binding or the definition does not match | Inspector note, `Ink2` | "No live input: <reason>." (existing pattern, e.g. "the logger definition is not known") | none |
+
+### 7.2 Live
+
+The logger's real rule (`LiveLogger`): a timeout is retried after 50 ms; three timeouts in a row stop the logger; any other error stops it at once. Stopping disconnects and closes the CSV, which keeps every row already written (rows are flushed one by one).
+
+| State | Cause | What shows | Copy | Action |
+|---|---|---|---|---|
+| Not connected | First launch or after Disconnect | Every value `n/a` in `Ink3`, arcs and bars empty, zero orange; status "Not connected" | Note under the header: "If the ECU refuses the faster baud rate while the engine runs, connect first, then start the engine." | Primary "Connect" (last port preselected) |
+| No COM port | Cable unplugged or driver missing | Port picker empty | "No COM port found. Plug in the K-line cable, then rescan ports." | "Rescan ports" |
+| Connecting | Opening the port, waking the ECU, switching baud | Values `n/a`; Connect disabled and labelled "Connecting…"; status line | "Connecting to MS43 (ms43x) on COM1…" (existing, with a real ellipsis) | none |
+| Connected, no samples yet | First poll not back | Rate "No samples yet", values `n/a`, sparklines empty | "No samples yet" (existing) | none |
+| Retrying | One or two timeouts in a row | Values keep their last sample; status line | "The ECU did not answer (1 of 3). Trying again." | none |
+| Connection failed | Third timeout in a row, or any other polling error | Values freeze and turn `Ink3`, orange off, rate gone; warning banner in the Live pane | "Logging stopped: the ECU stopped answering on COM1 (3 timeouts in a row). ms43-20261019-2225.csv is closed with 9576 rows." | "Connect"; quiet "Show details" opens the connection log (replaces the all-caps error window) |
+| Connect failed | Port in use, ECU silent, refused baud switch | Warning banner | "Not connected: <reason>." Known causes: "COM1 is in use by another program. Close it, then connect." / "The ECU did not answer on COM1. Turn the ignition on, then connect." / "The ECU refused the faster baud rate. Turn the engine off, connect, then start the engine." | "Connect" |
+| CSV cannot be created | Path not writable at connect | Connect is refused; warning banner | "Not connected: cannot write D:\logs\ms43-20261019-2225.csv (<reason>). Choose another file, then connect." | "Browse…" |
+| CSV write fails mid-session | Disk full, file locked | The write error stops the logger (current behaviour); warning banner | "Logging stopped: writing ms43-20261019-2225.csv failed (<reason>). The rows written before 00:04:12 are kept." | "Browse…" |
+| CSV off | "Write CSV log" off | Status bar shows no file | "Not writing a log" | none |
+| Wrong definition | ADX cannot be read | Warning banner | "Cannot read the ms43x definition: <reason>." (existing) | Definition picker |
+| Channel missing | A channel is absent from the reply or fails to decode | That row, tile or dial shows `n/a` | Tooltip: "No value in the last sample." | none |
+| Filter finds nothing | Query matches no title or id | One line in the list | "No channel matches "xyz"." | Quiet "Clear filter" |
+| Pinned only, none pinned | Switch on, no pins | One line in the list | "No pinned channels. Use the pin on a row to keep it at the top." | none |
+| Out of scale | rpm above 8000, value outside a dial | Mark clamps at the end; the numeral prints the true value | none | none |
+| Gear unknown | Clutch in, neutral, standing still | No slot lit, readout `n/a` | none | none |
+| No bin open | Limiter unknown | No limiter band | Dial caption: "Rev limit: open a bin to read it" | none |
+
+### 7.3 Compare
+
+| State | Cause | What shows | Copy | Action |
+|---|---|---|---|---|
+| No A | No bin open on Tune | Empty-state block | "Open a bin on the Tune tab first" / "Compare uses the open bin as A and its XDF for both files. Then pick the bin to compare it with." (existing) | Primary "Open bin…" |
+| No B | A open, B not picked | Empty-state block | "Open the bin to compare with" (existing) / "A is CAR_current_43X001_SP95_STAGE1.bin. B can be any 512 KiB MS43 bin; both are read through A's XDF." | Primary "Open B…" |
+| Identical | No byte differs through the XDF | Empty-state block | "The two files are identical through this XDF." (existing) / "No bytes differ outside the XDF" (existing) | Quiet "Change…" |
+| B wrong size | B is not 524288 bytes | Warning banner; the current B (if any) stays | "Not opened: stock.bin is 262144 bytes. An MS43 bin is exactly 524288 bytes (512 KiB)." | "Open B…" |
+| B other firmware | B's id differs from A's | Warning banner above the list, stays while this B is open | "B is firmware <idB>, A is <idA>. Items are compared at the same addresses, where B may hold something else." (existing) | "Change…" |
+| Copied | Copy B into A done | Inline message; Save becomes enabled | "Copied <title> from B. Undo with Ctrl Z." (existing) | none |
+| Read-only snapshot | Editing the B or A − B grid | Inline message | "This grid is read-only. Edit A on the Tune tab, or copy from B." (existing) | "Edit in Tune" |
+
+---
+
+## 8. Layout
+
+Header 48 px and status bar 28 px on every screen. No horizontal page scroll at any size; only the grid and lists scroll, inside their panes, with sticky headers. Nothing is clipped: text truncates with an ellipsis (middle for file names, start for paths: "…\ms43-20261019-2225.csv") and the full text is in a tooltip.
+
+| Region | 1440 × 900 | 1024 × 680 (minimum) |
+|---|---|---|
+| Header | wordmark, tabs, file block with second line, rate, Port, Rescan, Definition, Connect | wordmark hidden, XDF line hidden (in tooltip and Details), connection pickers merged into one button, tab padding and the margins after the mark and the tabs 8 px, the words "slow link" hidden (rate and icon stay) |
+| Body height | 824 px | 604 px |
+| Tune rail | 256 px, `Frame` | 224 px |
+| Tune inspector | 312 px docked, `Frame` | Hidden; a quiet "Details" toggle in the title row opens it as a 312 px overlay from the right (popup surface) |
+| Tune pane | padding 24; title row 32, toolbar 32, grid, key line 20 | padding 16; same rows |
+| Grid | 16 columns about 48 px wide; rows up to 26 px | columns about 44 px; rows shrink to 20 px, then the grid scrolls vertically with sticky headers. Toolbar, title, save state and key line never scroll away |
+| Live cluster | 252 px (dials 220 px) | 184 px (dials 160 px) |
+| Live channel list | two columns at 1200 px and wider: Pinned left, Not pinned right, each scrolling on its own (5.6) | one column below 1200 px, Pinned then Not pinned; about 11 rows visible |
+| Live session | CSV row (switch, path, Browse…) shown only when not logging; while logging the facts live in the status bar | same |
+| Compare | list of differing items 280 px, pane with A / B / A − B grid | list 224 px, pane as Tune at 1024 |
+| Performance rail | 256 px, `Frame`: Run / Results, then the tests under Pulls, Acceleration and Setup (two-line rows, 5.6); resizable and collapsible as the Tune rail (Ctrl B) | 224 px |
+| Performance pane, Run | padding 24: title row 32, warm-up banners, options row (gear, band, "Compare against", Arm), then the ready check, the running block (reading, elapsed, progress, knock bars, live values, live chart) or the result (figures, flags, conditions, tune, name, description, direction); the run's actions (Cancel; Save result, Discard, Run again) in a bar under the scrolling part, so the primary never scrolls away | padding 16; under 760 px tall the knock bars sit beside the reading and the live chart is 180 px |
+| Performance pane, Results | search (Ctrl K), "Show cold runs", two-line result rows with their tick, headline and flag tags, Compare; a comparison (trace segment, chart, A − B panel, the newer run as A) or an opened result replaces the list, with "Back to the list" | same; the chart 240 px |
+
+Tune pane, top to bottom: title row (kind glyph, map id in Cascadia 13 SemiBold, the XDF description in UI 13 `Ink2`, Pin, Details below 1280), banners, toolbar (cell operations only), grid with its axis line ("MAFIGA load, mg/stk" UI 12 `Ink2` + `ldpm_maf_iga_2` Cascadia `Ink3`), key line. The key line holds, left to right: the selection ("4 rows × 3 columns: 3750 to 4500 rpm, 130.0 to 200.0 mg/stk", or for one cell "4000 rpm × 165.0 mg/stk: 33.4 °CRK, raw 152 (0x98)"), the changed legend with its triangle ("2 cells changed since the last save"), the live readout or idle note, and the latest edit message ("Undo: Set 4 cells of ip_iga_ron98_pl__n__maf to 27.8 °CRK"). Inspector sections, top to bottom: Edit limits ("-23.6 to 72.0 °CRK, step 0.375, 8 bit"), Surface ("Drag to turn, or use the arrow keys"; the plot takes keyboard focus), Details (address, size "20 × 16", units, scaling, rows and columns ids with units and point counts), Colour scale (2.2 caption).
+
+A one-column table (a curve or an axis) is centred horizontally in the pane: its row labels, unit header and cells move as one block, its key line is centred under it, and it stays top-aligned under the toolbar. A value shows its reading in Data 56, the slider of 5.14 under it, then the key line.
+
+Live uses readout tiles by default, with a Readouts setting that swaps only the readout band between tiles and dials. Everything else on the Live screen is identical in both modes.
+
+| Readouts | Band at 1440 | At 1024 |
+|---|---|---|
+| Tiles (default) | rpm tile 2 × 2 (Data 88) with a bar up to the rev limit, load and advance as the tall second tier (Data 56) with slim range bars, gear and speed merged in one cell (Data 24), pinned tiles below on auto rows that scroll | band drops to 3 columns; pinned tiles move to the list |
+| Dials | the same band grid and cell sizes: rpm dial 220 px (Data 56 reading) with the rev-limit band, load and advance dials 184 px (Data 40), gear and speed cell unchanged | rpm dial 160 px, load and advance 134 px beside their names; "× 1000 rpm" hidden |
+
+Bar and dial marks that sit on the orange fill (the advance zero mark, the rev-limit tick, a fill end inside the limit zone) carry a 1 px `Pane` casing on each side, so they keep 3:1 against the fill and the hatch (measured 3.50 Day, 7.55 Night).
+
+---
+
+## 9. Copy
+
+### 9.1 Rules
+
+- Sentence case for every label, button, heading and message. Avoid all-caps labels.
+- No em dash and no en dash anywhere; ranges are written "3.0 to 39.0".
+- No buzzwords. Labels name the action: "Open bin…", "Use another XDF…", "Save", "Save as…", "Connect", "Disconnect", "Rescan ports", "Browse…", "Copy B into A", "Edit in Tune", "Open B…", "Change…", "Pin" / "Unpin", "Set", "Add", "Scale %", "Interpolate", "Smooth", "Undo", "Redo", "Performance tests".
+- The ellipsis character "…" ends a command that opens a dialog or picker, and a status that is in progress. Never three dots.
+- Every message: what happened, then what to do. The cause comes from the app (exception text, file name, counts), never a guess.
+- Help text appears in the state it helps: the baud-rate advice only when not connected or after a refused baud switch.
+- A hint names the control as it is labelled: "Connect to see the engine's position on this map." (not "Start logging").
+- Shortcut hints: "Ctrl K", "Ctrl S", "Ctrl Shift S", "Ctrl O", "Ctrl Z", "Ctrl Y".
+
+### 9.2 Units
+
+Number, space, unit: "2480 rpm", "112.4 mg/stk", "27.8 °CRK", "31.5 kPa", "88.5 °C", "77 km/h", "12.4 °TPS", "7.1 %", "3.42 ms", "38 samples/s". Dimensions and positions use "×" with spaces: "20 × 16", "4000 rpm × 165.0 mg/stk". Units are the XDF and ADX units, cleaned only of encoding errors. A unit is shown once per context: not in a title chip when Details already gives it.
+
+### 9.3 One name per thing
+
+| Thing | Name on screen |
+|---|---|
+| The 512 KiB file | bin |
+| The TunerPro definition | XDF |
+| Anything in the XDF | item (map, curve, value, switch, flag, axis) |
+| One value in a map | cell |
+| A value on an axis | breakpoint |
+| A logged quantity | channel, named by its ADX title exactly as the definition writes it ("Engine Load Ignition"), with its id beside it (`MAFIGA`). No aliases: the cluster and the list use the same name, and the filter finds both. |
+| The ADX variant | definition (`ms43x`, `b22`, `b25`, `b30`) |
+| Differs from the last save | changed (items in the header and rail, cells in the key line) |
+| Differs between A and B | differs |
+| Missing value | n/a |
+| The rpm limit | rev limit, "Rev limit 7104 rpm, read from the open bin" |
+
+---
+
+## 10. Visual hierarchy and motion
+
+### 10.1 Hierarchy and consistency
+
+- Keep data more prominent than the window chrome. Use flat surfaces, hairlines and one accent, without decorative gradients, glows or illustrations.
+- Use the same shell, spacing steps and component shapes across Live, Tune and Compare.
+- Use transitions to acknowledge actions: hover and press fades, the tab underline, screen changes, dialogs, popups, banners and switches. Live gauges, numbers and the map cursor follow the samples without animation. Avoid pulses, idle motion and scroll effects. Section 10.3 defines durations and reduced-motion behavior.
+
+### 10.2 Numerals and focal points
+
+Every displayed value uses Bahnschrift tabular figures, based on the DIN 1451 lettering used on German road signs and dashboards. Limits come from the car's own data (the rev limit band from `id_n_max_max_mt__gear`, the hatched storage limit in the grid).
+
+| Screen | One focal point | Everything else |
+|---|---|---|
+| Tune | The map grid (highest-contrast pane, the only coloured area) | Save is the strongest control; rail and inspector sit on Frame |
+| Live | The engine-speed reading (rpm dial, hero tile, or the rpm strip with its trace) | Load and advance second tier, channel list third |
+| Compare | The A − B grid of the selected item (or the list of differing items when none is selected) | Copy B into A is secondary; A and B views are a switch away |
+| Performance | The running reading and the live run chart; on Results, the comparison chart | Arm, then Save result, is the one primary; the rail and the banners frame it |
+
+### 10.3 Motion spec
+
+The transitions live in `Theme/Motion.axaml`, which `App.ApplyMotion` loads only while Windows' "Animation effects" setting is on.
+
+| Motion | Spec | Reduced motion (Windows "Animation effects" off) |
+|---|---|---|
+| Hover, pressed | Overlay and state fills fade in 120 ms, cubic ease-out (buttons, tabs, segments, list rows, window buttons) | Instant |
+| Tab underline | Grows from its centre, 200 ms (`scaleX` 0 to 1) | Shown at once |
+| Screen change | The screen coming to the front fades in and rises 6 px, 200 ms | Instant |
+| Dialog | Scrim fades in, card grows from 97 %, 180 ms | Instant |
+| Menus, picker lists, tooltips | Fade in and drop 4 px, 120 ms | Instant |
+| Banners | Fade in and slide down 6 px, 180 ms | Instant |
+| Switch knob | Slides 150 ms | Jumps |
+| Map selection | The selection box glides from the old cell or range to the new one, 120 ms, cubic ease-out (`MapGrid.SelectionGlide`); typing in a cell does not glide | Jumps |
+| Live cursor | Redrawn at most 30 times a second (`LiveCursorController.MaxRedrawsPerSecond`), drawn exactly at the sample, never tweened between samples; stale after 1 s (`StaleAfter`) | trail drawn without width falloff; dot unchanged |
+| Just-edited flash | 450 ms (`MapGrid.FlashTime`). Frame 0: the cell fill is the cell's final text colour (black or white per 2.3), so start and end differ by 4.58:1 or more. It eases out (cubic) to the new fill. The text colour is recomputed from the blended fill every frame, so the number stays at 4.58:1 or more throughout. The flash must remain visible on light Day cells | No flash; the changed triangle and the key-line message ("Set 4 cells to 27.8 °CRK") confirm the edit |
+
+---
+
+## 11. Sample data and verification
+
+### 11.1 Sample values for Live mockups
+
+Illustrative, physically consistent, and labelled "Sample values" outside the frame of every mockup: 2480 rpm in gear 4 at 77 km/h (E46 325i, 4th 1.22, final drive 3.07, 205/55R16), MAFIGA 112.4 mg/stk, MAFTI 118.0 mg/stk, MAP 31.5 kPa, AMP 101.2 kPa, TPS 12.4 °TPS, TCO 88.5 °C, TIA 31.0 °C, TOIL 96.0 °C, IGAAVG 31.1 °CRK. Rev limit 7104 rpm (real, from the bin). 96 channels (real, ms43x ADX). Trends cover the Trend length setting (10, 30 or 60 s); the label reads "Last 10 s" (or 30, 60) once a rate is measured and "Last N samples" before a rate exists. Tune mockups use the real `ip_iga_ron98_pl__n__maf` values unchanged; the live readout on it is "2480 rpm · 112.4 mg/stk · map 27.5 °CRK" (bilinear between rows 2200 and 2500, columns 100.0 and 130.0; the measured 31.1 °CRK advance is a different number).
+
+One data state for every Tune mockup, Day and Night: range selected rows 3750 to 4500 × columns 130.0 to 200.0 (4 × 3), active cell 4000 × 165.0 (33.4 °CRK, raw 152, 0x98), changed cells 3750 × 130.0 and 3750 × 165.0, header "1 item not saved".
+
+### 11.2 Verification checklist
+
+- Both themes rendered from the same layout file with only token values swapped.
+- Every text pair 4.5:1 and every control edge, mark and focus ring 3:1, calculated against the surface behind it for any colour not listed here.
+- Tab order follows the visual order; every control shows the focus ring; dialogs close with Esc; the surface plot turns with the arrow keys.
+- Empty, loading and error states from section 7 drawn and reachable.
+- 1024 × 680 frame drawn: no horizontal page scroll, nothing clipped, toolbar and save state always visible.
+- Zero orange on idle screens; orange only on the marks listed in 1.4.
+- Every number in Bahnschrift with `+tnum`; ids in Cascadia Mono; no U+2212 inside a number, no em or en dash in any string.
+- Built and run, every control clicked in both themes, with the click-through recorded.
+
+### 11.3 Implementation references
+
+The contrast tables in sections 1.2, 2.1 and 2.5 use the listed colour values. Font coverage and feature measurements use `bahnschrift.ttf`, `SegUIVar.ttf` and `CascadiaMono.ttf`. Recheck contrast and glyph coverage when changing colours or fonts.
+
+The relevant source files are:
+
+- [Motion.axaml](../src/MS43Logger.AvaloniaApp/Theme/Motion.axaml) and `App.ApplyMotion` for transitions and reduced motion.
+- [MapGrid.cs](../src/MS43Logger.AvaloniaApp/Controls/MapGrid.cs), [LiveCursorController.cs](../src/MS43Logger.AvaloniaApp/LiveCursorController.cs) and [LiveModels.cs](../src/MS43Logger.AvaloniaApp/LiveModels.cs) for map rendering and live data.
+- [TuneViewModel.cs](../src/MS43Logger.AvaloniaApp/TuneViewModel.cs), [TableEdits.cs](../src/MS43Logger.Core/Tuning/TableEdits.cs) and [CompareViewModel.cs](../src/MS43Logger.AvaloniaApp/CompareViewModel.cs) for edits, limits and comparison behavior.
+- [MainWindowViewModel.cs](../src/MS43Logger.AvaloniaApp/MainWindowViewModel.cs) and [LiveLogger.cs](../src/MS43Logger.Core/LiveLogger.cs) for connection states and logging.
+
+Use the checklist above to verify a changed screen in both themes. A specification or a contrast calculation alone does not establish that the running screen meets it. Section 11.1 labels illustrative values separately from the readings taken from a bin or definition.
