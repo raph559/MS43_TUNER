@@ -81,7 +81,7 @@ public sealed class LiveTuningFeatureGroupsTests
             Assert.True(Row(page, OverlayV10.Reserved).Map.Reserved);
             Assert.DoesNotContain(page.FilteredMaps, row => row.Map.Index == OverlayV10.Reserved);
             Assert.DoesNotContain(page.FilteredMaps, row => row.Title.Contains("stab", StringComparison.OrdinalIgnoreCase));
-            page.Selected = Row(page, OverlayV8.Pops);
+            page.Selected = Row(page, OverlaySettings.Pops);
             Assert.Equal(PopsLabels, page.ScalarFields.Select(f => f.Label));
             Assert.DoesNotContain(page.ScalarFields, f => f.Description.Contains("stab", StringComparison.OrdinalIgnoreCase));
             shell.SelectedTab = ShellViewModel.FunTab;
@@ -122,7 +122,7 @@ public sealed class LiveTuningFeatureGroupsTests
         var page = shell.LiveTuning;
         try
         {
-            page.Selected = Row(page, OverlayV8.Pops);
+            page.Selected = Row(page, OverlaySettings.Pops);
             var afr = Field(page.ScalarFields, "AFR target (petrol)");
             Assert.Equal(("AFR", 70L, (5.0, 14.7)), (afr.Units, afr.RawValue, Range(afr)));
             page.Selected = Row(page, OverlayV10.BlipGears);
@@ -141,14 +141,14 @@ public sealed class LiveTuningFeatureGroupsTests
         var page = shell.LiveTuning;
         try
         {
-            page.Selected = Row(page, OverlayV8.Pops);
+            page.Selected = Row(page, OverlaySettings.Pops);
             var afr = Field(page.ScalarFields, "AFR target (petrol)"); afr.Input = "5.0"; Assert.True(afr.Apply());
             await page.SendSelectedAsync(); Assert.Null(page.Problem);
             page.Selected = Row(page, OverlayV10.BlipGears);
             var lead = Field(page.ScalarFields, "Blip lead"); lead.Input = "200"; Assert.True(lead.Apply());
             var cap = Field(page.ScalarFields, "Spark above the target"); cap.Input = "-10.125"; Assert.True(cap.Apply());
             await page.SendSelectedAsync(); Assert.Null(page.Problem);
-            Assert.Equal(50, ecu!.Copies[ecu.Entries[OverlayV8.Pops].Offset + 3]);
+            Assert.Equal(50, ecu!.Copies[ecu.Entries[OverlaySettings.Pops].Offset + 3]);
             Assert.Equal(20, ecu.Copies[ecu.Entries[OverlayV10.BlipGears].Offset + 6]);
             Assert.Equal(36, ecu.Copies[ecu.Entries[OverlayV10.BlipGears].Offset + 7]);      // (-10.125 + 23.625) / 0.375
         }
@@ -264,7 +264,7 @@ public sealed class LiveTuningFeatureGroupsTests
                 Assert.Equal(OverlayState.On, ecu!.Entries[index].State);
             Assert.Equal(new byte[] { 1, 3, 0x1E, 0xBB, 0x0F, 0x96, 0x19, 0x75 }, ecu!.Copies.AsSpan(ecu.Entries[OverlayV10.Blip].Offset, 8).ToArray());
             Assert.Equal(new byte[] { 1, 1, 1, 1, 0x15, 0x28, 0x0F, 0 }, ecu.Copies.AsSpan(ecu.Entries[OverlayV10.BlipGears].Offset, 8).ToArray());
-            Assert.Equal(OverlayState.Free, ecu.Entries[OverlayV8.Pops].State);
+            Assert.Equal(OverlayState.Free, ecu.Entries[OverlaySettings.Pops].State);
         }
         finally { Close(window, shell); }
     }
@@ -431,7 +431,7 @@ public sealed class LiveTuningFeatureGroupsTests
         {
             (int Index, string Label, string Value)[] edits =
             [
-                (OverlayV8.Pops, "Duration", "3.0"), (OverlayV10.Blip, "Blip opening", "12.0"),
+                (OverlaySettings.Pops, "Duration", "3.0"), (OverlayV10.Blip, "Blip opening", "12.0"),
                 (OverlayV10.BlipGears, "Tap length", "300"), (OverlayV10.BlipRatios, "rpm per km/h, 3rd", "45.0"),
             ];
             foreach (var (index, label, value) in edits)

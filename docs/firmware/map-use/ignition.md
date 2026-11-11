@@ -49,7 +49,7 @@ R13 = map(0x771D5 ron91_pl) - R9       ; 0x2C65E..0x2C668, signed 16-bit
 81C8 = R9 + rnd(R13 * E305 / 255)      ; 0x2C66A MOVBZ R12,E305 ; R14=#FF ; CALLS 0D:1516 ; ADD R4,R9
 ```
 => **E305 = 0 -> 100 % RON98; E305 = 255 -> 100 % RON91.** Weight on RON91 = E305/255.
-LIVE_OVERLAY.md writes this as `ron91 + (ron98-ron91)*factor`. That is the same thing only if
+The first overlay design wrote this as `ron91 + (ron98-ron91)*factor`. That is the same thing only if
 factor = 1 - E305/255. The code starts from ron98.
 
 **Flex-fuel blend, helper 0D:1850** (file 0x51850) [obs]: blend(a=R12, b=R13, f=R14) =

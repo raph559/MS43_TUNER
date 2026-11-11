@@ -19,7 +19,7 @@ public sealed class OverlayLaunchFeatureTests
         var ecu = Ecu(); var client = new OverlayClient(ecu); var detection = client.Detect();
         Assert.Null(detection.Problem);
         Assert.Equal(143, detection.Catalogue!.Count); Assert.Equal(143, detection.Flash.Count);
-        Assert.Equal(OverlayV4.Maps, detection.Catalogue.Take(124));
+        Assert.Equal(OverlayCatalogue.BaseMaps, detection.Catalogue.Take(124));
         Assert.Equal(new[] { 0x7132C, 0x71334, 0x7133C }, detection.Catalogue.Skip(124).Take(3).Select(m => m.Address));
         Assert.All(detection.Catalogue.Skip(124).Take(3), m => { Assert.Equal(8, m.Bytes); Assert.Equal(2, m.Flags); });
         Assert.Equal(new[] { 8, 8, 7 }, detection.Catalogue.Skip(124).Take(3).Select(m => m.ScalarGroup!.Fields.Count));
@@ -34,16 +34,16 @@ public sealed class OverlayLaunchFeatureTests
     {
         var ecu = Ecu(); var client = new OverlayClient(ecu); var detection = client.Detect();
         Assert.Equal(896, client.Status().FreeBytes);
-        var ordinary = OverlayV4.Maps.Where(m => m.Index >= 5 && m.Bytes == 64).Take(5).ToArray();
+        var ordinary = OverlayCatalogue.BaseMaps.Where(m => m.Index >= 5 && m.Bytes == 64).Take(5).ToArray();
         foreach (var map in ordinary)
             Assert.Null(client.Send(map.Index, detection.Flash[map.Index], detection.Flash[map.Index], client.Status()).Refused);
-        foreach (var map in OverlayV6.Maps.Skip(124))
+        foreach (var map in OverlayCatalogue.Maps.Take(127).Skip(124))
             Assert.Null(client.Send(map.Index, detection.Flash[map.Index], detection.Flash[map.Index], client.Status()).Refused);
         var status = client.Status();
         Assert.Equal(143, status.Tables.Count); Assert.Equal(8, status.Tables.Count(e => e.State == OverlayState.On));
-        Assert.Equal(896 - 5 * 64 - 3 * 8 - 44, status.FreeBytes); Assert.Equal(44, OverlayV5.TrackingBytes(status));
+        Assert.Equal(896 - 5 * 64 - 3 * 8 - 44, status.FreeBytes); Assert.Equal(44, OverlayMemory.TrackingBytes(status));
         var pool = ecu.OverflowPool(); pool[208 + 126 / 8] &= unchecked((byte)~(1 << (126 % 8)));
-        Assert.Throws<InvalidDataException>(() => OverlayV5.ParseStatus(ecu.StatusFrame(), pool));
+        Assert.Throws<InvalidDataException>(() => OverlayMemory.ParseStatus(ecu.StatusFrame(), pool));
         Assert.Null(client.AllOff()); Assert.Null(client.Free(126));
         Assert.Equal(status.FreeBytes + 16, client.Status().FreeBytes);
         Assert.Null(client.Revert()); Assert.Equal(896, client.Status().FreeBytes);

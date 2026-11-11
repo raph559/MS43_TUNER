@@ -13,7 +13,7 @@ public sealed class CurrentOverlayTests
 
     internal static FakeOverlayEcu Ecu() => new(FakeOverlayEcu.CurrentImage());
 
-    private static byte[] Group(int table) => Defaults.AsSpan(8 * (table - OverlayV8.Pops), 8).ToArray();
+    private static byte[] Group(int table) => Defaults.AsSpan(8 * (table - OverlaySettings.Pops), 8).ToArray();
 
     private static byte[] With(int table, params (int Index, byte Value)[] changes)
     {
@@ -86,9 +86,6 @@ public sealed class CurrentOverlayTests
         Assert.Equal(("reserved_139", 0xCFF88, 8, 2, true), (reserved.Key, reserved.Address, reserved.Bytes, reserved.Flags, reserved.Reserved));
         Assert.Null(reserved.ScalarGroup);
         Assert.Equal(1, OverlayV10.Maps.Count(m => m.Reserved));
-        foreach (var (v8, v10) in OverlayV8.Maps.Zip(OverlayV10.Maps))
-            if (v8.Index == OverlayV8.Pops) Assert.Equal(v8 with { ScalarGroup = v10.ScalarGroup }, v10);
-            else Assert.Equal(v8, v10);
     }
 
     [Fact]
@@ -100,16 +97,15 @@ public sealed class CurrentOverlayTests
     }
 
     [Fact]
-    public void ThePopsGroupHasTheRealAfrAndV9sOpening()
+    public void ThePopsGroupHasTheRealAfrAndThe20DegreeOpening()
     {
-        var afr = Field(OverlayV8.Pops, 3);
+        var afr = Field(OverlaySettings.Pops, 3);
         Assert.Equal("AFR target (petrol)", afr.Label);
         Assert.Equal(("AFR", 5.0, 14.7, 1), (afr.Definition!.Units, afr.Definition.RangeLow, afr.Definition.RangeHigh, afr.Definition.Decimals));
         Assert.Equal(7.0, Shown(afr.Definition, 70), 9);
         Assert.Equal(5.0, Shown(afr.Definition, 50), 9);
         Assert.Equal(14.7, Shown(afr.Definition, 147), 9);
-        Assert.Equal(OverlayV9.PopsGroup.Fields.Single(f => f.Offset == 6), Field(OverlayV8.Pops, 6));
-        Assert.Equal(20.0, Field(OverlayV8.Pops, 6).Definition!.RangeHigh);
+        Assert.Equal(20.0, Field(OverlaySettings.Pops, 6).Definition!.RangeHigh);
     }
 
     [Fact]
@@ -156,7 +152,7 @@ public sealed class CurrentOverlayTests
     public void TheBlipsChoicesAreNamed()
     {
         static string Description(int table, int offset) => Field(table, offset).Definition!.Description;
-        foreach (var (value, label, _) in OverlayV8.Triggers) Assert.Contains($"\n{value}: {label}", Description(140, 0));
+        foreach (var (value, label, _) in OverlayTriggers.Pops) Assert.Contains($"\n{value}: {label}", Description(140, 0));
         Assert.EndsWith("1: While braking\n2: On a pedal tap\n3: Braking or tap", Description(140, 1));
         for (var gear = 0; gear < 4; gear++) Assert.EndsWith("\n0: Off\n1: On", Description(141, gear));
         Assert.Contains("tap only", Description(141, 3));
@@ -206,8 +202,8 @@ public sealed class CurrentOverlayTests
     [Fact]
     public void LcTakesItsTriggers()
     {
-        var flash = FakeOverlayEcu.Image().AsSpan(0x7132C, 8).ToArray(); var trigger = flash.ToArray(); trigger[0] = OverlayV8.AirConOn;
-        Assert.Null(OverlayV10.ValidateCopy(OverlayV6.LaunchControl, trigger, flash));
+        var flash = FakeOverlayEcu.Image().AsSpan(0x7132C, 8).ToArray(); var trigger = flash.ToArray(); trigger[0] = OverlayTriggers.AirConOn;
+        Assert.Null(OverlayV10.ValidateCopy(OverlaySettings.LaunchControl, trigger, flash));
     }
 
     [Fact]
@@ -220,13 +216,13 @@ public sealed class CurrentOverlayTests
     [Fact]
     public void TheRefusalSaysWhichRuleAGroupBroke()
     {
-        Assert.Equal("A pops setting is outside its limits", OverlayV10.Refusal(OverlayV8.Pops, With(138, (6, 201))));
+        Assert.Equal("A pops setting is outside its limits", OverlayV10.Refusal(OverlaySettings.Pops, With(138, (6, 201))));
         Assert.Equal("A blip setting is outside its limits", OverlayV10.Refusal(OverlayV10.Blip, With(140, (5, 151))));
         Assert.Equal("A blip setting is outside its limits: the hold opening is above the blip opening",
             OverlayV10.Refusal(OverlayV10.Blip, With(140, (5, 40), (6, 41))));
         Assert.Equal("A blip setting is outside its limits", OverlayV10.Refusal(OverlayV10.BlipGears, With(141, (3, 2))));
         Assert.Equal("A blip setting is outside its limits", OverlayV10.Refusal(OverlayV10.BlipRatios, With(142, (0, 179))));
-        Assert.Null(OverlayV10.Refusal(OverlayV6.LaunchControl, new byte[8]));
+        Assert.Null(OverlayV10.Refusal(OverlaySettings.LaunchControl, new byte[8]));
     }
 
     [Fact]
@@ -236,11 +232,10 @@ public sealed class CurrentOverlayTests
     [Fact]
     public void PlannerKeepsPoolAWithin668()
     {
-        Assert.Equal(896, OverlayV5.Budget);
-        Assert.Equal(668, OverlayV5.PoolAEnd);
-        Assert.True(OverlayV5.Fits(660, 8));
-        Assert.False(OverlayV5.Fits(664, 8));
-        Assert.Equal(OverlayV10.Maps, OverlayV5.Catalogue);
+        Assert.Equal(896, OverlayMemory.Budget);
+        Assert.Equal(668, OverlayMemory.PoolAEnd);
+        Assert.True(OverlayMemory.Fits(660, 8));
+        Assert.False(OverlayMemory.Fits(664, 8));
     }
 
     public static TheoryData<int[]> FittingSets => new() { new[] { 1, 2, 3, 4 }, new[] { 0, 1, 3, 4 }, new[] { 0, 1, 2, 4 }, new[] { 0, 1, 2, 3 } };
@@ -275,7 +270,7 @@ public sealed class CurrentOverlayTests
         var ecu = Ecu(); var client = new OverlayClient(ecu); var detection = client.Detect();
         var requests = ecu.Requests.Count;
         Assert.Equal(OverlayReason.Range, client.Send(OverlayV10.Blip, With(140, (5, 40), (6, 41)), detection.Flash[OverlayV10.Blip], client.Status()).Refused);
-        Assert.Equal(OverlayReason.Range, client.Send(OverlayV8.Pops, With(138, (3, 210)), detection.Flash[OverlayV8.Pops], client.Status()).Refused);
+        Assert.Equal(OverlayReason.Range, client.Send(OverlaySettings.Pops, With(138, (3, 210)), detection.Flash[OverlaySettings.Pops], client.Status()).Refused);
         Assert.Equal(OverlayReason.Range, client.Send(OverlayV10.Reserved, With(139, (0, 1)), detection.Flash[OverlayV10.Reserved], client.Status()).Refused);
         Assert.DoesNotContain(ecu.Requests.Skip(requests), p => p[0] == 0x6D && p[1] is 1 or 2 or 3 or 9);
     }
@@ -289,6 +284,6 @@ public sealed class CurrentOverlayTests
         Assert.Equal(30.0, pops.RangeHigh);
         var copy = OverlayV104Settings.Defaults[..8];
         copy[2] = angle;
-        Assert.Equal(accepted ? null : OverlayReason.Range, OverlayV10.ValidateCopy(OverlayV8.Pops, copy, OverlayV104Settings.Defaults[..8]));
+        Assert.Equal(accepted ? null : OverlayReason.Range, OverlayV10.ValidateCopy(OverlaySettings.Pops, copy, OverlayV104Settings.Defaults[..8]));
     }
 }

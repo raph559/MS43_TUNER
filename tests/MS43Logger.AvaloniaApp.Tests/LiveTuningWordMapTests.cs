@@ -22,7 +22,7 @@ public sealed class LiveTuningWordMapTests
             await page.AttachLine(ecu);
             Assert.Equal("135 supported maps + 7 settings groups · load while RAM fits", page.CatalogueText);
             Assert.Equal(143, page.Maps.Count);
-            foreach (var map in OverlayV7.Maps.Skip(127))
+            foreach (var map in OverlayCatalogue.Maps.Take(138).Skip(127))
             {
                 page.Selected = page.Maps[map.Index];
                 Assert.True(page.CanSendSelected, page.Selected.CapacityText); Assert.NotNull(page.Editor);

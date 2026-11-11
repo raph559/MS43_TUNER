@@ -35,7 +35,7 @@ public static class OverlayCatalogue
     private static IReadOnlyList<OverlayMap> LoadCatalogue()
     {
         var assembly = typeof(OverlayCatalogue).Assembly;
-        using var stream = assembly.GetManifestResourceStream(assembly.GetManifestResourceNames().Single(n => n.EndsWith("live_overlay_v4_catalog.json")))!;
+        using var stream = assembly.GetManifestResourceStream(assembly.GetManifestResourceNames().Single(n => n.EndsWith("live_overlay_byte_maps.json")))!;
         using var doc = JsonDocument.Parse(stream);
         return Array.AsReadOnly(doc.RootElement.EnumerateArray().Select(e =>
         {

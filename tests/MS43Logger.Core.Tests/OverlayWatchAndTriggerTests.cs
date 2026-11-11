@@ -18,9 +18,9 @@ public sealed class OverlayWatchAndTriggerTests
     [Fact]
     public void WatchRequestEncodesTheAddressBigEndian()
     {
-        Assert.Equal(new byte[] { 0x6D, 0x0C, 0x07, 0x75, 0xD4 }, OverlayV9.WatchRequest(0x775D4));
-        Assert.Equal(new byte[] { 0x6D, 0x0C, 0, 0, 0 }, OverlayV9.WatchRequest(0));
-        Assert.Equal(new byte[] { 0x6D, 0x0B }, OverlayV9.LogRequest);
+        Assert.Equal(new byte[] { 0x6D, 0x0C, 0x07, 0x75, 0xD4 }, OverlayWatch.WatchRequest(0x775D4));
+        Assert.Equal(new byte[] { 0x6D, 0x0C, 0, 0, 0 }, OverlayWatch.WatchRequest(0));
+        Assert.Equal(new byte[] { 0x6D, 0x0B }, OverlayWatch.LogRequest);
     }
 
     [Fact]
@@ -30,13 +30,13 @@ public sealed class OverlayWatchAndTriggerTests
         byte[] record = [1, 9, 0x00, 0x03, 0x80, 0x00, 0x00, 0x05, 0x40, 0x00, 12];
         var frame = Frame([0xA0, .. stock, .. record]);
         Assert.Equal(88, frame.Length);
-        var parsed = OverlayV9.ParseLogReply(frame, out var payload);
+        var parsed = OverlayWatch.ParseLogReply(frame, out var payload);
         Assert.Equal(stock, payload.ToArray());
         Assert.Equal(new WatchRecord(WatchKind.MapIndices, 9, 3, 0x8000, 5, 0x4000, 12), parsed);
 
-        Assert.Null(OverlayV9.ParseLogReply(Frame([0xA0, .. stock, 1, 2, 3]), out _));        // 77 bytes: a stock reply
+        Assert.Null(OverlayWatch.ParseLogReply(Frame([0xA0, .. stock, 1, 2, 3]), out _));        // 77 bytes: a stock reply
         var bad = frame.ToArray(); bad[^1] ^= 1;
-        Assert.Null(OverlayV9.ParseLogReply(bad, out _));
+        Assert.Null(OverlayWatch.ParseLogReply(bad, out _));
     }
 
     private static byte[] Group(int table, byte config)
@@ -57,15 +57,15 @@ public sealed class OverlayWatchAndTriggerTests
         Assert.Equal(OverlayReason.Range, OverlayV10.ValidateCopy(124, Group(124, 0xA0), flash));
         var neighbour = Group(126, 0x97); neighbour[7] ^= 1;
         Assert.Equal(OverlayReason.Range, OverlayV10.ValidateCopy(126, neighbour, Group(126, 0)));
-        Assert.Equal(0x97, OverlayV9.TriggersFor(124).Single(t => t.Label == "A/C on + clutch").Value);
-        Assert.Equal(0x82, OverlayV9.TriggersFor(124).Single(t => t.Label == "ASC off + clutch").Value);
-        Assert.Equal(0x82, OverlayV8.Triggers.Single(t => t.Label == "ASC off").Value);
-        Assert.Equal(["Off", "“−” pressed", "ASC off + “−”", "A/C on + “−”"], OverlayV9.TriggersFor(126).Select(t => t.Label));
+        Assert.Equal(0x97, OverlayTriggers.For(124).Single(t => t.Label == "A/C on + clutch").Value);
+        Assert.Equal(0x82, OverlayTriggers.For(124).Single(t => t.Label == "ASC off + clutch").Value);
+        Assert.Equal(0x82, OverlayTriggers.Pops.Single(t => t.Label == "ASC off").Value);
+        Assert.Equal(["Off", "“−” pressed", "ASC off + “−”", "A/C on + “−”"], OverlayTriggers.For(126).Select(t => t.Label));
     }
 
     [Fact] // a stock bin's own rules (no overlay): the activation bytes take no trigger
     public void TheStockRulesTakeNoTrigger() =>
-        Assert.Equal(OverlayReason.Range, OverlayV8.ValidateCopy(124, Group(124, 0x97), Group(124, 1)));
+        Assert.Equal(OverlayReason.Range, OverlaySettings.ValidateStockLaunchCopy(124, Group(124, 0x97), Group(124, 1)));
 
     [Fact]
     public void VersionInReadsTheHeader()

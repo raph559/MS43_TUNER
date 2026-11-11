@@ -88,7 +88,7 @@ The current live-tuning implementation is in [`src/MS43Logger.Core/LiveTuning`](
 - `OverlayMemory` handles RAM allocation and directory status; `OverlayCatalogue` holds map IDs and addresses.
 - `OverlaySettings` defines fields and validates settings; `OverlayTriggers` names switch choices; `OverlayWatch` handles watch requests and log replies.
 
-The public `OverlayV3` through `OverlayV10` entry points remain for compatibility. Their historical catalogues and validation rules intentionally differ in places. Current code should use the responsibility-based helpers. Protocol and catalogue changes are covered by `CurrentOverlayTests`, `OverlayAllocationTests`, `OverlayPopsTests` and `OverlayWatchAndTriggerTests`.
+`OverlayV10` forwards to these helpers and remains for existing callers; new code should use the helpers directly. Protocol and catalogue changes are covered by `CurrentOverlayTests`, `OverlayAllocationTests`, `OverlayPopsTests` and `OverlayWatchAndTriggerTests`.
 
 ## Test
 

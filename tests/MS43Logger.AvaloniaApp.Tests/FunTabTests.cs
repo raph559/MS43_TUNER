@@ -133,7 +133,7 @@ public sealed class FunTabTests
         var (window, shell, _, _) = await Open();
         try
         {
-            var lc = OverlayV6.Maps.Single(m => m.Index == OverlayV6.LaunchControl);
+            var lc = OverlayCatalogue.Maps.Single(m => m.Index == OverlaySettings.LaunchControl);
             var broken = lc with { ScalarGroup = lc.ScalarGroup! with { Fields = [.. lc.ScalarGroup.Fields.Select(f => f.Offset == 3 ? f with { Key = "c_lc_missing" } : f)] } };
             var groups = OverlayV10.Maps.Where(m => m.ScalarGroup is not null).Select(m => m.Index == lc.Index ? broken : m).ToArray();
             Assert.DoesNotContain("lc", FunFeatures.Offline(shell.Tune.Document!, groups));
@@ -167,13 +167,13 @@ public sealed class FunTabTests
             await fun.SendAsync();
             Assert.Null(fun.Problem);
 
-            var page = s2.LiveTuning; page.Selected = page.Maps.Single(m => m.Map.Index == OverlayV8.Pops);
+            var page = s2.LiveTuning; page.Selected = page.Maps.Single(m => m.Map.Index == OverlaySettings.Pops);
             var pageAngle = page.ScalarFields.Single(f => f.Label == "Ignition angle").Editor; pageAngle.Input = "-20.25"; Assert.True(pageAngle.Apply());
             await page.SendSelectedAsync();
 
-            Assert.Equal(OverlayState.On, ecu1!.Entries[OverlayV8.Pops].State);
-            Assert.Equal(ecu2!.Copies.AsSpan(ecu2.Entries[OverlayV8.Pops].Offset, 8).ToArray(),
-                ecu1.Copies.AsSpan(ecu1.Entries[OverlayV8.Pops].Offset, 8).ToArray());
+            Assert.Equal(OverlayState.On, ecu1!.Entries[OverlaySettings.Pops].State);
+            Assert.Equal(ecu2!.Copies.AsSpan(ecu2.Entries[OverlaySettings.Pops].Offset, 8).ToArray(),
+                ecu1.Copies.AsSpan(ecu1.Entries[OverlaySettings.Pops].Offset, 8).ToArray());
         }
         finally { Close(w1, s1); Close(w2, s2); }
     }
@@ -186,7 +186,7 @@ public sealed class FunTabTests
         {
             Choose(fun, "lc");
             var rpm = fun.ScalarRows.Single(r => r.Key == "c_lc_n_max").Editor; rpm.Input = "4800"; Assert.True(rpm.Apply());
-            var page = shell.LiveTuning; page.Selected = page.Maps.Single(m => m.Map.Index == OverlayV6.LaunchControl);
+            var page = shell.LiveTuning; page.Selected = page.Maps.Single(m => m.Map.Index == OverlaySettings.LaunchControl);
             Assert.Equal(150, page.ScalarFields.Single(f => f.Key == "c_lc_n_max").Editor.RawValue);
         }
         finally { Close(window, shell); }

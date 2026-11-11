@@ -26,7 +26,7 @@ public sealed class LiveTuningPopsTests
         return (window, shell, page, ecu, before);
     }
 
-    private static LiveMapRow Pops(LiveTuningViewModel page) => page.Maps.Single(row => row.Map.Index == OverlayV8.Pops);
+    private static LiveMapRow Pops(LiveTuningViewModel page) => page.Maps.Single(row => row.Map.Index == OverlaySettings.Pops);
 
     [CarAvaloniaFact]
     public async Task PopsGroupIsListedWithItsCategoryAndDescriptions()
@@ -106,7 +106,7 @@ public sealed class LiveTuningPopsTests
             afr.Input = "11.5"; Assert.True(afr.Apply()); Assert.Equal(115, afr.RawValue);
             await page.SendSelectedAsync();
             Assert.Null(page.Problem);
-            var entry = ecu.Entries[OverlayV8.Pops];
+            var entry = ecu.Entries[OverlaySettings.Pops];
             Assert.Equal(OverlayState.On, entry.State);
             Assert.Equal(new byte[] { 2, 0x28, 9, 115, 0x7D, 0x9E, 0x1E, 0x14 }, ecu.Copies.AsSpan(entry.Offset, 8).ToArray());
         }

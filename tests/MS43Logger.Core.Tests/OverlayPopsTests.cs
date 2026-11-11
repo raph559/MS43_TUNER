@@ -17,8 +17,7 @@ public sealed class OverlayPopsTests
     {
         var ecu = CurrentOverlayTests.Ecu(); var client = new OverlayClient(ecu); var detection = client.Detect();
         Assert.Null(detection.Problem);
-        Assert.Equal(OverlayV7.Maps, detection.Catalogue!.Take(138));
-        var pops = detection.Catalogue[138];
+        var pops = detection.Catalogue![138];
         Assert.Equal((138, 0xCFF80, 8, 2), (pops.Index, pops.Address, pops.Bytes, pops.Flags));
         Assert.Equal(8, pops.ScalarGroup!.Fields.Count);
         Assert.Equal(Defaults, detection.Flash[138]);
@@ -32,7 +31,7 @@ public sealed class OverlayPopsTests
     {
         var ecu = CurrentOverlayTests.Ecu(); var client = new OverlayClient(ecu); var detection = client.Detect();
         var requests = ecu.Requests.Count;
-        var result = client.Send(OverlayV8.Pops, With(index, value), detection.Flash[OverlayV8.Pops], client.Status());
+        var result = client.Send(OverlaySettings.Pops, With(index, value), detection.Flash[OverlaySettings.Pops], client.Status());
         Assert.Equal(OverlayReason.Range, result.Refused);
         Assert.DoesNotContain(ecu.Requests.Skip(requests), p => p[0] == 0x6D && p[1] is 1 or 2 or 3);
     }
@@ -42,7 +41,7 @@ public sealed class OverlayPopsTests
     public void ACanBitSwitchIsAccepted(byte value)
     {
         var copy = Defaults.ToArray(); copy[0] = value;
-        Assert.Null(OverlayV10.ValidateCopy(OverlayV8.Pops, copy, Defaults));
+        Assert.Null(OverlayV10.ValidateCopy(OverlaySettings.Pops, copy, Defaults));
     }
 
     [Fact]
@@ -50,8 +49,8 @@ public sealed class OverlayPopsTests
     {
         var ecu = CurrentOverlayTests.Ecu(); var client = new OverlayClient(ecu); var detection = client.Detect();
         byte[] on = [1, 50, 0, 70, 219, 255, 200, 255];
-        Assert.Null(client.Send(OverlayV8.Pops, on, detection.Flash[OverlayV8.Pops], client.Status()).Refused);
-        Assert.Equal(on, client.ReadCopy(OverlayV8.Pops, client.Status().Tables[OverlayV8.Pops]));
+        Assert.Null(client.Send(OverlaySettings.Pops, on, detection.Flash[OverlaySettings.Pops], client.Status()).Refused);
+        Assert.Equal(on, client.ReadCopy(OverlaySettings.Pops, client.Status().Tables[OverlaySettings.Pops]));
     }
 
     [Theory]

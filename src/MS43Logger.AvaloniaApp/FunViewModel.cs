@@ -372,7 +372,7 @@ public sealed class FunViewModel : ViewModelBase, IDisposable
             var offset = BinImage.ToOffset(address) - at;
             if (offset is >= 0 and < 8) after[offset] = (byte)plan.Changes[0].NewRaw;
         }
-        var refused = OverlayProtocol.IsCurrent(bin.Image.Bytes) ? OverlaySettings.ValidateCopy(map.Index, after, current) : OverlayV8.ValidateCopy(map.Index, after, current);
+        var refused = OverlayProtocol.IsCurrent(bin.Image.Bytes) ? OverlaySettings.ValidateCopy(map.Index, after, current) : OverlaySettings.ValidateStockLaunchCopy(map.Index, after, current);
         if (refused is null) return null;
         return (OverlaySettings.Refusal(map.Index, after) ?? "That activation mode is not supported") + ". Nothing was changed.";
     }

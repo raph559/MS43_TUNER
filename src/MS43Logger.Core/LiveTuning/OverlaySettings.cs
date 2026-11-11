@@ -202,7 +202,8 @@ public static class OverlaySettings
         return ValidateStockLaunchCopy(table, stock, flash);
     }
 
-    internal static OverlayReason? ValidateStockLaunchCopy(int table, ReadOnlySpan<byte> copy, ReadOnlySpan<byte> flash)
+    /// <summary>The rules of a bin without the overlay: LC and NLS take 0..2, RAL 0..1 and its neighbour byte stays; no trigger.</summary>
+    public static OverlayReason? ValidateStockLaunchCopy(int table, ReadOnlySpan<byte> copy, ReadOnlySpan<byte> flash)
     {
         if (table is < LaunchControl or > RollingAntiLag) return null;
         if (copy.Length != 8 || flash.Length != 8 || copy[0] > (table == RollingAntiLag ? 1 : 2))

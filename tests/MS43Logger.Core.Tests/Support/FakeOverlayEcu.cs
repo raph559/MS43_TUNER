@@ -78,7 +78,7 @@ internal sealed class FakeOverlayEcu(byte[] flash) : IDs2Line
     public int DropWrites { get; set; }
 
     /// <summary>The status the ECU would give now, without sending anything.</summary>
-    public OverlayStatus Peek() => OverlayV5.ParseStatus(StatusFrame(), OverflowPool());
+    public OverlayStatus Peek() => OverlayMemory.ParseStatus(StatusFrame(), OverflowPool());
 
     /// <summary>The engine stalls with the key on: not running, and the overlay switches everything off.</summary>
     public void Stall() { Running = false; AutomaticDisable(); }
@@ -109,7 +109,7 @@ internal sealed class FakeOverlayEcu(byte[] flash) : IDs2Line
             (byte)(m.Address % 0x4000), (byte)(m.Address % 0x4000 >> 8), (byte)m.Bytes, (byte)(m.Bytes >> 8), (byte)(m.ScalarGroup is null ? m.Flags : ScalarFlagsOverride ?? m.Flags), 0 }).ToArray();
         if (HasOverlay && address >= OverlayContract.HeaderAddress && address < OverlayContract.HeaderAddress + 16) return header.AsSpan(address - OverlayContract.HeaderAddress, count).ToArray();
         if (address >= 0xCC800 && address < 0xCC800 + list.Length) return list.AsSpan(address - 0xCC800, count).ToArray();
-        if (address == OverlayV4.LimiterAddress) return WireLimiter().AsSpan(0, count).ToArray();
+        if (address == OverlayMemory.LimiterAddress) return WireLimiter().AsSpan(0, count).ToArray();
         if (address is >= 0x41D00 and < 0x41FC0) return Copies.AsSpan(address - 0x41D00, count).ToArray();
         if (address is >= 0xE6E0 and < 0xE7C4)
         {
@@ -221,9 +221,9 @@ internal sealed class FakeOverlayEcu(byte[] flash) : IDs2Line
         var pool = Copies.AsSpan(704).ToArray(); var records = OverflowEntries();
         if (records.Length > 0)
         {
-            Array.Clear(pool, 228 - OverlayV5.LookupBytes, OverlayV5.LookupBytes);
+            Array.Clear(pool, 228 - OverlayMemory.LookupBytes, OverlayMemory.LookupBytes);
             for (var id = 0; id < Entries.Length; id++)
-                if (Entries[id].State != OverlayState.Free) pool[228 - OverlayV5.LookupBytes + id / 8] |= (byte)(1 << (id % 8));
+                if (Entries[id].State != OverlayState.Free) pool[228 - OverlayMemory.LookupBytes + id / 8] |= (byte)(1 << (id % 8));
         }
         for (var i = 0; i < records.Length; i++)
         {
@@ -248,8 +248,8 @@ internal sealed class FakeOverlayEcu(byte[] flash) : IDs2Line
         var records = OverflowEntries();
         p[9] = (byte)_disableEpoch; p[17] = (byte)(_disableEpoch >> 8);
         p[41] = records.Length == 0 ? (byte)255 : (byte)(records[0].DirectorySlot - 5);
-        var free = OverlayV5.Budget - Maps.Where(m => Entries[m.Index].State != OverlayState.Free).Sum(m => m.Bytes)
-            - records.Length * 8 - (records.Length == 0 ? 0 : OverlayV5.LookupBytes);
+        var free = OverlayMemory.Budget - Maps.Where(m => Entries[m.Index].State != OverlayState.Free).Sum(m => m.Bytes)
+            - records.Length * 8 - (records.Length == 0 ? 0 : OverlayMemory.LookupBytes);
         BinaryPrimitives.WriteUInt16BigEndian(p.AsSpan(46), (ushort)free);
         Put32(p, 48, Session); Put32(p, 52, Revision); WireLimiter().CopyTo(p, 56);
         return Frame([0xA0, .. p]);
