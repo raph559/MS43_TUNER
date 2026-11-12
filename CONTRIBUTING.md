@@ -154,7 +154,7 @@ For example:
 The summary must be nonempty, on one line, without leading or trailing whitespace. Use `!` after the scope
 only for a breaking change, such as `feat(protocol)!: require a new session format`.
 The [PR title check](.github/workflows/pr-title.yml) validates the format when a PR opens, reopens, changes title
-or receives commits. Dependabot uses `chore(deps):` for NuGet updates and `ci(actions):` for Actions updates.
+or receives commits.
 Match the final commit subject to the PR title when squashing.
 
 The pull request template repeats this checklist:
